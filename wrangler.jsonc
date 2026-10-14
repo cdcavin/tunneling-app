@@ -1,0 +1,10 @@
+{
+  // Cloudflare Worker config. For now the Worker only serves the built site from dist/.
+  // The AWRE video proxy will be added here as the Worker's code later.
+  "name": "wvu-tunneling",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
