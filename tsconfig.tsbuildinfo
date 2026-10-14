@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/components/Charts.tsx","./src/components/Scene3D.tsx","./src/components/ZonePicker.tsx","./src/lib/grid.ts","./src/lib/physics.test.ts","./src/lib/physics.ts","./src/lib/pitchColors.ts","./src/lib/types.ts"],"version":"5.9.3"}
