@@ -22,16 +22,19 @@ interface HeatProps {
   unit: string;
 }
 
+export interface Marker { loc: Loc; color: string; name: string }
+
 interface Props {
   label: string;
-  selected: Loc;
+  markers: Marker[];        // anchor and tunnel markers, drawn on the same grid
+  active: number;           // index into markers: the one a click moves
   onSelect: (loc: Loc) => void;
   heat?: HeatProps;
   best?: Loc | null;
-  color: string;
 }
 
-export default function ZonePicker({ label, selected, onSelect, heat, best, color }: Props) {
+export default function ZonePicker({ label, markers, active, onSelect, heat, best }: Props) {
+  const selected = markers[active]?.loc ?? { side: 0, height: 2.5 };
   const lookup = new Map<string, Cell>();
   heat?.cells.forEach((c) => lookup.set(`${c.side.toFixed(2)}|${c.height.toFixed(2)}`, c));
   let lo = Infinity, hi = -Infinity;
@@ -52,20 +55,22 @@ export default function ZonePicker({ label, selected, onSelect, heat, best, colo
           const v = cell && heat ? heat.value(cell) : null;
           const i = v != null ? bin(v) : -1;
           const isSel = sameLoc(loc, selected);
+          const here = markers.filter((m) => sameLoc(m.loc, loc));
           const isBest = !!best && sameLoc(loc, best);
           const desc = `${s > 0 ? `${(s * 12).toFixed(0)} in toward third` : s < 0 ? `${(-s * 12).toFixed(0)} in toward first` : "middle"}, ${(h * 12).toFixed(0)} in high`;
           return (
             <button
               key={`${s}|${h}`}
               type="button"
-              className={`zone-cell${isSel ? " is-selected" : ""}${isBest ? " is-best" : ""}`}
+              className={`zone-cell${isSel ? " is-selected" : ""}${isBest ? " is-best" : ""}${here.length ? " has-marker" : ""}`}
               style={{
                 backgroundColor: i >= 0 ? RAMP[i] : EMPTY,
                 color: i >= 0 ? INK_ON(i) : undefined,
-                ["--sel" as string]: color,
+                ["--m1" as string]: here[0]?.color ?? "transparent",
+                ["--m2" as string]: here[1]?.color ?? here[0]?.color ?? "transparent",
               }}
               aria-pressed={isSel}
-              aria-label={`${desc}${v != null ? `, ${v.toFixed(1)} ${heat!.unit}` : ""}${isBest ? ", best spot" : ""}`}
+              aria-label={`${desc}${v != null ? `, ${v.toFixed(1)} ${heat!.unit}` : ""}${here.map((m) => `, ${m.name} here`).join("")}${isBest ? ", best spot" : ""}`}
               title={v != null ? `${v.toFixed(1)} ${heat!.unit}` : undefined}
               onClick={() => onSelect(loc)}
             />

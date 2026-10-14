@@ -36,6 +36,8 @@ interface Props {
   camera: CameraPreset;
   heat: HeatLayer | null;
   selected: Loc | null;
+  anchorLoc: Loc | null;
+  anchorColor: string;
   best: Loc | null;
   onPick: (loc: Loc) => void;
   /** Flight clock: null = show full paths; a number = seconds since release, balls in flight. */
@@ -165,7 +167,7 @@ function dispose(obj: THREE.Object3D) {
 const STEP = 0.25;
 
 /** The next-pitch heat grid as colored tiles standing at the plate's front edge. */
-function heatGroup(heat: HeatLayer, selected: Loc | null, best: Loc | null): { group: THREE.Group; tiles: THREE.Mesh[] } {
+function heatGroup(heat: HeatLayer, selected: Loc | null, best: Loc | null, anchor: Loc | null, anchorColor: string): { group: THREE.Group; tiles: THREE.Mesh[] } {
   const group = new THREE.Group();
   const tiles: THREE.Mesh[] = [];
   let lo = Infinity, hi = -Infinity;
@@ -187,11 +189,12 @@ function heatGroup(heat: HeatLayer, selected: Loc | null, best: Loc | null): { g
     group.add(o);
   };
   if (best) ring(best, GOLD, 0.15);
-  if (selected) ring(selected, 0xffffff, 0.11);
+  if (anchor) ring(anchor, new THREE.Color(anchorColor).getHex(), 0.13);
+  if (selected) ring(selected, 0xffffff, 0.1);
   return { group, tiles };
 }
 
-export default function Scene3D({ last, next, aim, aimColor, camera, heat, selected, best, onPick, flightTime }: Props) {
+export default function Scene3D({ last, next, aim, aimColor, camera, heat, selected, anchorLoc, anchorColor, best, onPick, flightTime }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     scene: THREE.Scene; cam: THREE.PerspectiveCamera; controls: OrbitControls; renderer: THREE.WebGLRenderer;
@@ -291,11 +294,11 @@ export default function Scene3D({ last, next, aim, aimColor, camera, heat, selec
     c.heatG.children.slice().forEach((o) => { c.heatG.remove(o); dispose(o); });
     c.tiles = [];
     if (heat) {
-      const { group, tiles } = heatGroup(heat, selected, best);
+      const { group, tiles } = heatGroup(heat, selected, best, anchorLoc, anchorColor);
       c.heatG.add(group);
       c.tiles = tiles;
     }
-  }, [heat, selected, best]);
+  }, [heat, selected, best, anchorLoc, anchorColor]);
 
   return <div className="scene" ref={host} role="img" aria-label="3D view of the two pitch trajectories from release to the plate" />;
 }

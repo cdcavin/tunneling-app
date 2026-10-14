@@ -6,17 +6,19 @@ import { aimAt, aimPoint, pairGeometry, perturb, PLATE_X, separationCurve, timeA
 import { HEAT_METRICS, metricValue, nextPitchCells, provisionalBest, tightest, type Cell, type HeatMetric, type Loc } from "./lib/grid";
 import { suggestShapes, type Suggestion } from "./lib/suggest";
 import { pitchColorOnDark } from "./lib/pitchColors";
-import type { ArsenalPitch, DataFile, Pitcher } from "./lib/types";
+import FilterPanel from "./components/FilterPanel";
+import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
+import { buildArsenal, type ArsenalPitch, type DataFile, type Pitcher } from "./lib/types";
 
 const FASTBALLS = ["Four-Seam", "Fastball", "Sinker"];
 const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}`;
 const SPEEDS = [0.05, 0.1, 0.25, 0.5, 1];
 const NO_DELTA: ShapeDelta = { ivb: 0, hb: 0, velo: 0 };
 
-function primaryFastball(p: Pitcher): ArsenalPitch {
-  const fbs = p.pitches.filter((x) => FASTBALLS.includes(x.type));
-  const pool = fbs.length ? fbs : p.pitches;
-  return pool.reduce((a, b) => (b.n > a.n ? b : a));
+function primaryFastball(arsenal: ArsenalPitch[]): ArsenalPitch | null {
+  const fbs = arsenal.filter((x) => FASTBALLS.includes(x.type));
+  const pool = fbs.length ? fbs : arsenal;
+  return pool.length ? pool.reduce((a, b) => (b.n > a.n ? b : a)) : null;
 }
 
 function PitchButtons({ pitches, value, onChange, label }: { pitches: ArsenalPitch[]; value: string; onChange: (t: string) => void; label: string }) {
@@ -26,7 +28,7 @@ function PitchButtons({ pitches, value, onChange, label }: { pitches: ArsenalPit
         <button key={p.type} type="button" role="radio" aria-checked={p.type === value}
           className={p.type === value ? "is-on" : ""} onClick={() => onChange(p.type)}>
           <i style={{ background: pitchColorOnDark(p.type) }} aria-hidden="true" />
-          {p.type}<small>{p.velo.toFixed(0)}</small>
+          {p.type}<small>{p.velo.toFixed(0)} · {p.n}</small>
         </button>
       ))}
     </div>
@@ -57,10 +59,13 @@ export default function App() {
   const [data, setData] = useState<DataFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pitcherId, setPitcherId] = useState("");
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [lastType, setLastType] = useState("");
   const [nextType, setNextType] = useState("");
   const [lastLoc, setLastLoc] = useState<Loc>({ side: 0, height: 2.0 });
   const [nextLoc, setNextLoc] = useState<Loc>({ side: 0, height: 1.5 });
+  const [placing, setPlacing] = useState<0 | 1>(1);   // 0 = anchor, 1 = tunnel pitch
+  const place = (loc: Loc) => (placing === 0 ? setLastLoc(loc) : setNextLoc(loc));
   const [heatMetric, setHeatMetric] = useState<HeatMetric>("decision");
   const [maxDecision, setMaxDecision] = useState(4);
   const [delta, setDelta] = useState<ShapeDelta>(NO_DELTA);
@@ -81,19 +86,24 @@ export default function App() {
   }, []);
 
   const pitcher = data?.pitchers.find((p) => p.id === pitcherId) ?? null;
+  const rows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
+  const arsenal = useMemo(() => buildArsenal(rows), [rows]);
 
   function choosePitcher(p: Pitcher) {
     setPitcherId(p.id);
-    const fb = primaryFastball(p);
-    setLastType(fb.type);
-    const second = p.pitches.filter((x) => x.type !== fb.type).sort((a, b) => b.n - a.n)[0] ?? fb;
-    setNextType(second.type);
+    setFilters(NO_FILTERS);
+    const ars = buildArsenal(p.pitches);
+    const fb = primaryFastball(ars);
+    setLastType(fb?.type ?? "");
+    const second = ars.filter((x) => x.type !== fb?.type)[0] ?? fb;
+    setNextType(second?.type ?? "");
     setDelta(NO_DELTA); setSuggestions(null);
   }
   function chooseNextType(t: string) { setNextType(t); setDelta(NO_DELTA); setSuggestions(null); }
 
-  const last = pitcher?.pitches.find((p) => p.type === lastType) ?? null;
-  const next = pitcher?.pitches.find((p) => p.type === nextType) ?? null;
+  // If a filter removes the selected type, fall back to what's left.
+  const last = arsenal.find((p) => p.type === lastType) ?? arsenal[0] ?? null;
+  const next = arsenal.find((p) => p.type === nextType) ?? arsenal.find((p) => p.type !== last?.type) ?? arsenal[0] ?? null;
   const shaped = useMemo(() => (next ? perturb(next.coeffs, delta) : null), [next, delta]);
 
   const lastAimed = useMemo(() => (last ? aimAt(last.coeffs, lastLoc.side, lastLoc.height) : null), [last, lastLoc]);
@@ -104,9 +114,10 @@ export default function App() {
   const geo = lastAimed && nextAimed ? pairGeometry(lastAimed, nextAimed) : null;
   const curve = useMemo(() => (lastAimed && nextAimed ? separationCurve(lastAimed, nextAimed) : []), [lastAimed, nextAimed]);
   const aim = useMemo(() => {
-    if (!showAim || !pitcher || !nextAimed) return null;
-    return aimPoint(nextAimed, primaryFastball(pitcher).coeffs);
-  }, [showAim, pitcher, nextAimed]);
+    const fb = primaryFastball(arsenal);
+    if (!showAim || !fb || !nextAimed) return null;
+    return aimPoint(nextAimed, fb.coeffs);
+  }, [showAim, arsenal, nextAimed]);
   const heat = useMemo(() => (showHeat3D && cells.length
     ? { cells, value: (c: Cell) => metricValue(c.geo, heatMetric), better: HEAT_METRICS[heatMetric].better } : null),
     [showHeat3D, cells, heatMetric]);
@@ -135,7 +146,7 @@ export default function App() {
   const runSuggestions = () => { if (lastAimed && next) setSuggestions(suggestShapes(lastAimed, next.coeffs, "tightThenFar", maxDecision)); };
   const applySuggestion = (s: Suggestion) => { setDelta(s.delta); setNextLoc({ side: s.cell.side, height: s.cell.height }); };
 
-  const sameType = lastType === nextType;
+  const sameType = !!last && !!next && last.type === next.type;
   const sceneLast = lastAimed && last ? { coeffs: lastAimed, color: pitchColorOnDark(last.type) } : null;
   const sceneNext = nextAimed && next ? { coeffs: nextAimed, color: pitchColorOnDark(next.type), dashed: sameType } : null;
   const shapedPitch = next && (delta.ivb || delta.hb || delta.velo)
@@ -162,18 +173,23 @@ export default function App() {
             <select id="pitcher" aria-label="Pitcher" value={pitcherId} onChange={(e) => { const p = data.pitchers.find((x) => x.id === e.target.value); if (p) choosePitcher(p); }}>
               {data.pitchers.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.throws === "Right" ? "R" : "L"})</option>)}
             </select>
-            {pitcher && <p className="hint">{pitcher.season}, {pitcher.pitches.reduce((s, p) => s + p.n, 0).toLocaleString()} pitches</p>}
+            {pitcher && <p className="hint">{pitcher.season}, {pitcher.pitches.length.toLocaleString()} tracked pitches</p>}
+          </section>
+
+          <section>
+            <div className="sec-title">Pitches in use</div>
+            {pitcher && <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={setFilters} />}
+            <p className="hint">Every pitch type below is the average of the selected pitches.</p>
           </section>
 
           <section className="pitch-block" style={{ ["--accent" as string]: last ? pitchColorOnDark(last.type) : "#9aa7ba" }}>
             <div className="sec-title">Anchor pitch</div>
-            {pitcher && <PitchButtons pitches={pitcher.pitches} value={lastType} onChange={setLastType} label="Anchor pitch type" />}
-            <ZonePicker label="Anchor pitch location" selected={lastLoc} onSelect={setLastLoc} color={last ? pitchColorOnDark(last.type) : "#9aa7ba"} />
+            <PitchButtons pitches={arsenal} value={last?.type ?? ""} onChange={setLastType} label="Anchor pitch type" />
           </section>
 
           <section className="pitch-block" style={{ ["--accent" as string]: next ? pitchColorOnDark(next.type) : "#9aa7ba" }}>
             <div className="sec-title">Tunnel pitch</div>
-            {pitcher && <PitchButtons pitches={pitcher.pitches} value={nextType} onChange={chooseNextType} label="Tunnel pitch type" />}
+            <PitchButtons pitches={arsenal} value={next?.type ?? ""} onChange={chooseNextType} label="Tunnel pitch type" />
             <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
               {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
@@ -181,8 +197,19 @@ export default function App() {
                 </button>
               ))}
             </div>
-            <ZonePicker label="Tunnel pitch location, shaded by tunnel quality" selected={nextLoc} onSelect={setNextLoc}
-              color={next ? pitchColorOnDark(next.type) : "#9aa7ba"} best={bestTight} heat={heatProps} />
+            <div className="placing" role="radiogroup" aria-label="Which pitch a click places">
+              <button type="button" role="radio" aria-checked={placing === 0} className={placing === 0 ? "is-on" : ""} onClick={() => setPlacing(0)}>
+                <i style={{ background: last ? pitchColorOnDark(last.type) : "#9aa7ba" }} />Place anchor
+              </button>
+              <button type="button" role="radio" aria-checked={placing === 1} className={placing === 1 ? "is-on" : ""} onClick={() => setPlacing(1)}>
+                <i style={{ background: next ? pitchColorOnDark(next.type) : "#9aa7ba" }} />Place tunnel pitch
+              </button>
+            </div>
+            <ZonePicker label="Pitch locations, shaded by how the tunnel pitch tunnels" active={placing} onSelect={place} best={bestTight} heat={heatProps}
+              markers={[
+                { loc: lastLoc, color: last ? pitchColorOnDark(last.type) : "#9aa7ba", name: `anchor ${last?.type ?? ""}` },
+                { loc: nextLoc, color: next ? pitchColorOnDark(next.type) : "#9aa7ba", name: `tunnel ${next?.type ?? ""}` },
+              ]} />
             <div className="lock-row">
               <button type="button" className="primary" disabled={!bestTight} onClick={() => bestTight && setNextLoc({ side: bestTight.side, height: bestTight.height })}>
                 Lock tightest tunnel
@@ -211,7 +238,7 @@ export default function App() {
           <div className="views">
             <div className="stage">
               <Scene3D last={sceneLast} next={sceneNext} aim={aim} aimColor={next ? pitchColorOnDark(next.type) : "#ffffff"} camera={camera}
-                heat={heat} selected={nextLoc} best={bestTight} onPick={setNextLoc} flightTime={clock} />
+                heat={heat} selected={placing === 0 ? lastLoc : nextLoc} anchorLoc={lastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={clock} />
               <div className="hud hud-legend">
                 {last && <span><i style={{ background: pitchColorOnDark(last.type) }} />Anchor: {last.type}</span>}
                 {next && <span><i style={{ background: pitchColorOnDark(next.type) }} className={sameType ? "dashed" : ""} />Tunnel: {next.type}{shapedPitch && " (modified)"}</span>}
@@ -288,7 +315,7 @@ export default function App() {
               )}
             </section>
             <section className="card">
-              {pitcher && <MovementPlot pitches={pitcher.pitches} lastType={lastType} nextType={nextType} modified={shapedPitch} />}
+              <MovementPlot pitches={arsenal} rows={rows} lastType={last?.type ?? null} nextType={next?.type ?? null} modified={shapedPitch} />
             </section>
             <section className="card">
               <SeparationChart curve={curve} />

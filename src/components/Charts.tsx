@@ -1,19 +1,21 @@
 import { useState } from "react";
-import type { ArsenalPitch } from "../lib/types";
+import type { ArsenalPitch, PitchRow } from "../lib/types";
 import { pitchAbbr, pitchColor } from "../lib/pitchColors";
 import { DECISION_FT } from "../lib/physics";
 
 // ── Movement plot: induced vertical break vs horizontal break, one dot per pitch type ──
 
 interface MovementProps {
-  pitches: ArsenalPitch[];
+  pitches: ArsenalPitch[];       // type averages over the selection
+  rows?: PitchRow[];             // every selected pitch, drawn as small dots
   lastType: string | null;
   nextType: string | null;
   modified?: { type: string; ivb: number; hb: number; velo: number } | null;
 }
 
-export function MovementPlot({ pitches, lastType, nextType, modified }: MovementProps) {
+export function MovementPlot({ pitches, rows = [], lastType, nextType, modified }: MovementProps) {
   const [hover, setHover] = useState<ArsenalPitch | null>(null);
+  const [hoverRow, setHoverRow] = useState<PitchRow | null>(null);
   const S = 250, pad = 28, R = 25; // R = axis range in inches either way
   const x = (hb: number) => pad + ((hb + R) / (2 * R)) * (S - 2 * pad);
   const y = (ivb: number) => S - pad - ((ivb + R) / (2 * R)) * (S - 2 * pad);
@@ -31,6 +33,10 @@ export function MovementPlot({ pitches, lastType, nextType, modified }: Movement
         ))}
         <text className="axis-title" x={S / 2} y={S - 3} textAnchor="middle">Horizontal break, in (+ toward 3B)</text>
         <text className="axis-title" x={9} y={S / 2} textAnchor="middle" transform={`rotate(-90 9 ${S / 2})`}>Induced vertical break, in</text>
+        {rows.map((r) => (
+          <circle key={r.id} className="pitch-dot" cx={x(r.hb)} cy={y(r.ivb)} r={2.6} fill={pitchColor(r.type)}
+            onMouseEnter={() => setHoverRow(r)} onMouseLeave={() => setHoverRow(null)} />
+        ))}
         {modified && (() => {
           const from = pitches.find((p) => p.type === modified.type);
           if (!from) return null;
@@ -55,10 +61,18 @@ export function MovementPlot({ pitches, lastType, nextType, modified }: Movement
       </svg>
       {hover && (
         <div className="tip" role="status">
-          <strong>{hover.type}</strong>
+          <strong>{hover.type}, average</strong>
           <span>{hover.velo.toFixed(1)} mph</span>
           <span>{hover.ivb.toFixed(1)} in IVB, {hover.hb.toFixed(1)} in HB</span>
           <span>{hover.n.toLocaleString()} pitches</span>
+        </div>
+      )}
+      {hoverRow && !hover && (
+        <div className="tip" role="status">
+          <strong>{hoverRow.type}, {hoverRow.date}</strong>
+          <span>{hoverRow.velo.toFixed(1)} mph{hoverRow.spin != null && `, ${hoverRow.spin} rpm`}</span>
+          <span>{hoverRow.ivb.toFixed(1)} in IVB, {hoverRow.hb.toFixed(1)} in HB</span>
+          <span>vs {hoverRow.opponent}: {hoverRow.call}</span>
         </div>
       )}
     </figure>

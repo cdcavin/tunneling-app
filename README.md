@@ -10,10 +10,12 @@ once the site is behind a login.
 
 ## What it measures
 
-Every pitch is the pitcher's own average version of that pitch type: his release
-point, release speed and movement, from Trackman's 9-number trajectory fit. To put
-a pitch at a location, the app keeps all of that and changes only the release
-direction, so the shape stays his.
+The data file holds every tracked pitch for each pitcher. Filters (outing, opponent,
+pitch type, velo and break ranges) choose which pitches are in use, and each pitch
+type the tool works with is the average of the selected pitches: release point,
+release speed and movement from Trackman's 9-number trajectory fit. To put a pitch
+at a location, the app keeps all of that and changes only the release direction,
+so the shape stays his.
 
 - **Apart at 23.8 ft:** how far apart the two pitches are 23.8 ft in front of the
   plate, roughly when a hitter has to commit. Smaller means the pitches look alike
@@ -44,7 +46,9 @@ npm run sample-data  # rebuild public/data/pitchers.json with sample pitchers
 
 - `src/lib/physics.ts` — trajectory math (time at a distance, position, re-aiming,
   pair separation). Covered by `physics.test.ts`.
-- `src/lib/grid.ts` — the next-pitch location grid and the placeholder best-spot rule.
+- `src/lib/grid.ts` — the next-pitch location grid and the two lock-in rules.
+- `src/lib/suggest.ts` — the shape-change search behind "Suggest changes".
+- `src/lib/filters.ts` — outing, opponent, pitch type and shape filters.
 - `src/components/` — 3D view, zone pickers, movement plot, separation chart.
-- `public/data/pitchers.json` — the data the app loads. Sample data only in git;
-  real team data is never committed.
+- `public/data/pitchers.json` — the data the app loads, one row per pitch. Sample
+  data only in git; real team data is never committed.
