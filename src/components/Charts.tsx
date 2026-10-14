@@ -13,13 +13,12 @@ interface MovementProps {
 
 export function MovementPlot({ pitches, lastType, nextType }: MovementProps) {
   const [hover, setHover] = useState<ArsenalPitch | null>(null);
-  const S = 260, pad = 30, R = 25; // R = axis range in inches either way
+  const S = 250, pad = 28, R = 25; // R = axis range in inches either way
   const x = (hb: number) => pad + ((hb + R) / (2 * R)) * (S - 2 * pad);
   const y = (ivb: number) => S - pad - ((ivb + R) / (2 * R)) * (S - 2 * pad);
   const ticks = [-20, -10, 0, 10, 20];
   return (
-    <figure className="chart">
-      <figcaption>Pitch shapes</figcaption>
+    <figure className="chart"><div className="sec-title">Pitch shapes</div>
       <svg viewBox={`0 0 ${S} ${S}`} role="img" aria-label="Movement plot of this pitcher's arsenal">
         {ticks.map((t) => (
           <g key={t} className="axis">
@@ -36,7 +35,7 @@ export function MovementPlot({ pitches, lastType, nextType }: MovementProps) {
           return (
             <g key={p.type} onMouseEnter={() => setHover(p)} onMouseLeave={() => setHover(null)}>
               <circle cx={x(p.hb)} cy={y(p.ivb)} r={14} fill="transparent" />
-              <circle cx={x(p.hb)} cy={y(p.ivb)} r={active ? 7 : 5} fill={pitchColor(p.type)} stroke="#ffffff" strokeWidth={2} />
+              <circle cx={x(p.hb)} cy={y(p.ivb)} r={active ? 7 : 5} fill={pitchColor(p.type)} stroke="#0f1a2e" strokeWidth={2} />
               <text className="dot-label" x={x(p.hb) + 10} y={y(p.ivb) + 4}>{pitchAbbr(p.type)}</text>
             </g>
           );
@@ -59,7 +58,7 @@ export function MovementPlot({ pitches, lastType, nextType }: MovementProps) {
 export function SeparationChart({ curve }: { curve: { distFromPlate: number; sep: number }[] }) {
   const [hover, setHover] = useState<{ distFromPlate: number; sep: number } | null>(null);
   if (curve.length < 2) return null;
-  const W = 520, H = 140, padL = 34, padR = 12, padT = 12, padB = 26;
+  const W = 300, H = 130, padL = 26, padR = 8, padT = 12, padB = 22;
   const maxD = Math.ceil(curve[0].distFromPlate / 5) * 5;
   const maxS = Math.max(6, Math.ceil(Math.max(...curve.map((c) => c.sep)) / 6) * 6);
   const x = (d: number) => padL + ((maxD - d) / maxD) * (W - padL - padR);
@@ -72,8 +71,7 @@ export function SeparationChart({ curve }: { curve: { distFromPlate: number; sep
   };
   const yTicks = [0, maxS / 2, maxS];
   return (
-    <figure className="chart sep-chart">
-      <figcaption>Inches apart over the flight</figcaption>
+    <figure className="chart sep-chart"><div className="sec-title">Inches apart over the flight</div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Separation between the two pitches from release to the plate">
         {yTicks.map((t) => (
           <g key={t} className="axis">
@@ -81,7 +79,7 @@ export function SeparationChart({ curve }: { curve: { distFromPlate: number; sep
             <text x={padL - 6} y={y(t) + 3} textAnchor="end">{t}</text>
           </g>
         ))}
-        {[maxD, 40, 20, 0].filter((d) => d <= maxD).map((d) => (
+        {[maxD, 20, 0].filter((d) => d <= maxD).map((d) => (
           <text key={d} className="axis" x={x(d)} y={H - 8} textAnchor="middle">{d === 0 ? "plate" : `${d} ft`}</text>
         ))}
         <line className="decision" x1={x(DECISION_FT)} x2={x(DECISION_FT)} y1={padT} y2={H - padB} />

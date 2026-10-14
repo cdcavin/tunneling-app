@@ -3,8 +3,10 @@ import { HEIGHTS, SIDES, ZONE, sameLoc, type Cell, type Loc } from "../lib/grid"
 // Sequential blue ramp, light (worse) to dark (better), from the validated palette.
 const RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#2a78d6", "#256abf", "#184f95", "#104281"];
 const INK_ON = (i: number) => (i >= 4 ? "#ffffff" : "#13294b");
+const EMPTY = "#1b2740";
 
 // Catcher's view: third-base side (+ side) on the left, high pitches on top.
+// A grid can be used with the keyboard (each cell is a button); the 3D plate mirrors it.
 const COLS = [...SIDES].reverse();
 const ROWS = [...HEIGHTS].reverse();
 const STEP = 0.25;
@@ -58,7 +60,7 @@ export default function ZonePicker({ label, selected, onSelect, heat, best, colo
               type="button"
               className={`zone-cell${isSel ? " is-selected" : ""}${isBest ? " is-best" : ""}`}
               style={{
-                backgroundColor: i >= 0 ? RAMP[i] : undefined,
+                backgroundColor: i >= 0 ? RAMP[i] : EMPTY,
                 color: i >= 0 ? INK_ON(i) : undefined,
                 ["--sel" as string]: color,
               }}
@@ -78,13 +80,13 @@ export default function ZonePicker({ label, selected, onSelect, heat, best, colo
           }}
         />
       </div>
-      <div className="zone-axis" aria-hidden="true"><span>3B side</span><span>Catcher's view</span><span>1B side</span></div>
+      <div className="zone-axis" aria-hidden="true"><span>3B</span><span>catcher's view</span><span>1B</span></div>
       {heat && (
         <div className="heat-legend">
           <span>{heat.better === "low" ? `${hi.toFixed(0)} in` : `${lo.toFixed(0)} in`}</span>
           <span className="heat-ramp" aria-hidden="true">{RAMP.map((c) => <i key={c} style={{ background: c }} />)}</span>
           <span>{heat.better === "low" ? `${lo.toFixed(0)} in` : `${hi.toFixed(0)} in`}</span>
-          <span className="heat-note">darker is better</span>
+          
         </div>
       )}
     </div>
