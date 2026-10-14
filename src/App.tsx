@@ -7,6 +7,8 @@ import { HEAT_METRICS, metricValue, nextPitchCells, provisionalBest, tightest, t
 import { suggestShapes, type Suggestion } from "./lib/suggest";
 import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
+import VideoOverlay from "./components/VideoOverlay";
+import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
 import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher } from "./lib/types";
 
@@ -67,6 +69,8 @@ export default function App() {
   const [lastLoc, setLastLoc] = useState<Loc>({ side: 0, height: 2.0 });
   const [nextLoc, setNextLoc] = useState<Loc>({ side: 0, height: 1.5 });
   const [placing, setPlacing] = useState<0 | 1>(1);   // 0 = anchor, 1 = tunnel pitch
+  const [pair, setPair] = useState<RealPair | null>(null);        // a real back-to-back pair he threw
+  const [showActual, setShowActual] = useState(true);              // draw the real pair instead of the aimed averages
   const place = (loc: Loc) => (placing === 0 ? setLastLoc(loc) : setNextLoc(loc));
   const [heatMetric, setHeatMetric] = useState<HeatMetric>("decision");
   const [maxDecision, setMaxDecision] = useState(4);
@@ -122,8 +126,12 @@ export default function App() {
   const next = arsenal.find((p) => p.type === nextType) ?? arsenal.find((p) => p.type !== last?.type) ?? arsenal[0] ?? null;
   const shaped = useMemo(() => (next ? perturb(next.coeffs, delta) : null), [next, delta]);
 
-  const lastAimed = useMemo(() => (last ? aimAt(last.coeffs, lastLoc.side, lastLoc.height) : null), [last, lastLoc]);
-  const nextAimed = useMemo(() => (shaped ? aimAt(shaped, nextLoc.side, nextLoc.height) : null), [shaped, nextLoc]);
+  const actual = pair && showActual;
+  const lastAimed = useMemo(() => (actual ? pair.anchor.coeffs : last ? aimAt(last.coeffs, lastLoc.side, lastLoc.height) : null), [actual, pair, last, lastLoc]);
+  const nextAimed = useMemo(() => (actual ? pair.next.coeffs : shaped ? aimAt(shaped, nextLoc.side, nextLoc.height) : null), [actual, pair, shaped, nextLoc]);
+  const pairs = useMemo(() => (last && next ? realPairs(rows, last.type, next.type) : []), [rows, last, next]);
+  // Drop the pair if the selection or the pitch types no longer include it.
+  useEffect(() => { if (pair && !pairs.some((p) => p.anchor.id === pair.anchor.id && p.next.id === pair.next.id)) setPair(null); }, [pairs, pair]);
   const cells = useMemo(() => (lastAimed && shaped ? nextPitchCells(lastAimed, shaped) : []), [lastAimed, shaped]);
   const bestTight = useMemo(() => tightest(cells), [cells]);
   const bestFar = useMemo(() => provisionalBest(cells, maxDecision), [cells, maxDecision]);
@@ -262,6 +270,7 @@ export default function App() {
                 {last && <span><i style={{ background: pitchColorOnDark(last.type) }} />Anchor: {last.type}</span>}
                 {next && <span><i style={{ background: pitchColorOnDark(next.type) }} className={sameType ? "dashed" : ""} />Tunnel: {next.type}{shapedPitch && " (modified)"}</span>}
                 <span><i className="gold" />Decision point, 23.8 ft</span>
+                {actual && <span className="legend-note">Real pair, {pair.next.date}</span>}
               </div>
               <div className="hud hud-cams" role="radiogroup" aria-label="Camera">
                 {(Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((k) => (
@@ -273,6 +282,7 @@ export default function App() {
               <div className="hud hud-toggles">
                 <label className="hud-check"><input type="checkbox" checked={showHeat3D} onChange={(e) => setShowHeat3D(e.target.checked)} />Heat on plate</label>
                 <label className="hud-check"><input type="checkbox" checked={showAim} onChange={(e) => setShowAim(e.target.checked)} />Aim point</label>
+                {pair && <label className="hud-check"><input type="checkbox" checked={showActual} onChange={(e) => setShowActual(e.target.checked)} />Show the real pair</label>}
               </div>
               <div className="hud hud-play">
                 <button type="button" className="play" onClick={playing ? () => setPlaying(false) : play} aria-label={playing ? "Pause" : "Play both pitches"}>
@@ -288,10 +298,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <div className="video-empty">
-                <div className="sec-title">Video overlay</div>
-                <p>AWRE clips of real pairs he has thrown, stacked at release, play here.</p>
-              </div>
+              <VideoOverlay pairs={pairs} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} />
             </div>
           </div>
 

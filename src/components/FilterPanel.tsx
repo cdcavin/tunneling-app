@@ -65,7 +65,7 @@ export default function FilterPanel({ all, selected, filters, onChange }: Props)
           {games.map((g) => (
             <button key={g.game} type="button" className={`chip${filters.games.includes(g.game) ? " is-on" : ""}`}
               onClick={() => onChange({ ...filters, games: toggle(filters.games, g.game) })}>
-              {g.date.slice(2).replaceAll("-", "/")} {g.opponent}<small>{g.n}</small>
+              {`${Number(g.date.slice(5, 7))}/${Number(g.date.slice(8, 10))}`} {g.opponent}<small>{g.n}</small>
             </button>
           ))}
         </div>

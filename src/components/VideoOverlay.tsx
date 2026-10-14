@@ -1,0 +1,123 @@
+import { useEffect, useRef, useState } from "react";
+import Hls from "hls.js";
+import { lookupClips, type AwreClip, type RealPair } from "../lib/pairs";
+import { pitchColorOnDark } from "../lib/pitchColors";
+
+interface Props {
+  pairs: RealPair[];
+  selected: RealPair | null;
+  onSelect: (p: RealPair | null) => void;
+  anchorType: string;
+  nextType: string;
+}
+
+/** Attach an HLS stream to a video element (native on Safari, hls.js elsewhere). */
+function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | null, onError: (msg: string) => void) {
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || !url) return;
+    if (v.canPlayType("application/vnd.apple.mpegurl")) { v.src = url; return () => { v.removeAttribute("src"); v.load(); }; }
+    if (!Hls.isSupported()) { onError("This browser can't play HLS video."); return; }
+    const hls = new Hls({ enableWorker: true });
+    hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) onError(`Video failed to load (${d.type}: ${d.details}).`); });
+    hls.loadSource(url);
+    hls.attachMedia(v);
+    return () => hls.destroy();
+  }, [ref, url, onError]);
+}
+
+const pick = (clips: AwreClip[], want: string) =>
+  clips.find((c) => c.perspective === want) ?? clips.find((c) => /home ?plate|center ?field/i.test(c.perspective)) ?? clips[0] ?? null;
+
+export default function VideoOverlay({ pairs, selected, onSelect, anchorType, nextType }: Props) {
+  const [clipsA, setClipsA] = useState<AwreClip[]>([]);
+  const [clipsB, setClipsB] = useState<AwreClip[]>([]);
+  const [perspective, setPerspective] = useState<string>("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [opacity, setOpacity] = useState(0.5);
+  const [offsetMs, setOffsetMs] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const vA = useRef<HTMLVideoElement>(null), vB = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!selected) { setClipsA([]); setClipsB([]); setStatus(null); return; }
+    let cancelled = false;
+    setStatus("Looking up video…");
+    Promise.all([lookupClips(selected.anchor.id), lookupClips(selected.next.id)]).then(([a, b]) => {
+      if (cancelled) return;
+      setClipsA(a.clips); setClipsB(b.clips);
+      const err = a.error ?? b.error;
+      setStatus(err ?? (a.clips.length && b.clips.length ? null : "AWRE has no clip for one of these pitches."));
+      const names = a.clips.map((c) => c.perspective).filter((p) => b.clips.some((c) => c.perspective === p));
+      setPerspective((cur) => (names.includes(cur) ? cur : names[0] ?? ""));
+    });
+    return () => { cancelled = true; };
+  }, [selected]);
+
+  const urlA = pick(clipsA, perspective)?.video_url ?? null;
+  const urlB = pick(clipsB, perspective)?.video_url ?? null;
+  const onError = (m: string) => setStatus(m);
+  useHls(vA, urlA, onError);
+  useHls(vB, urlB, onError);
+
+  // Keep B offset from A by offsetMs, and play/pause both together.
+  const sync = () => { const a = vA.current, b = vB.current; if (a && b) b.currentTime = Math.max(0, a.currentTime + offsetMs / 1000); };
+  const toggle = () => {
+    const a = vA.current, b = vB.current; if (!a || !b) return;
+    if (playing) { a.pause(); b.pause(); setPlaying(false); } else { sync(); void a.play(); void b.play(); setPlaying(true); }
+  };
+  const restart = () => { const a = vA.current, b = vB.current; if (!a || !b) return; a.currentTime = 0; sync(); };
+  const step = (ms: number) => { const a = vA.current; if (!a) return; a.pause(); vB.current?.pause(); setPlaying(false); a.currentTime = Math.max(0, a.currentTime + ms / 1000); sync(); };
+  useEffect(sync, [offsetMs]);
+
+  const perspectives = clipsA.map((c) => c.perspective).filter((p) => clipsB.some((c) => c.perspective === p));
+
+  return (
+    <div className="overlay">
+      <div className="overlay-head">
+        <div className="sec-title">Video overlay</div>
+        <select aria-label="Real pair to watch" value={selected ? `${selected.anchor.id}|${selected.next.id}` : ""}
+          onChange={(e) => onSelect(pairs.find((p) => `${p.anchor.id}|${p.next.id}` === e.target.value) ?? null)}>
+          <option value="">{pairs.length ? `Pick a real ${anchorType} → ${nextType} pair (${pairs.length})` : `No ${anchorType} → ${nextType} pairs in the selected pitches`}</option>
+          {pairs.map((p) => (
+            <option key={`${p.anchor.id}|${p.next.id}`} value={`${p.anchor.id}|${p.next.id}`}>
+              {p.next.date} vs {p.next.opponent}, inn {p.next.inning}: {p.anchor.velo.toFixed(0)} {anchorType} → {p.next.velo.toFixed(0)} {nextType} ({p.next.call})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="overlay-stage">
+        {selected && urlA && urlB ? (
+          <>
+            <video ref={vA} muted playsInline preload="auto" />
+            <video ref={vB} muted playsInline preload="auto" style={{ opacity }} />
+            <div className="overlay-tags">
+              <span><i style={{ background: pitchColorOnDark(anchorType) }} />{anchorType}</span>
+              <span><i style={{ background: pitchColorOnDark(nextType) }} />{nextType}</span>
+            </div>
+          </>
+        ) : (
+          <div className="video-empty"><p>{status ?? (selected ? "Loading…" : "Pick a real pair to stack the two clips.")}</p></div>
+        )}
+      </div>
+
+      {selected && urlA && urlB && (
+        <div className="overlay-controls">
+          <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
+          <button type="button" className="ghost" onClick={restart}>Restart</button>
+          <button type="button" className="ghost" onClick={() => step(-33)} aria-label="Back one frame">−1f</button>
+          <button type="button" className="ghost" onClick={() => step(33)} aria-label="Forward one frame">+1f</button>
+          <label className="mini"><span>Blend</span><input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Blend between the two clips" /></label>
+          <label className="mini"><span>Offset {offsetMs >= 0 ? "+" : ""}{offsetMs} ms</span><input type="range" min={-1500} max={1500} step={10} value={offsetMs} onChange={(e) => setOffsetMs(Number(e.target.value))} aria-label="Time offset of the second clip" /></label>
+          {perspectives.length > 1 && (
+            <select aria-label="Camera" value={perspective} onChange={(e) => setPerspective(e.target.value)}>
+              {perspectives.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
+          {status && <span className="hint">{status}</span>}
+        </div>
+      )}
+    </div>
+  );
+}

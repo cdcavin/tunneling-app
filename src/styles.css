@@ -260,3 +260,22 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .range-row b.on { color: var(--wvu-gold); font-weight: 600; }
 .pitch-dot { opacity: 0.55; }
 .pitch-dot:hover { opacity: 1; }
+
+/* ── Video overlay ── */
+.video { padding: 10px; flex-direction: column; gap: 8px; }
+.overlay { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+.overlay-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
+.overlay-head .sec-title { margin: 0; white-space: nowrap; }
+.overlay-stage { position: relative; flex: 1; min-height: 0; background: #000; border-radius: var(--radius); overflow: hidden; display: flex; }
+.overlay-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.overlay-stage .video-empty { flex: 1; border: 0; border-radius: 0; }
+.overlay-tags { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; }
+.overlay-tags span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 4px; background: rgba(8, 15, 28, 0.78); font-size: 12px; }
+.overlay-tags i { width: 9px; height: 9px; border-radius: 50%; }
+.overlay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.overlay-controls .play { width: 34px; height: 30px; border: 0; border-radius: 4px; background: var(--wvu-gold); color: var(--wvu-navy); cursor: pointer; }
+.overlay-controls .ghost { padding: 4px 9px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--well); color: var(--ink-2); font-size: 12px; cursor: pointer; }
+.overlay-controls .mini { display: grid; gap: 1px; font-size: 11px; color: var(--muted); min-width: 110px; }
+.overlay-controls .mini input { width: 100%; margin: 0; accent-color: var(--wvu-gold); }
+.overlay-controls select { width: auto; padding: 4px 6px; font-size: 12px; }
+.legend-note { color: var(--wvu-gold); font-size: 11px; }

@@ -9,7 +9,41 @@
 interface Env {
   DATA: KVNamespace;
   ASSETS: Fetcher;
-  AWRE_API_KEY?: string;
+  AWRE_API_KEY?: string;   // set in the Worker's Settings > Variables and Secrets; never in code
+  AWRE_TEAM_ID?: string;   // defaults to WVU's id below
+  AWRE_BASE?: string;
+}
+
+const AWRE_TEAM = "74632";
+const AWRE_BASE = "https://api.awresports.com/api/exchange/v2";
+
+/**
+ * AWRE lookups, with the key kept on the server.
+ *   GET /api/awre/pitch/<PitchUID>  ->  { pitch, clips }   (the pitch record and its camera angles)
+ * Results are cached in KV for a day so repeat views don't hit AWRE.
+ */
+async function awre(env: Env, pathname: string): Promise<Response> {
+  if (!env.AWRE_API_KEY) return json({ error: "AWRE is not connected yet (no API key on the server)." }, 503);
+  const m = pathname.match(/^\/api\/awre\/pitch\/([^/]+)$/);
+  if (!m) return json({ error: "Not found." }, 404);
+  const uid = decodeURIComponent(m[1]);
+  const cacheKey = `awre:pitch:${uid}`;
+  const cached = await env.DATA.get(cacheKey, "text");
+  if (cached) return new Response(cached, { headers: JSON_HEADERS });
+
+  const base = env.AWRE_BASE ?? AWRE_BASE, team = env.AWRE_TEAM_ID ?? AWRE_TEAM;
+  const headers = { Authorization: `Api-Key ${env.AWRE_API_KEY}`, Accept: "application/json" };
+  const p = await fetch(`${base}/team/${team}/pitchuid/${encodeURIComponent(uid)}`, { headers });
+  if (!p.ok) return json({ error: `AWRE pitch lookup failed (HTTP ${p.status}).`, detail: (await p.text()).slice(0, 300) }, 502);
+  const pitch = (await p.json()) as { pitch?: { pitch_id?: number } };
+  const pitchId = pitch.pitch?.pitch_id;
+  if (!pitchId) return json({ error: "AWRE has no video record for this pitch.", pitch }, 404);
+  const a = await fetch(`${base}/team/${team}/clip/ph_${pitchId}/angles`, { headers });
+  if (!a.ok) return json({ error: `AWRE clip lookup failed (HTTP ${a.status}).`, detail: (await a.text()).slice(0, 300) }, 502);
+  const angles = (await a.json()) as { clips?: unknown[] };
+  const body = JSON.stringify({ pitch: pitch.pitch, clips: angles.clips ?? [] });
+  await env.DATA.put(cacheKey, body, { expirationTtl: 86400 });
+  return new Response(body, { headers: JSON_HEADERS });
 }
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "private, max-age=300" };
@@ -46,6 +80,7 @@ export default {
       return p ? json(p) : json({ error: `No pitcher ${id}.` }, 404);
     }
 
+    if (pathname.startsWith("/api/awre/")) return awre(env, pathname);
     if (pathname.startsWith("/api/")) return json({ error: "Not found." }, 404);
     return env.ASSETS.fetch(request);
   },
