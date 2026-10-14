@@ -141,3 +141,24 @@ export function aimPoint(c: Coeffs, fastball: Coeffs): Point | null {
   if (t == null) return null;
   return posAtTime({ ...c, Yc2: fastball.Yc2, Zc2: fastball.Zc2 }, t);
 }
+
+export interface ShapeDelta { ivb: number; hb: number; velo: number } // in, in, mph
+
+/**
+ * Change a pitch's shape: add induced vertical break, horizontal break (Trackman sign,
+ * + toward third) and velocity. Movement is turned into acceleration over the pitch's own
+ * flight time; velocity scales the release velocity. Release point stays put.
+ */
+export function perturb(c: Coeffs, d: ShapeDelta): Coeffs {
+  const t = timeAtDist(c, PLATE_X);
+  if (t == null) return c;
+  const v0 = releaseSpeedFtS(c);
+  const k = (v0 + d.velo / 0.681818) / v0;
+  return {
+    ...c,
+    Xc1: c.Xc1 * k, Yc1: c.Yc1 * k, Zc1: c.Zc1 * k,
+    Xc2: c.Xc2 * k * k,                         // drag scales with speed squared
+    Yc2: c.Yc2 + (d.ivb / 12) / (t * t),        // a = 2*s/t^2, c2 = a/2
+    Zc2: c.Zc2 - (d.hb / 12) / (t * t),         // Z carries the opposite sign of side
+  };
+}

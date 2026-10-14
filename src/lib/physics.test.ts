@@ -52,3 +52,21 @@ describe("trajectory geometry", () => {
     expect(DECISION_X - PLATE_X).toBeCloseTo(23.8, 12);
   });
 });
+
+import { perturb, releaseSpeedFtS as spd } from "./physics";
+
+describe("shape changes", () => {
+  const c = pitches[0].coeffs;
+  it("adds the stated inches of movement at the plate when aimed the same way", () => {
+    // Compare where the two land with the same release direction: the delta is the movement added.
+    const base = posAtDist(c, PLATE_X)!;
+    const up = posAtDist(perturb(c, { ivb: 6, hb: 0, velo: 0 }), PLATE_X)!;
+    const side = posAtDist(perturb(c, { ivb: 0, hb: 6, velo: 0 }), PLATE_X)!;
+    expect((up.height - base.height) * 12).toBeCloseTo(6, 1);
+    expect((side.side - base.side) * 12).toBeCloseTo(6, 1);
+  });
+  it("changes release speed by the stated mph", () => {
+    const faster = perturb(c, { ivb: 0, hb: 0, velo: 3 });
+    expect((spd(faster) - spd(c)) * 0.681818).toBeCloseTo(3, 6);
+  });
+});

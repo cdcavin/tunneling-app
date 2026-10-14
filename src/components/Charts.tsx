@@ -9,9 +9,10 @@ interface MovementProps {
   pitches: ArsenalPitch[];
   lastType: string | null;
   nextType: string | null;
+  modified?: { type: string; ivb: number; hb: number; velo: number } | null;
 }
 
-export function MovementPlot({ pitches, lastType, nextType }: MovementProps) {
+export function MovementPlot({ pitches, lastType, nextType, modified }: MovementProps) {
   const [hover, setHover] = useState<ArsenalPitch | null>(null);
   const S = 250, pad = 28, R = 25; // R = axis range in inches either way
   const x = (hb: number) => pad + ((hb + R) / (2 * R)) * (S - 2 * pad);
@@ -30,6 +31,17 @@ export function MovementPlot({ pitches, lastType, nextType }: MovementProps) {
         ))}
         <text className="axis-title" x={S / 2} y={S - 3} textAnchor="middle">Horizontal break, in (+ toward 3B)</text>
         <text className="axis-title" x={9} y={S / 2} textAnchor="middle" transform={`rotate(-90 9 ${S / 2})`}>Induced vertical break, in</text>
+        {modified && (() => {
+          const from = pitches.find((p) => p.type === modified.type);
+          if (!from) return null;
+          return (
+            <g className="modified">
+              <line x1={x(from.hb)} y1={y(from.ivb)} x2={x(modified.hb)} y2={y(modified.ivb)} stroke={pitchColor(modified.type)} strokeWidth={1.5} strokeDasharray="3 3" />
+              <circle cx={x(modified.hb)} cy={y(modified.ivb)} r={7} fill="none" stroke={pitchColor(modified.type)} strokeWidth={2.5} />
+              <text className="dot-label" x={x(modified.hb) + 10} y={y(modified.ivb) + 4}>{pitchAbbr(modified.type)}′</text>
+            </g>
+          );
+        })()}
         {pitches.map((p) => {
           const active = p.type === lastType || p.type === nextType;
           return (

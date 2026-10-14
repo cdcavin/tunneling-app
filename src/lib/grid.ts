@@ -44,3 +44,8 @@ export function provisionalBest(cells: Cell[], maxDecisionIn: number): Cell | nu
 }
 
 export const sameLoc = (a: Loc, b: Loc) => Math.abs(a.side - b.side) < 1e-6 && Math.abs(a.height - b.height) < 1e-6;
+
+/** The location where the next pitch stays closest to the last pitch at 23.8 ft. */
+export function tightest(cells: Cell[]): Cell | null {
+  return cells.reduce<Cell | null>((a, b) => (!a || b.geo.decisionSep < a.geo.decisionSep ? b : a), null);
+}
