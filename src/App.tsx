@@ -8,7 +8,7 @@ import { suggestShapes, type Suggestion } from "./lib/suggest";
 import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
-import { buildArsenal, type ArsenalPitch, type DataFile, type Pitcher } from "./lib/types";
+import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher } from "./lib/types";
 
 const FASTBALLS = ["Four-Seam", "Fastball", "Sinker"];
 const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}`;
@@ -56,9 +56,11 @@ function DeltaSlider({ label, unit, value, min, max, step, onChange }: { label: 
 }
 
 export default function App() {
-  const [data, setData] = useState<DataFile | null>(null);
+  const [data, setData] = useState<IndexFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pitcherId, setPitcherId] = useState("");
+  const [pitcher, setPitcher] = useState<Pitcher | null>(null);
+  const [loadingPitcher, setLoadingPitcher] = useState(false);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [lastType, setLastType] = useState("");
   const [nextType, setNextType] = useState("");
@@ -79,20 +81,34 @@ export default function App() {
   const clockRef = useRef<number | null>(null);
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}data/pitchers.json`, { cache: "no-store" })
-      .then((r) => { if (!r.ok) throw new Error(`The data file did not load (HTTP ${r.status}).`); return r.json(); })
-      .then((d: DataFile) => { setData(d); if (d.pitchers[0]) choosePitcher(d.pitchers[0]); })
+    fetch(`${import.meta.env.BASE_URL}data/index.json`, { cache: "no-store" })
+      .then((r) => { if (!r.ok) throw new Error(`The pitcher list did not load (HTTP ${r.status}).`); return r.json(); })
+      .then((d: IndexFile) => { setData(d); if (d.pitchers[0]) setPitcherId(d.pitchers[0].id); })
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  const pitcher = data?.pitchers.find((p) => p.id === pitcherId) ?? null;
+  // Load one pitcher's pitches when the selection changes.
+  useEffect(() => {
+    if (!pitcherId) return;
+    let cancelled = false;
+    setLoadingPitcher(true);
+    fetch(`${import.meta.env.BASE_URL}data/pitcher/${encodeURIComponent(pitcherId)}.json`, { cache: "no-store" })
+      .then((r) => { if (!r.ok) throw new Error(`This pitcher's data did not load (HTTP ${r.status}).`); return r.json(); })
+      .then((p: Pitcher) => { if (!cancelled) { setPitcher(p); setUpPitcher(p); } })
+      .catch((e: Error) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoadingPitcher(false); });
+    return () => { cancelled = true; };
+  }, [pitcherId]);
+
   const rows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
   const arsenal = useMemo(() => buildArsenal(rows), [rows]);
 
-  function choosePitcher(p: Pitcher) {
-    setPitcherId(p.id);
-    setFilters(NO_FILTERS);
-    const ars = buildArsenal(p.pitches);
+  function setUpPitcher(p: Pitcher) {
+    // Default to his most recent season.
+    const latest = seasonsOf(p.pitches)[0];
+    const f = { ...NO_FILTERS, seasons: latest ? [latest] : [] };
+    setFilters(f);
+    const ars = buildArsenal(applyFilters(p.pitches, f));
     const fb = primaryFastball(ars);
     setLastType(fb?.type ?? "");
     const second = ars.filter((x) => x.type !== fb?.type)[0] ?? fb;
@@ -170,10 +186,13 @@ export default function App() {
         <aside className="panel left" aria-label="Pitch selection">
           <section>
             <div className="sec-title">Pitcher</div>
-            <select id="pitcher" aria-label="Pitcher" value={pitcherId} onChange={(e) => { const p = data.pitchers.find((x) => x.id === e.target.value); if (p) choosePitcher(p); }}>
-              {data.pitchers.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.throws === "Right" ? "R" : "L"})</option>)}
+            <select id="pitcher" aria-label="Pitcher" value={pitcherId} onChange={(e) => setPitcherId(e.target.value)}>
+              {[...data.pitchers].sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.throws === "Right" ? "R" : "L"}, {p.season})</option>
+              ))}
             </select>
-            {pitcher && <p className="hint">{pitcher.season}, {pitcher.pitches.length.toLocaleString()} tracked pitches</p>}
+            {loadingPitcher ? <p className="hint">Loading pitches…</p>
+              : pitcher && <p className="hint">{pitcher.pitches.length.toLocaleString()} tracked pitches, latest {pitcher.season}</p>}
           </section>
 
           <section>

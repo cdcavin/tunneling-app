@@ -3,6 +3,7 @@ import type { PitchRow } from "./types";
 export interface Range { min: number; max: number }
 
 export interface Filters {
+  seasons: string[];     // empty = all seasons
   games: string[];       // empty = all outings
   opponents: string[];   // empty = all
   types: string[];       // empty = all
@@ -11,15 +12,16 @@ export interface Filters {
   hb: Range | null;
 }
 
-export const NO_FILTERS: Filters = { games: [], opponents: [], types: [], velo: null, ivb: null, hb: null };
+export const NO_FILTERS: Filters = { seasons: [], games: [], opponents: [], types: [], velo: null, ivb: null, hb: null };
 
 export const isActive = (f: Filters) =>
-  f.games.length > 0 || f.opponents.length > 0 || f.types.length > 0 || !!f.velo || !!f.ivb || !!f.hb;
+  f.seasons.length > 0 || f.games.length > 0 || f.opponents.length > 0 || f.types.length > 0 || !!f.velo || !!f.ivb || !!f.hb;
 
 const inRange = (v: number, r: Range | null) => !r || (v >= r.min && v <= r.max);
 
 export function applyFilters(rows: PitchRow[], f: Filters): PitchRow[] {
   return rows.filter((p) =>
+    (f.seasons.length === 0 || (p.season != null && f.seasons.includes(p.season))) &&
     (f.games.length === 0 || f.games.includes(p.game)) &&
     (f.opponents.length === 0 || f.opponents.includes(p.opponent)) &&
     (f.types.length === 0 || f.types.includes(p.type)) &&

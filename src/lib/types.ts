@@ -6,6 +6,9 @@ export interface PitchRow {
   date: string;          // YYYY-MM-DD
   game: string;          // GameID
   opponent: string;      // opponent team name
+  season: string;        // e.g. "Spring 2026"
+  home?: boolean;        // tracked at WVU's park, where the tags are the staff's own
+  inning?: number | null; half?: string | null; pa?: number | null; pitchNo?: number | null;   // at-bat sequence, for finding real pairs
   type: string;          // pitch type (home operator tag, or matched to it for away games)
   velo: number;          // mph, release
   ivb: number;           // in, induced vertical break
@@ -36,11 +39,25 @@ export interface ArsenalPitch {
   coeffs: Coeffs;
 }
 
-export interface DataFile {
-  generated: string;     // ISO date the file was built
+export interface PitcherSummary { id: string; name: string; throws: "Right" | "Left"; season: string; n: number }
+
+/** /data/index.json: who is available, without pitch rows. */
+export interface DataIndex {
+  generated: string;     // ISO date the data was built
   dataThrough: string;   // last game date in the data
   sample: boolean;       // true = made-up pitchers, safe to show publicly
-  pitchers: Pitcher[];
+  pitchers: PitcherSummary[];
+}
+
+export type IndexFile = DataIndex;
+
+/** The bundled sample file and the Colab export share this shape. */
+export interface DataFile extends Omit<DataIndex, "pitchers"> { pitchers: Pitcher[] }
+
+/** Seasons in the data, newest first ("Fall 2026" before "Spring 2026"). */
+export function seasonsOf(rows: PitchRow[]): string[] {
+  const rank = (s: string) => Number(s.slice(-4)) * 2 + (s.startsWith("Fall") ? 1 : 0);
+  return [...new Set(rows.map((r) => r.season))].sort((a, b) => rank(b) - rank(a));
 }
 
 const KEYS = ["Xc0", "Xc1", "Xc2", "Yc0", "Yc1", "Yc2", "Zc0", "Zc1", "Zc2"] as const;

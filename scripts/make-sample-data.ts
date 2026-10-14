@@ -48,14 +48,17 @@ function pitcher(id: string, name: string, throws: "Right" | "Left", rel: [numbe
       const target = { side: gauss() * 0.7, height: 2.4 + gauss() * 0.8 };
       const coeffs = aimAt(buildCoeffs(velo, ivb, hb, relH, relS, ext), target.side, target.height);
       pitches.push({
-        id: `${id}-${++n}`, date, game: `${date}-${opponent.replace(/\s/g, "")}`, opponent, type: s.type,
+        id: `${id}-${++n}`, date, game: `${date}-${opponent.replace(/\s/g, "")}`, opponent, season: o < 2 ? "Fall 2025" : "Spring 2026",
+        home: o % 2 === 0, inning: 1 + Math.floor(i / 15), half: "Top", pa: 1 + Math.floor((i % 15) / 5), pitchNo: 1 + (i % 5), type: s.type,
+        season: o < 3 ? "Fall 2025" : "Spring 2026", home: opponent === "Intrasquad" || o % 2 === 0,
+        inning: 1 + Math.floor(i / 18), half: "Top", pa: 1 + Math.floor((i % 18) / 4.5), pitchNo: 1 + (i % 5),
         velo: Math.round(velo * 10) / 10, ivb: Math.round(ivb * 10) / 10, hb: Math.round(hb * 10) / 10,
         spin: Math.round(s.spin + gauss() * 80), side: Math.round(target.side * 100) / 100, height: Math.round(target.height * 100) / 100,
         call: CALLS[Math.floor(rand() * CALLS.length)], coeffs,
       });
     }
   }
-  return { id, name, throws, season: "Sample", pitches };
+  return { id, name, throws, season: "Spring 2026", pitches };
 }
 
 const data: DataFile = {

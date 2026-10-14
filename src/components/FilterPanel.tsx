@@ -1,5 +1,5 @@
-import { extent, outings, type Filters, type Range } from "../lib/filters";
-import type { PitchRow } from "../lib/types";
+import { extent, outings, NO_FILTERS, type Filters, type Range } from "../lib/filters";
+import { seasonsOf, type PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 
 interface Props {
@@ -32,8 +32,11 @@ function RangeRow({ label, unit, full, value, onChange }: { label: string; unit:
 }
 
 export default function FilterPanel({ all, selected, filters, onChange }: Props) {
-  const games = outings(all);
-  const opponents = [...new Set(all.map((p) => p.opponent))].sort();
+  const seasons = seasonsOf(all);
+  // Outings listed are those within the chosen seasons, so the list stays short.
+  const inSeason = filters.seasons.length ? all.filter((p) => filters.seasons.includes(p.season)) : all;
+  const games = outings(inSeason);
+  const opponents = [...new Set(inSeason.map((p) => p.opponent))].sort();
   const types = [...new Set(all.map((p) => p.type))].sort((a, b) => all.filter((p) => p.type === b).length - all.filter((p) => p.type === a).length);
   const active = selected !== all.length;
 
@@ -41,8 +44,20 @@ export default function FilterPanel({ all, selected, filters, onChange }: Props)
     <div className="filters">
       <div className="filter-head">
         <span><b>{selected.toLocaleString()}</b> of {all.length.toLocaleString()} pitches</span>
-        {active && <button type="button" className="link" onClick={() => onChange({ games: [], opponents: [], types: [], velo: null, ivb: null, hb: null })}>Show all</button>}
+        {active && <button type="button" className="link" onClick={() => onChange(NO_FILTERS)}>Show all</button>}
       </div>
+
+      {seasons.length > 1 && (
+        <div className="filter-group">
+          <span className="filter-label">Season</span>
+          <div className="chips">
+            {seasons.map((sn) => (
+              <button key={sn} type="button" className={`chip${filters.seasons.includes(sn) ? " is-on" : ""}`}
+                onClick={() => onChange({ ...filters, seasons: toggle(filters.seasons, sn), games: [] })}>{sn}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="filter-group">
         <span className="filter-label">Outing</span>
@@ -50,7 +65,7 @@ export default function FilterPanel({ all, selected, filters, onChange }: Props)
           {games.map((g) => (
             <button key={g.game} type="button" className={`chip${filters.games.includes(g.game) ? " is-on" : ""}`}
               onClick={() => onChange({ ...filters, games: toggle(filters.games, g.game) })}>
-              {g.date.slice(5).replace("-", "/")} {g.opponent}<small>{g.n}</small>
+              {g.date.slice(2).replaceAll("-", "/")} {g.opponent}<small>{g.n}</small>
             </button>
           ))}
         </div>

@@ -4,3 +4,4 @@ dist
 *.local
 # real team data never goes in git; the weekly job and Cloudflare deploy handle it
 data-private/
+.wrangler/
