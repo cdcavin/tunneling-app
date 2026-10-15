@@ -10,41 +10,53 @@ interface MovementProps {
   rows?: PitchRow[];             // every selected pitch, drawn as small dots
   lastType: string | null;
   nextType: string | null;
+  throws?: "Right" | "Left";
   modified?: { type: string; ivb: number; hb: number; velo: number } | null;
 }
 
-export function MovementPlot({ pitches, rows = [], lastType, nextType, modified }: MovementProps) {
+/**
+ * Savant-style movement plot: pitcher's view, rings every 6 in, every pitch as a faint dot and
+ * each type's average as a labeled marker. Trackman HB is + toward third base, which is the
+ * pitcher's right, so x = +HB to the right; arm side is right for a righty, left for a lefty.
+ */
+export function MovementPlot({ pitches, rows = [], lastType, nextType, throws = "Right", modified }: MovementProps) {
   const [hover, setHover] = useState<ArsenalPitch | null>(null);
   const [hoverRow, setHoverRow] = useState<PitchRow | null>(null);
-  const S = 250, pad = 28, R = 25; // R = axis range in inches either way
-  const x = (hb: number) => pad + ((hb + R) / (2 * R)) * (S - 2 * pad);
-  const y = (ivb: number) => S - pad - ((ivb + R) / (2 * R)) * (S - 2 * pad);
-  const ticks = [-20, -10, 0, 10, 20];
+  const S = 300, cx = S / 2, cy = S / 2 - 4, R = 27, rad = 122;   // R = inches at the outer ring
+  const sc = rad / R;
+  const x = (hb: number) => cx + hb * sc;
+  const y = (ivb: number) => cy - ivb * sc;
+  const rings = [6, 12, 18, 24];
+  const armRight = throws === "Right";
   return (
-    <figure className="chart"><div className="sec-title">Pitch shapes</div>
-      <svg viewBox={`0 0 ${S} ${S}`} role="img" aria-label="Movement plot of this pitcher's arsenal">
-        {ticks.map((t) => (
-          <g key={t} className="axis">
-            <line x1={x(t)} x2={x(t)} y1={pad} y2={S - pad} className={t === 0 ? "zero" : ""} />
-            <line y1={y(t)} y2={y(t)} x1={pad} x2={S - pad} className={t === 0 ? "zero" : ""} />
-            <text x={x(t)} y={S - pad + 13} textAnchor="middle">{t}</text>
-            <text x={pad - 6} y={y(t) + 3} textAnchor="end">{t}</text>
-          </g>
-        ))}
-        <text className="axis-title" x={S / 2} y={S - 3} textAnchor="middle">Horizontal break, in (+ toward 3B)</text>
-        <text className="axis-title" x={9} y={S / 2} textAnchor="middle" transform={`rotate(-90 9 ${S / 2})`}>Induced vertical break, in</text>
-        {rows.map((r) => (
-          <circle key={r.id} className="pitch-dot" cx={x(r.hb)} cy={y(r.ivb)} r={2.6} fill={pitchColor(r.type)}
-            onMouseEnter={() => setHoverRow(r)} onMouseLeave={() => setHoverRow(null)} />
-        ))}
+    <figure className="chart mvmt"><div className="sec-title">Pitch movement</div>
+      <svg viewBox={`0 0 ${S} ${S}`} role="img" aria-label="Movement plot of this pitcher's arsenal, pitcher's view">
+        <defs>
+          <clipPath id="mvmt-clip"><circle cx={cx} cy={cy} r={rad} /></clipPath>
+        </defs>
+        <circle className="mvmt-disc" cx={cx} cy={cy} r={rad} />
+        {rings.map((r) => <circle key={r} className="mvmt-ring" cx={cx} cy={cy} r={r * sc} />)}
+        <line className="mvmt-axis" x1={cx - rad} x2={cx + rad} y1={cy} y2={cy} />
+        <line className="mvmt-axis" x1={cx} x2={cx} y1={cy - rad} y2={cy + rad} />
+        {rings.map((r) => <text key={r} className="mvmt-ringlabel" x={cx + 3} y={cy - r * sc - 2}>{r}″</text>)}
+        <text className="mvmt-side" x={cx - rad + 4} y={cy + rad + 14}>{armRight ? "◀ Glove side" : "◀ Arm side"}</text>
+        <text className="mvmt-side" x={cx + rad - 4} y={cy + rad + 14} textAnchor="end">{armRight ? "Arm side ▶" : "Glove side ▶"}</text>
+        <text className="mvmt-side" x={cx} y={cy - rad - 6} textAnchor="middle">Rise ▲</text>
+        <text className="mvmt-side" x={cx} y={cy + rad + 14} textAnchor="middle">▼ Drop</text>
+        <g clipPath="url(#mvmt-clip)">
+          {rows.map((r) => (
+            <circle key={r.id} className="pitch-dot" cx={x(r.hb)} cy={y(r.ivb)} r={2.4} fill={pitchColor(r.type)}
+              onMouseEnter={() => setHoverRow(r)} onMouseLeave={() => setHoverRow(null)} />
+          ))}
+        </g>
         {modified && (() => {
           const from = pitches.find((p) => p.type === modified.type);
           if (!from) return null;
           return (
             <g className="modified">
               <line x1={x(from.hb)} y1={y(from.ivb)} x2={x(modified.hb)} y2={y(modified.ivb)} stroke={pitchColor(modified.type)} strokeWidth={1.5} strokeDasharray="3 3" />
-              <circle cx={x(modified.hb)} cy={y(modified.ivb)} r={7} fill="none" stroke={pitchColor(modified.type)} strokeWidth={2.5} />
-              <text className="dot-label" x={x(modified.hb) + 10} y={y(modified.ivb) + 4}>{pitchAbbr(modified.type)}′</text>
+              <circle cx={x(modified.hb)} cy={y(modified.ivb)} r={8} fill="none" stroke={pitchColor(modified.type)} strokeWidth={2.5} />
+              <text className="mvmt-label" x={x(modified.hb) + 11} y={y(modified.ivb) + 4}>{pitchAbbr(modified.type)}′</text>
             </g>
           );
         })()}
@@ -52,9 +64,9 @@ export function MovementPlot({ pitches, rows = [], lastType, nextType, modified 
           const active = p.type === lastType || p.type === nextType;
           return (
             <g key={p.type} onMouseEnter={() => setHover(p)} onMouseLeave={() => setHover(null)}>
-              <circle cx={x(p.hb)} cy={y(p.ivb)} r={14} fill="transparent" />
-              <circle cx={x(p.hb)} cy={y(p.ivb)} r={active ? 7 : 5} fill={pitchColor(p.type)} stroke="#0f1a2e" strokeWidth={2} />
-              <text className="dot-label" x={x(p.hb) + 10} y={y(p.ivb) + 4}>{pitchAbbr(p.type)}</text>
+              <circle cx={x(p.hb)} cy={y(p.ivb)} r={16} fill="transparent" />
+              <circle cx={x(p.hb)} cy={y(p.ivb)} r={active ? 9 : 7} fill={pitchColor(p.type)} stroke="#ffffff" strokeWidth={2.5} />
+              <text className="mvmt-label" x={x(p.hb) + 12} y={y(p.ivb) + 4}>{pitchAbbr(p.type)} <tspan className="mvmt-velo">{p.velo.toFixed(0)}</tspan></text>
             </g>
           );
         })}
@@ -62,7 +74,7 @@ export function MovementPlot({ pitches, rows = [], lastType, nextType, modified 
       {hover && (
         <div className="tip" role="status">
           <strong>{hover.type}, average</strong>
-          <span>{hover.velo.toFixed(1)} mph</span>
+          <span>{hover.velo.toFixed(1)} mph{hover.spin != null && `, ${Math.round(hover.spin)} rpm`}</span>
           <span>{hover.ivb.toFixed(1)} in IVB, {hover.hb.toFixed(1)} in HB</span>
           <span>{hover.n.toLocaleString()} pitches</span>
         </div>

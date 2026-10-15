@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { HEAT_RAMP, heatBin } from "../lib/heatRamp";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DECISION_X, PLATE_X, posAtDist, posAtTime, timeAtDist, type Coeffs, type Point } from "../lib/physics";
 import { ZONE, type Cell, type Loc } from "../lib/grid";
@@ -48,8 +49,7 @@ interface Props {
 
 const SKY = 0x0a1322;
 const GOLD = 0xeaaa00;
-// Sequential red ramp, light (worse) to dark red (better).
-const RAMP = ["#fde0df", "#f9b9b7", "#f4918f", "#ec6b69", "#e34948", "#c43636", "#9c2525", "#731717"].map((c) => new THREE.Color(c));
+const RAMP = HEAT_RAMP.map((c) => new THREE.Color(c));
 
 function buildField(scene: THREE.Scene) {
   scene.background = new THREE.Color(SKY);
@@ -202,7 +202,7 @@ function heatGroup(heat: HeatLayer, selected: Loc | null, best: Loc | null, anch
   for (const c of heat.cells) {
     let f = hi - lo < 1e-9 ? 0 : (heat.value(c) - lo) / (hi - lo);
     if (heat.better === "low") f = 1 - f;
-    const col = RAMP[Math.min(RAMP.length - 1, Math.floor(f * RAMP.length))];
+    const col = RAMP[heatBin(f)];
     const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
     m.position.set(c.side, c.height, PLATE_X + 0.04);
     m.userData.loc = { side: c.side, height: c.height };

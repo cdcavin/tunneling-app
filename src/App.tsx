@@ -281,7 +281,7 @@ export default function App() {
                 <ZonePicker label="Where every pitch is placed; shaded by how the active pitch tunnels off the anchor" active={arsenalRows.filter((r) => r.on).findIndex((r) => r.isActive)} onSelect={place}
                   best={placing === 1 ? bestTight : null} heat={placing === 1 ? heatProps : undefined}
                   markers={arsenalRows.filter((r) => r.on).map((r) => ({ loc: r.loc, color: pitchColorOnDark(r.pitch.type), name: r.isAnchor ? `anchor ${r.pitch.type}` : r.pitch.type }))} />
-                <p className="hint">Red is better for the active pitch. Click a cell to move it there.</p>
+                <p className="hint">Green is better for the active pitch. Click a cell to move it there.</p>
               </section>
             </>
           )}
@@ -423,7 +423,7 @@ export default function App() {
               )}
             </section>
             <section className="card">
-              <MovementPlot pitches={arsenal} rows={rows} lastType={last?.type ?? null} nextType={next?.type ?? null} modified={shapedPitch} />
+              <MovementPlot pitches={arsenal} rows={rows} lastType={last?.type ?? null} nextType={next?.type ?? null} throws={pitcher?.throws} modified={shapedPitch} />
             </section>
             <section className="card">
               <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />

@@ -361,3 +361,14 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .picker-pop { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
 .picker-pop .picker-list { max-height: 220px; }
 .picker-slots .dd.is-open { border-color: var(--wvu-gold); color: var(--ink); }
+
+/* Savant-style movement plot */
+.mvmt-disc { fill: #f6f7f9; stroke: #cfd5de; stroke-width: 1; }
+.mvmt-ring { fill: none; stroke: #d7dce4; stroke-width: 1; }
+.mvmt-axis { stroke: #b9c1cc; stroke-width: 1; }
+.mvmt-ringlabel { fill: #8a94a3; font-size: 8.5px; font-family: var(--font); }
+.mvmt-side { fill: var(--muted); font-size: 10px; font-weight: 600; font-family: var(--font); letter-spacing: 0.02em; }
+.mvmt-label { fill: #1b2330; font-size: 11px; font-weight: 700; font-family: var(--font); paint-order: stroke; stroke: #f6f7f9; stroke-width: 3px; stroke-linejoin: round; }
+.mvmt-velo { font-weight: 500; fill: #4d5868; }
+.mvmt .pitch-dot { opacity: 0.55; }
+.mvmt .pitch-dot:hover { opacity: 1; }

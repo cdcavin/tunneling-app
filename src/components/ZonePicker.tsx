@@ -1,8 +1,6 @@
 import { HEIGHTS, SIDES, ZONE, sameLoc, type Cell, type Loc } from "../lib/grid";
 
-// Sequential red ramp, light (worse) to dark red (better).
-const RAMP = ["#fde0df", "#f9b9b7", "#f4918f", "#ec6b69", "#e34948", "#c43636", "#9c2525", "#731717"];
-const INK_ON = (i: number) => (i >= 3 ? "#ffffff" : "#3a0d0d");
+import { HEAT_RAMP as RAMP, heatInk as INK_ON, heatBin } from "../lib/heatRamp";
 const EMPTY = "#1b2740";
 
 // Catcher's view: third-base side (+ side) on the left, high pitches on top.
@@ -43,7 +41,7 @@ export default function ZonePicker({ label, markers, active, onSelect, heat, bes
     if (!heat || hi - lo < 1e-9) return 0;
     let f = (v - lo) / (hi - lo);
     if (heat.better === "low") f = 1 - f;
-    return Math.min(RAMP.length - 1, Math.floor(f * RAMP.length));
+    return heatBin(f);
   };
 
   return (
