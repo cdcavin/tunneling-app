@@ -107,7 +107,7 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
       const err = a.error ?? b.error;
       setStatus(err ?? (a.clips.length && b.clips.length ? null : "AWRE has no clip for one of these pitches."));
       const names = a.clips.map((c) => c.perspective).filter((p) => b.clips.some((c) => c.perspective === p));
-      setPerspective((cur) => (names.includes(cur) ? cur : names.find((n) => /home ?plate/i.test(n)) ?? names[0] ?? ""));
+      setPerspective((cur) => (names.includes(cur) ? cur : names.find((n) => /center ?field/i.test(n)) ?? names.find((n) => /home ?plate/i.test(n)) ?? names[0] ?? ""));
     });
     return () => { cancelled = true; };
   }, [selected]);
@@ -223,11 +223,6 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
               <span><i style={{ background: pitchColorOnDark(anchorType) }} />{anchorType}</span>
               <span><i style={{ background: pitchColorOnDark(nextType) }} />{nextType}</span>
               <span className={aligned ? "tag-ok" : "tag-warn"}>{aligned ? "Releases aligned" : "Release not found: mark it"}</span>
-            </div>
-            <div className="overlay-debug" aria-label="Alignment details">
-              {[["A", selected.anchor.utc, startA, releaseA], ["B", selected.next.utc, startB, releaseB]].map(([k, utc, start, rel]) => (
-                <span key={k as string}>{k as string}: utc {utc ?? "missing"} · clip start {start == null ? "unknown" : new Date(start as number).toISOString()} · release {rel == null ? "—" : `${(rel as number).toFixed(3)} s`}</span>
-              ))}
             </div>
           </>
         ) : (
