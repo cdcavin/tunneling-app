@@ -267,7 +267,7 @@ export default function App() {
           <div className="views">
             <div className="stage">
               <Scene3D last={sceneLast} next={sceneNext} aim={aim} aimColor={next ? pitchColorOnDark(next.type) : "#ffffff"} camera={camera}
-                heat={heat} selected={placing === 0 ? lastLoc : nextLoc} anchorLoc={lastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={videoClock ?? clock} />
+                heat={heat} selected={placing === 0 ? lastLoc : nextLoc} anchorLoc={lastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={playing || videoClock == null ? clock : videoClock} />
               <div className="hud hud-legend">
                 {last && <span><i style={{ background: pitchColorOnDark(last.type) }} />Anchor: {last.type}</span>}
                 {next && <span><i style={{ background: pitchColorOnDark(next.type) }} className={sameType ? "dashed" : ""} />Tunnel: {next.type}{shapedPitch && " (modified)"}</span>}
@@ -300,7 +300,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <VideoOverlay pairs={pairs} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} />
+              <VideoOverlay pairs={pairs} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
             </div>
           </div>
 

@@ -11,6 +11,8 @@ interface Props {
   nextType: string;
   /** Called with seconds since release while linked to the 3D view, or null when unlinked. */
   onFlightTime: (t: number | null) => void;
+  /** Whether the 3D view is showing this real pair (so the video may drive its clock). */
+  drivesScene: boolean;
 }
 
 // Safari plays HLS natively; every other browser answers "maybe" to canPlayType and then can't, so go by the browser.
@@ -65,13 +67,15 @@ const tIn = (v: HTMLVideoElement) => v.currentTime - t0(v);
 /** Release inside a clip, seconds from its start: Trackman's UTC release time against the stream's wall clock. */
 function releaseFromUtc(utc: string | undefined, startMs: number | null): number | null {
   if (!utc || startMs == null) return null;
-  const t = Date.parse(utc);
+  // Trackman writes "2026-03-01 17:23:21.781043" (UTC, no zone marker). Normalise to ISO so it is never read as local time.
+  const iso = utc.trim().replace(" ", "T").replace(/(\.\d{3})\d+/, "$1");
+  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
   if (Number.isNaN(t)) return null;
   const s = (t - startMs) / 1000;
   return s >= 0 && s <= 120 ? s : null;
 }
 
-export default function VideoOverlay({ pairs, selected, onSelect, anchorType, nextType, onFlightTime }: Props) {
+export default function VideoOverlay({ pairs, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene }: Props) {
   const [clipsA, setClipsA] = useState<AwreClip[]>([]);
   const [clipsB, setClipsB] = useState<AwreClip[]>([]);
   const [linked, setLinked] = useState(true);
@@ -143,13 +147,16 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
     const tick = () => {
       const rel = tIn(a) - (releaseA ?? 0);
       setPos(rel);
-      onFlightTime(linked && releaseA != null ? Math.max(0, rel) : null);
+      // Drive the 3D clock only while the video is playing or sits after release; a clip parked
+      // before release leaves the 3D showing the full paths instead of two balls in the hand.
+      const drive = linked && drivesScene && releaseA != null && (!a.paused || rel > 0);
+      onFlightTime(drive ? Math.max(0, rel) : null);
       if (!a.paused) sync();
       raf = requestAnimationFrame(tick);
     };
     tick();
     return () => { cancelAnimationFrame(raf); onFlightTime(null); };
-  }, [linked, releaseA, urlA, onFlightTime, sync]);
+  }, [linked, drivesScene, releaseA, urlA, onFlightTime, sync]);
 
   useEffect(() => {
     const a = vA.current; if (!a) return;
