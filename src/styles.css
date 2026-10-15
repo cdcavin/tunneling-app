@@ -348,3 +348,13 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .pick-what { color: var(--ink-2); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pick-what i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .pick-btns button { width: 22px; height: 20px; margin-left: 3px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--well); color: var(--ink); font-size: 11px; font-weight: 700; cursor: pointer; }
+.sep-vert { fill: none; stroke: #e06c8c; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.sep-horz { fill: none; stroke: #4fc08d; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.sep-dot-vert { fill: #e06c8c; stroke: var(--panel); stroke-width: 1.5; }
+.sep-dot-horz { fill: #4fc08d; stroke: var(--panel); stroke-width: 1.5; }
+.sep-legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--muted); margin: -4px 0 4px; }
+.sep-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.sep-legend i { width: 14px; height: 0; border-top: 2px solid; }
+.sep-legend .l-total { border-color: #3987e5; }
+.sep-legend .l-vert { border-color: #e06c8c; border-top-style: dashed; }
+.sep-legend .l-horz { border-color: #4fc08d; border-top-style: dashed; }

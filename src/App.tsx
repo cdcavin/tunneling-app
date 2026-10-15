@@ -426,7 +426,7 @@ export default function App() {
               <MovementPlot pitches={arsenal} rows={rows} lastType={last?.type ?? null} nextType={next?.type ?? null} modified={shapedPitch} />
             </section>
             <section className="card">
-              <SeparationChart curve={curve} />
+              <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
             </section>
           </div>
         </main>

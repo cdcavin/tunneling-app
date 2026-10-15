@@ -114,13 +114,20 @@ export function pairGeometry(a: Coeffs, b: Coeffs): PairGeometry | null {
 }
 
 /** Separation (in) at evenly spaced distances from release to the plate. */
-export function separationCurve(a: Coeffs, b: Coeffs, n = 60): { distFromPlate: number; sep: number }[] {
+export interface SepSample { distFromPlate: number; sep: number; dv: number; dh: number }
+
+/**
+ * Separation over the flight, release to the plate's front edge. `sep` is the straight-line gap;
+ * `dv` and `dh` are the vertical and horizontal parts, signed as second pitch minus first
+ * (dv > 0: second pitch higher; dh > 0: second pitch toward the third-base side). Inches.
+ */
+export function separationCurve(a: Coeffs, b: Coeffs, n = 60): SepSample[] {
   const start = Math.min(a.Xc0, b.Xc0);
-  const out: { distFromPlate: number; sep: number }[] = [];
+  const out: SepSample[] = [];
   for (let i = 0; i <= n; i++) {
     const d = start + (PLATE_X - start) * (i / n);
     const pa = posAtDist(a, d), pb = posAtDist(b, d);
-    if (pa && pb) out.push({ distFromPlate: d - PLATE_X, sep: sepInches(pa, pb) });
+    if (pa && pb) out.push({ distFromPlate: d - PLATE_X, sep: sepInches(pa, pb), dv: (pb.height - pa.height) * 12, dh: (pb.side - pa.side) * 12 });
   }
   return out;
 }
