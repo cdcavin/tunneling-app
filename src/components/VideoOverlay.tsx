@@ -207,6 +207,11 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
               <span><i style={{ background: pitchColorOnDark(nextType) }} />{nextType}</span>
               <span className={aligned ? "tag-ok" : "tag-warn"}>{aligned ? "Releases aligned" : "Release not found: mark it"}</span>
             </div>
+            <div className="overlay-debug" aria-label="Alignment details">
+              {[["A", selected.anchor.utc, startA, releaseA], ["B", selected.next.utc, startB, releaseB]].map(([k, utc, start, rel]) => (
+                <span key={k as string}>{k as string}: utc {utc ?? "missing"} · clip start {start == null ? "unknown" : new Date(start as number).toISOString()} · release {rel == null ? "—" : `${(rel as number).toFixed(3)} s`}</span>
+              ))}
+            </div>
           </>
         ) : (
           <div className="video-empty"><p>{status ?? (selected ? "Loading…" : "Pick a real pair to stack the two clips.")}</p></div>
