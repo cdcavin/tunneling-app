@@ -31,10 +31,17 @@ async function awre(env: Env, pathname: string): Promise<Response> {
   const cached = await env.DATA.get(cacheKey, "text");
   if (cached) return new Response(cached, { headers: JSON_HEADERS });
 
-  const base = env.AWRE_BASE ?? AWRE_BASE, team = env.AWRE_TEAM_ID ?? AWRE_TEAM;
-  const headers = { Authorization: `Api-Key ${env.AWRE_API_KEY}`, Accept: "application/json" };
-  const p = await fetch(`${base}/team/${team}/pitchuid/${encodeURIComponent(uid)}`, { headers });
-  if (!p.ok) return json({ error: `AWRE pitch lookup failed (HTTP ${p.status}).`, detail: (await p.text()).slice(0, 300) }, 502);
+  const team = env.AWRE_TEAM_ID ?? AWRE_TEAM;
+  // The collection sends only the key; extra headers (an Accept header, say) get a 406 back.
+  const headers = { Authorization: `Api-Key ${env.AWRE_API_KEY}` };
+  const bases = env.AWRE_BASE ? [env.AWRE_BASE] : [AWRE_BASE, AWRE_BASE.replace("https://api.", "https://www.")];
+  let p: Response | null = null, base = bases[0];
+  for (const b of bases) {
+    p = await fetch(`${b}/team/${team}/pitchuid/${encodeURIComponent(uid)}`, { headers });
+    base = b;
+    if (p.ok || p.status === 404) break;
+  }
+  if (!p || !p.ok) return json({ error: `AWRE pitch lookup failed (HTTP ${p?.status}).`, detail: (await p?.text())?.slice(0, 300) }, 502);
   const pitch = (await p.json()) as { pitch?: { pitch_id?: number } };
   const pitchId = pitch.pitch?.pitch_id;
   if (!pitchId) return json({ error: "AWRE has no video record for this pitch.", pitch }, 404);
