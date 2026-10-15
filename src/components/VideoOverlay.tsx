@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { lookupClips, streamUrl, type AwreClip, type RealPair } from "../lib/pairs";
+import PitchPicker from "./PitchPicker";
+import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 
 interface Props {
   pairs: RealPair[];
+  rows: PitchRow[];
   selected: RealPair | null;
   onSelect: (p: RealPair | null) => void;
   anchorType: string;
@@ -96,7 +99,7 @@ function releaseFromUtc(utc: string | undefined, startMs: number | null): number
   return s >= 0 && s <= 120 ? s : null;
 }
 
-export default function VideoOverlay({ pairs, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene }: Props) {
+export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene }: Props) {
   const [clipsA, setClipsA] = useState<AwreClip[]>([]);
   const [clipsB, setClipsB] = useState<AwreClip[]>([]);
   const [linked, setLinked] = useState(true);
@@ -119,7 +122,7 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
   const vA = useRef<HTMLVideoElement>(null), vB = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (!selected) { setClipsA([]); setClipsB([]); setStatus(null); return; }
+    if (!selected || selected.anchor.id === selected.next.id) { setClipsA([]); setClipsB([]); setStatus(selected ? "Now pick pitch B." : null); return; }
     let cancelled = false;
     setStatus("Looking up video…");
     setManualA(null); setManualB(null); setNudgeMs(0);
@@ -225,19 +228,11 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
     <div className="overlay">
       <div className="overlay-head">
         <div className="sec-title">Video overlay</div>
-        <select aria-label="Real pair to watch" value={selected ? `${selected.anchor.id}|${selected.next.id}` : ""}
-          onChange={(e) => onSelect(pairs.find((p) => `${p.anchor.id}|${p.next.id}` === e.target.value) ?? null)}>
-          <option value="">{pairs.length ? `Pick a real ${anchorType} → ${nextType} pair (${pairs.length})` : `No ${anchorType} → ${nextType} pairs in the selected pitches`}</option>
-          {pairs.map((p) => (
-            <option key={`${p.anchor.id}|${p.next.id}`} value={`${p.anchor.id}|${p.next.id}`}>
-              {p.next.date} vs {p.next.opponent}, inn {p.next.inning}: {p.anchor.velo.toFixed(0)} {anchorType} → {p.next.velo.toFixed(0)} {nextType} ({p.next.call})
-            </option>
-          ))}
-        </select>
+        <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} />
       </div>
 
       <div className="overlay-stage">
-        {selected && urlA && urlB ? (
+        {selected && selected.anchor.id !== selected.next.id && urlA && urlB ? (
           <>
             <video ref={vA} muted playsInline preload="auto" />
             <video ref={vB} muted playsInline preload="auto" style={{ opacity }} />
@@ -248,11 +243,11 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
             </div>
           </>
         ) : (
-          <div className="video-empty"><p>{status ?? (selected ? "Loading…" : "Pick a real pair to stack the two clips.")}</p></div>
+          <div className="video-empty"><p>{status ?? (selected ? "Loading…" : "Pick any two pitches to stack their clips.")}</p></div>
         )}
       </div>
 
-      {selected && urlA && urlB && (
+      {selected && selected.anchor.id !== selected.next.id && urlA && urlB && (
         <>
           <div className="scrub-row">
             <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>

@@ -10,6 +10,7 @@ export interface PitchRow {
   utc?: string;          // release time, ISO UTC with milliseconds (Trackman UTCDateTime); aligns video
   home?: boolean;        // tracked at WVU's park, where the tags are the staff's own
   inning?: number | null; half?: string | null; pa?: number | null; pitchNo?: number | null;   // at-bat sequence, for finding real pairs
+  batter?: string; batterSide?: string; count?: string;   // who was up and the count, when the data carries them
   type: string;          // pitch type (home operator tag, or matched to it for away games)
   velo: number;          // mph, release
   ivb: number;           // in, induced vertical break

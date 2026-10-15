@@ -264,7 +264,7 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 /* ── Video overlay ── */
 .video { padding: 8px; flex-direction: column; gap: 6px; }
 .overlay { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
-.overlay-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
+.overlay-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
 .overlay-head .sec-title { margin: 0; white-space: nowrap; }
 .overlay-stage { position: relative; flex: none; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius); overflow: hidden; display: flex; }
 .overlay-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
@@ -327,3 +327,24 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .grade.good { background: #1d4b8a; color: #cfe3ff; }
 .grade.avg { background: #6b4a00; color: #ffe4a6; }
 .grade.poor { background: #6e1d1d; color: #ffd0d0; }
+
+/* pitch picker */
+.picker { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.picker-slots { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.picker-slots .slot { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--well); color: var(--ink-2); font-size: 11px; cursor: pointer; }
+.picker-slots .slot b { color: var(--wvu-gold); }
+.picker-slots .slot.is-next { border-color: var(--wvu-gold); }
+.picker-slots .slot i { width: 8px; height: 8px; border-radius: 50%; }
+.picker-slots .muted { color: var(--muted); }
+.picker-slots .ghost { padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--well); color: var(--ink-2); font-size: 11px; cursor: pointer; }
+.picker-filters { display: grid; grid-template-columns: 1.3fr 0.8fr 1.2fr 1.3fr; gap: 4px; }
+.picker-filters select, .picker-filters input { width: 100%; padding: 4px 6px; font-size: 11px; min-width: 0; }
+.picker-list { max-height: 132px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+.pick-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 3px 6px; font-size: 11px; border-bottom: 1px solid var(--line); }
+.pick-row.is-a { background: rgba(234, 170, 0, 0.12); }
+.pick-row.is-b { background: rgba(120, 160, 255, 0.12); }
+.pick-row.is-a.is-b { background: rgba(180, 160, 100, 0.16); }
+.pick-when { color: var(--muted); white-space: nowrap; }
+.pick-what { color: var(--ink-2); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick-what i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.pick-btns button { width: 22px; height: 20px; margin-left: 3px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--well); color: var(--ink); font-size: 11px; font-weight: 700; cursor: pointer; }

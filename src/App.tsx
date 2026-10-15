@@ -142,12 +142,12 @@ export default function App() {
     if (placing === 0) setLastLoc(loc); else setNextLoc(loc);
   };
 
-  const actual = pair && showActual;
-  const lastAimed = useMemo(() => (actual ? pair.anchor.coeffs : last ? aimAt(last.coeffs, curLastLoc.side, curLastLoc.height) : null), [actual, pair, last, curLastLoc]);
-  const nextAimed = useMemo(() => (actual ? pair.next.coeffs : shaped ? aimAt(shaped, curNextLoc.side, curNextLoc.height) : null), [actual, pair, shaped, curNextLoc]);
+  const actual = pair && showActual && pair.anchor.id !== pair.next.id ? pair : null;
+  const lastAimed = useMemo(() => (actual ? actual.anchor.coeffs : last ? aimAt(last.coeffs, curLastLoc.side, curLastLoc.height) : null), [actual, pair, last, curLastLoc]);
+  const nextAimed = useMemo(() => (actual ? actual.next.coeffs : shaped ? aimAt(shaped, curNextLoc.side, curNextLoc.height) : null), [actual, pair, shaped, curNextLoc]);
   const pairs = useMemo(() => (last && next ? realPairs(rows, last.type, next.type) : []), [rows, last, next]);
   // Drop the pair if the selection or the pitch types no longer include it.
-  useEffect(() => { if (pair && !pairs.some((p) => p.anchor.id === pair.anchor.id && p.next.id === pair.next.id)) setPair(null); }, [pairs, pair]);
+  useEffect(() => { if (pair && !(rows.some((r) => r.id === pair.anchor.id) && rows.some((r) => r.id === pair.next.id))) setPair(null); }, [rows, pair]);
   const cells = useMemo(() => (lastAimed && shaped ? nextPitchCells(lastAimed, shaped) : []), [lastAimed, shaped]);
   const bestTight = useMemo(() => tightest(cells), [cells]);
   const bestFar = useMemo(() => provisionalBest(cells, maxDecision), [cells, maxDecision]);
@@ -352,7 +352,7 @@ export default function App() {
                   <span key={r.pitch.type}><i style={{ background: pitchColorOnDark(r.pitch.type) }} />{r.pitch.type}</span>
                 ))}
                 <span><i className="gold" />Decision point, 23.8 ft</span>
-                {actual && <span className="legend-note">Real pair, {pair.next.date}</span>}
+                {actual && <span className="legend-note">Real pitches, {actual.next.date}</span>}
               </div>
               <div className="hud hud-cams" role="radiogroup" aria-label="Camera">
                 {(Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((k) => (
@@ -380,7 +380,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <VideoOverlay pairs={pairs} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
+              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
             </div>
           </div>
 
