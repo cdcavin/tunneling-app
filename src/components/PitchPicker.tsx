@@ -22,7 +22,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
   const [ab, setAb] = useState("");
   const [query, setQuery] = useState("");
   const [slot, setSlot] = useState<"A" | "B">("A");
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const games = useMemo(() => outings(rows), [rows]);
   const inGame = useMemo(() => (game ? rows.filter((r) => r.game === game) : rows), [rows, game]);
@@ -53,10 +53,10 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
           </button>
         ))}
         {selected && <button type="button" className="ghost" onClick={() => onSelect(null)}>Clear</button>}
-        <button type="button" className="ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{open ? "Hide list" : "Browse"}</button>
+        <button type="button" className={`ghost dd${open ? " is-open" : ""}`} onClick={() => setOpen((o) => !o)} aria-expanded={open}>{open ? "Done ▴" : "Find pitches ▾"}</button>
       </div>
       {open && (
-        <>
+        <div className="picker-pop" role="dialog" aria-label="Find pitches">
           <div className="picker-filters">
             <select aria-label="Outing" value={game} onChange={(e) => { setGame(e.target.value); setInning(""); setAb(""); }}>
               <option value="">All outings</option>
@@ -79,7 +79,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
                 <span className="pick-what"><i style={{ background: pitchColorOnDark(r.type) }} />{r.type} {r.velo.toFixed(0)}{r.count ? ` · ${r.count}` : ""} · {r.call}{r.batter ? ` · ${r.batter}` : ""}</span>
                 <span className="pick-btns">
                   <button type="button" onClick={() => { setSlot("A"); onSelect(B && !isPlaceholder ? { anchor: r, next: B } : { anchor: r, next: r }); setSlot("B"); }} aria-label={`Use as A: ${short(r)}`}>A</button>
-                  <button type="button" onClick={() => { onSelect(A ? { anchor: A, next: r } : { anchor: r, next: r }); }} aria-label={`Use as B: ${short(r)}`}>B</button>
+                  <button type="button" onClick={() => { onSelect(A ? { anchor: A, next: r } : { anchor: r, next: r }); if (A) setOpen(false); }} aria-label={`Use as B: ${short(r)}`}>B</button>
                 </span>
               </div>
             ))}
@@ -87,7 +87,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
             {list.length === 80 && <p className="hint">Showing the first 80. Narrow it down.</p>}
           </div>
           {pairs.length > 0 && (
-            <select aria-label="Quick: real back-to-back pairs" value="" onChange={(e) => { const p = pairs.find((x) => `${x.anchor.id}|${x.next.id}` === e.target.value); if (p) onSelect(p); }}>
+            <select aria-label="Quick: real back-to-back pairs" value="" onChange={(e) => { const p = pairs.find((x) => `${x.anchor.id}|${x.next.id}` === e.target.value); if (p) { onSelect(p); setOpen(false); } }}>
               <option value="">Quick pick: back-to-back {pairs[0].anchor.type} → {pairs[0].next.type} ({pairs.length})</option>
               {pairs.map((p) => (
                 <option key={`${p.anchor.id}|${p.next.id}`} value={`${p.anchor.id}|${p.next.id}`}>
@@ -96,7 +96,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
               ))}
             </select>
           )}
-        </>
+        </div>
       )}
     </div>
   );

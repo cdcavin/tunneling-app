@@ -329,7 +329,7 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .grade.poor { background: #6e1d1d; color: #ffd0d0; }
 
 /* pitch picker */
-.picker { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.picker { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .picker-slots { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .picker-slots .slot { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--well); color: var(--ink-2); font-size: 11px; cursor: pointer; }
 .picker-slots .slot b { color: var(--wvu-gold); }
@@ -358,3 +358,6 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .sep-legend .l-total { border-color: #3987e5; }
 .sep-legend .l-vert { border-color: #e06c8c; border-top-style: dashed; }
 .sep-legend .l-horz { border-color: #4fc08d; border-top-style: dashed; }
+.picker-pop { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
+.picker-pop .picker-list { max-height: 220px; }
+.picker-slots .dd.is-open { border-color: var(--wvu-gold); color: var(--ink); }
