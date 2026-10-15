@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { lookupClips, type AwreClip, type RealPair } from "../lib/pairs";
 import { pitchColorOnDark } from "../lib/pitchColors";
@@ -56,18 +56,31 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
 
   const urlA = pick(clipsA, perspective)?.video_url ?? null;
   const urlB = pick(clipsB, perspective)?.video_url ?? null;
-  const onError = (m: string) => setStatus(m);
+  // Stable handler: the players are only rebuilt when a clip URL changes, not on every render.
+  const onError = useCallback((m: string) => setStatus(m), []);
   useHls(vA, urlA, onError);
   useHls(vB, urlB, onError);
+  // When both clips end, show the play button again.
+  useEffect(() => {
+    const a = vA.current; if (!a) return;
+    const done = () => setPlaying(false);
+    a.addEventListener("ended", done); a.addEventListener("pause", done);
+    return () => { a.removeEventListener("ended", done); a.removeEventListener("pause", done); };
+  }, [urlA]);
 
   // Keep B offset from A by offsetMs, and play/pause both together.
-  const sync = () => { const a = vA.current, b = vB.current; if (a && b) b.currentTime = Math.max(0, a.currentTime + offsetMs / 1000); };
+  const sync = () => {
+    const a = vA.current, b = vB.current; if (!a || !b) return;
+    const want = Math.max(0, a.currentTime + offsetMs / 1000);
+    if (Math.abs(b.currentTime - want) > 0.02) b.currentTime = want;   // only seek when actually out of step
+  };
   const toggle = () => {
     const a = vA.current, b = vB.current; if (!a || !b) return;
     if (playing) { a.pause(); b.pause(); setPlaying(false); } else { sync(); void a.play(); void b.play(); setPlaying(true); }
   };
   const restart = () => { const a = vA.current, b = vB.current; if (!a || !b) return; a.currentTime = 0; sync(); };
   const step = (ms: number) => { const a = vA.current; if (!a) return; a.pause(); vB.current?.pause(); setPlaying(false); a.currentTime = Math.max(0, a.currentTime + ms / 1000); sync(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(sync, [offsetMs]);
 
   const perspectives = clipsA.map((c) => c.perspective).filter((p) => clipsB.some((c) => c.perspective === p));
