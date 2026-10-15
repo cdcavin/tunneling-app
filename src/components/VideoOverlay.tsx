@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { guessRelease, lookupClips, streamUrl, type AwreClip, type RealPair } from "../lib/pairs";
+import { lookupClips, streamUrl, type AwreClip, type RealPair } from "../lib/pairs";
 import { pitchColorOnDark } from "../lib/pitchColors";
 
 interface Props {
@@ -15,13 +15,28 @@ interface Props {
 
 // Safari plays HLS natively; every other browser answers "maybe" to canPlayType and then can't, so go by the browser.
 const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
+const VIDEO_SPEEDS = [0.1, 0.25, 0.5, 1];
+/** How much of the clip the scrubber covers around release (seconds before, seconds after). */
+const WINDOW = { before: 1.5, after: 2.0 };
 
-/** Attach an HLS stream to a video element (native on Safari, hls.js elsewhere). */
-function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | null, onError: (msg: string) => void) {
+/**
+ * Attach an HLS stream to a video element (native on Safari, hls.js elsewhere) and report
+ * the wall-clock time (ms since epoch) of media time 0, from the stream's PROGRAM-DATE-TIME tags.
+ */
+function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | null, onError: (msg: string) => void, onStart: (ms: number | null) => void) {
   useEffect(() => {
     const v = ref.current;
+    onStart(null);
     if (!v || !url) return;
-    if (IS_SAFARI) { v.src = url; return () => { v.removeAttribute("src"); v.load(); }; }
+    if (IS_SAFARI) {
+      v.src = url;
+      const read = () => {
+        const d = (v as HTMLVideoElement & { getStartDate?: () => Date }).getStartDate?.();
+        if (d && !Number.isNaN(d.getTime())) onStart(d.getTime());
+      };
+      v.addEventListener("loadedmetadata", read);
+      return () => { v.removeEventListener("loadedmetadata", read); v.removeAttribute("src"); v.load(); };
+    }
     if (!Hls.isSupported()) { onError("This browser can't play HLS video."); return; }
     const hls = new Hls({ enableWorker: true });
     hls.on(Hls.Events.ERROR, (_e, d) => {
@@ -29,74 +44,113 @@ function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | nul
       if (d.fatal) onError(`Video failed to load (${d.type}: ${d.details}${code ? `, HTTP ${code}` : ""}).`);
       else if (d.details === "manifestLoadError" || d.details === "fragLoadError") onError(`Video server refused a piece of the clip (${d.details}${code ? `, HTTP ${code}` : ""}).`);
     });
+    hls.on(Hls.Events.LEVEL_LOADED, (_e, d) => {
+      const f = d.details.fragments[0];
+      if (f?.programDateTime != null) onStart(f.programDateTime - f.start * 1000);
+    });
     hls.loadSource(url);
     hls.attachMedia(v);
     return () => hls.destroy();
-  }, [ref, url, onError]);
+  }, [ref, url, onError, onStart]);
 }
+
+const pick = (clips: AwreClip[], want: string) =>
+  clips.find((c) => c.perspective === want) ?? clips.find((c) => /home ?plate|center ?field/i.test(c.perspective)) ?? clips[0] ?? null;
 
 /** Where a clip's timeline starts. Clips cut from a continuous recording don't start at 0. */
 const t0 = (v: HTMLVideoElement) => (v.seekable.length ? v.seekable.start(0) : 0);
 /** Seconds into the clip, from its own start. */
 const tIn = (v: HTMLVideoElement) => v.currentTime - t0(v);
 
-const pick = (clips: AwreClip[], want: string) =>
-  clips.find((c) => c.perspective === want) ?? clips.find((c) => /home ?plate|center ?field/i.test(c.perspective)) ?? clips[0] ?? null;
-
-const VIDEO_SPEEDS = [0.1, 0.25, 0.5, 1];
+/** Release inside a clip, seconds from its start: Trackman's UTC release time against the stream's wall clock. */
+function releaseFromUtc(utc: string | undefined, startMs: number | null): number | null {
+  if (!utc || startMs == null) return null;
+  const t = Date.parse(utc);
+  if (Number.isNaN(t)) return null;
+  const s = (t - startMs) / 1000;
+  return s >= 0 && s <= 120 ? s : null;
+}
 
 export default function VideoOverlay({ pairs, selected, onSelect, anchorType, nextType, onFlightTime }: Props) {
   const [clipsA, setClipsA] = useState<AwreClip[]>([]);
   const [clipsB, setClipsB] = useState<AwreClip[]>([]);
-  const [pitchA, setPitchA] = useState<Record<string, unknown> | undefined>();
   const [linked, setLinked] = useState(true);
-  const [release, setRelease] = useState<number | null>(null);   // seconds into clip A where the ball leaves the hand
-  const [rate, setRate] = useState(1);
+  const [rate, setRate] = useState(0.25);
   const [perspective, setPerspective] = useState<string>("");
   const [status, setStatus] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(0.5);
-  const [offsetMs, setOffsetMs] = useState(0);
+  const [nudgeMs, setNudgeMs] = useState(0);                   // fine adjustment of B relative to A
   const [playing, setPlaying] = useState(false);
+  const [startA, setStartA] = useState<number | null>(null);   // wall clock of media time 0, clip A
+  const [startB, setStartB] = useState<number | null>(null);
+  const [manualA, setManualA] = useState<number | null>(null); // hand-marked release, seconds into clip A
+  const [manualB, setManualB] = useState<number | null>(null);
+  const [pos, setPos] = useState(0);                           // scrubber position: seconds relative to release
   const vA = useRef<HTMLVideoElement>(null), vB = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (!selected) { setClipsA([]); setClipsB([]); setStatus(null); return; }
     let cancelled = false;
     setStatus("Looking up video…");
-    setRelease(null);
+    setManualA(null); setManualB(null); setNudgeMs(0);
     Promise.all([lookupClips(selected.anchor.id), lookupClips(selected.next.id)]).then(([a, b]) => {
       if (cancelled) return;
-      setClipsA(a.clips); setClipsB(b.clips); setPitchA(a.pitch);
+      setClipsA(a.clips); setClipsB(b.clips);
       const err = a.error ?? b.error;
       setStatus(err ?? (a.clips.length && b.clips.length ? null : "AWRE has no clip for one of these pitches."));
       const names = a.clips.map((c) => c.perspective).filter((p) => b.clips.some((c) => c.perspective === p));
-      setPerspective((cur) => (names.includes(cur) ? cur : names[0] ?? ""));
+      setPerspective((cur) => (names.includes(cur) ? cur : names.find((n) => /home ?plate/i.test(n)) ?? names[0] ?? ""));
     });
     return () => { cancelled = true; };
   }, [selected]);
 
-  const clipA = pick(clipsA, perspective);
+  const clipA = pick(clipsA, perspective), clipB = pick(clipsB, perspective);
   const urlA = clipA ? streamUrl(clipA.video_url) : null;
-  const clipB = pick(clipsB, perspective);
   const urlB = clipB ? streamUrl(clipB.video_url) : null;
-  // Default release mark from AWRE's timestamps, until the user marks it by hand.
-  useEffect(() => { if (release == null) { const g = guessRelease(clipA, pitchA); if (g != null) setRelease(g); } }, [clipA, pitchA, release]);
-  // Playback rate on both players.
+
+  const releaseA = manualA ?? releaseFromUtc(selected?.anchor.utc, startA);
+  const releaseB = manualB ?? releaseFromUtc(selected?.next.utc, startB);
+  const aligned = releaseA != null && releaseB != null;
+
+  const onError = useCallback((m: string) => setStatus(m), []);
+  const onStartA = useCallback((ms: number | null) => setStartA(ms), []);
+  const onStartB = useCallback((ms: number | null) => setStartB(ms), []);
+  useHls(vA, urlA, onError, onStartA);
+  useHls(vB, urlB, onError, onStartB);
+
   useEffect(() => { for (const v of [vA.current, vB.current]) if (v) v.playbackRate = rate; }, [rate, urlA, urlB]);
-  // Drive the 3D flight clock from the anchor clip while linked.
+
+  // B follows A so both sit at the same time relative to their own release (plus the nudge).
+  const sync = useCallback(() => {
+    const a = vA.current, b = vB.current; if (!a || !b) return;
+    const rel = tIn(a) - (releaseA ?? 0);
+    const want = t0(b) + Math.max(0, (releaseB ?? 0) + rel + nudgeMs / 1000);
+    if (Math.abs(b.currentTime - want) > 0.02) b.currentTime = want;
+  }, [releaseA, releaseB, nudgeMs]);
+  useEffect(sync, [sync]);
+
+  const seekRel = useCallback((rel: number) => {
+    const a = vA.current; if (!a) return;
+    a.currentTime = t0(a) + Math.max(0, (releaseA ?? 0) + rel);
+    sync();
+  }, [releaseA, sync]);
+
+  // Scrubber position, the 3D flight clock, and keeping B in step while playing.
   useEffect(() => {
     const a = vA.current;
-    if (!linked || !a || release == null || !urlA) { onFlightTime(null); return; }
+    if (!a || !urlA) { onFlightTime(null); return; }
     let raf = 0;
-    const tick = () => { onFlightTime(Math.max(0, tIn(a) - release)); raf = requestAnimationFrame(tick); };
+    const tick = () => {
+      const rel = tIn(a) - (releaseA ?? 0);
+      setPos(rel);
+      onFlightTime(linked && releaseA != null ? Math.max(0, rel) : null);
+      if (!a.paused) sync();
+      raf = requestAnimationFrame(tick);
+    };
     tick();
     return () => { cancelAnimationFrame(raf); onFlightTime(null); };
-  }, [linked, release, urlA, onFlightTime]);
-  // Stable handler: the players are only rebuilt when a clip URL changes, not on every render.
-  const onError = useCallback((m: string) => setStatus(m), []);
-  useHls(vA, urlA, onError);
-  useHls(vB, urlB, onError);
-  // When both clips end, show the play button again.
+  }, [linked, releaseA, urlA, onFlightTime, sync]);
+
   useEffect(() => {
     const a = vA.current; if (!a) return;
     const done = () => setPlaying(false);
@@ -104,25 +158,22 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
     return () => { a.removeEventListener("ended", done); a.removeEventListener("pause", done); };
   }, [urlA]);
 
-  // Keep B offset from A by offsetMs, and play/pause both together.
-  const sync = () => {
-    const a = vA.current, b = vB.current; if (!a || !b) return;
-    const want = t0(b) + Math.max(0, tIn(a) + offsetMs / 1000);
-    if (Math.abs(b.currentTime - want) > 0.02) b.currentTime = want;   // only seek when actually out of step
-  };
+  // Once both releases are known, park the clips just before release.
+  useEffect(() => { if (aligned) seekRel(-0.6); }, [aligned, seekRel]);
+
+  const pauseBoth = () => { vA.current?.pause(); vB.current?.pause(); setPlaying(false); };
   const toggle = () => {
     const a = vA.current, b = vB.current; if (!a || !b) return;
-    if (playing) { a.pause(); b.pause(); setPlaying(false); return; }
+    if (playing) { pauseBoth(); return; }
     sync();
     Promise.all([a.play(), b.play()]).then(() => setPlaying(true)).catch((e: Error) => setStatus(`Play was blocked: ${e.name}: ${e.message}`));
   };
-  const restart = () => { const a = vA.current, b = vB.current; if (!a || !b) return; a.currentTime = t0(a) + (release != null ? Math.max(0, release - 0.5) : 0); sync(); };
-  const markRelease = () => { const a = vA.current; if (a) setRelease(tIn(a)); };
-  const step = (ms: number) => { const a = vA.current; if (!a) return; a.pause(); vB.current?.pause(); setPlaying(false); a.currentTime = Math.max(0, a.currentTime + ms / 1000); sync(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(sync, [offsetMs]);
+  const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
+  const markA = () => { const a = vA.current; if (a) setManualA(tIn(a)); };
+  const markB = () => { const b = vB.current; if (b) setManualB(tIn(b)); };
 
   const perspectives = clipsA.map((c) => c.perspective).filter((p) => clipsB.some((c) => c.perspective === p));
+  const fmt = (s: number) => `${s >= 0 ? "+" : "−"}${Math.abs(s * 1000).toFixed(0)} ms`;
 
   return (
     <div className="overlay">
@@ -147,6 +198,7 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
             <div className="overlay-tags">
               <span><i style={{ background: pitchColorOnDark(anchorType) }} />{anchorType}</span>
               <span><i style={{ background: pitchColorOnDark(nextType) }} />{nextType}</span>
+              <span className={aligned ? "tag-ok" : "tag-warn"}>{aligned ? "Releases aligned" : "Release not found: mark it"}</span>
             </div>
           </>
         ) : (
@@ -155,28 +207,36 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
       </div>
 
       {selected && urlA && urlB && (
-        <div className="overlay-controls">
-          <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
-          <button type="button" className="ghost" onClick={restart}>Restart</button>
-          <button type="button" className="ghost" onClick={() => step(-33)} aria-label="Back one frame">−1f</button>
-          <button type="button" className="ghost" onClick={() => step(33)} aria-label="Forward one frame">+1f</button>
-          <label className="mini"><span>Blend</span><input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Blend between the two clips" /></label>
-          <label className="mini"><span>Offset {offsetMs >= 0 ? "+" : ""}{offsetMs} ms</span><input type="range" min={-1500} max={1500} step={10} value={offsetMs} onChange={(e) => setOffsetMs(Number(e.target.value))} aria-label="Time offset of the second clip" /></label>
-          <select className="speed" aria-label="Video speed" value={rate} onChange={(e) => setRate(Number(e.target.value))}>
-            {VIDEO_SPEEDS.map((r) => <option key={r} value={r}>{r}×</option>)}
-          </select>
-          {perspectives.length > 1 && (
-            <select aria-label="Camera" value={perspective} onChange={(e) => setPerspective(e.target.value)}>
-              {perspectives.map((p) => <option key={p} value={p}>{p}</option>)}
+        <>
+          <div className="scrub-row">
+            <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
+            <button type="button" className="ghost" onClick={() => step(-33)} aria-label="Back one frame">−1f</button>
+            <button type="button" className="ghost" onClick={() => step(33)} aria-label="Forward one frame">+1f</button>
+            <div className="scrub-wrap">
+              <input type="range" className="scrub" min={-WINDOW.before} max={WINDOW.after} step={0.001} value={Math.min(WINDOW.after, Math.max(-WINDOW.before, pos))}
+                onChange={(e) => { pauseBoth(); seekRel(Number(e.target.value)); }} aria-label="Time relative to release" />
+              <i className="release-tick" style={{ left: `${(WINDOW.before / (WINDOW.before + WINDOW.after)) * 100}%` }} aria-hidden="true" />
+            </div>
+            <span className="clock">{fmt(pos)}</span>
+            <select className="speed" aria-label="Video speed" value={rate} onChange={(e) => setRate(Number(e.target.value))}>
+              {VIDEO_SPEEDS.map((r) => <option key={r} value={r}>{r}×</option>)}
             </select>
-          )}
-          <span className="hud-sep" />
-          <button type="button" className="ghost" onClick={markRelease} title="Scrub to the frame the ball leaves the hand, then click">Mark release</button>
-          <label className="hud-check"><input type="checkbox" checked={linked} onChange={(e) => setLinked(e.target.checked)} />Link to 3D</label>
-          <span className="hint">{release == null ? "Mark release to link the 3D flight to the clip." : `Release at ${release.toFixed(2)} s`}</span>
-          {status && <span className="hint">{status}</span>}
-          <a className="hint" href={urlA} target="_blank" rel="noreferrer">Open anchor clip in a new tab</a>
-        </div>
+          </div>
+          <div className="overlay-controls">
+            <label className="mini"><span>Blend</span><input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Blend between the two clips" /></label>
+            <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
+            {perspectives.length > 1 && (
+              <select aria-label="Camera" value={perspective} onChange={(e) => setPerspective(e.target.value)}>
+                {perspectives.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+            <span className="hud-sep" />
+            <button type="button" className="ghost" onClick={markA} title={`Scrub to the frame the ${anchorType} leaves the hand, then click`}>Mark {anchorType} release</button>
+            <button type="button" className="ghost" onClick={markB} title={`Scrub to the frame the ${nextType} leaves the hand, then click`}>Mark {nextType} release</button>
+            <label className="hud-check"><input type="checkbox" checked={linked} onChange={(e) => setLinked(e.target.checked)} />Link to 3D</label>
+            {status && <span className="hint">{status}</span>}
+          </div>
+        </>
       )}
     </div>
   );

@@ -279,3 +279,12 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .overlay-controls .mini input { width: 100%; margin: 0; accent-color: var(--wvu-gold); }
 .overlay-controls select { width: auto; padding: 4px 6px; font-size: 12px; }
 .legend-note { color: var(--wvu-gold); font-size: 11px; }
+
+.scrub-row { display: flex; align-items: center; gap: 6px; }
+.scrub-row .play { width: 34px; height: 30px; border: 0; border-radius: 4px; background: var(--wvu-gold); color: var(--wvu-navy); cursor: pointer; flex-shrink: 0; }
+.scrub-row .ghost { padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--well); color: var(--ink-2); font-size: 12px; cursor: pointer; }
+.scrub-wrap { position: relative; flex: 1; display: flex; align-items: center; height: 24px; }
+.scrub-wrap .scrub { width: 100%; margin: 0; }
+.release-tick { position: absolute; top: 2px; bottom: 2px; width: 2px; background: var(--wvu-gold); pointer-events: none; transform: translateX(-1px); }
+.tag-ok { color: #7fd99a; }
+.tag-warn { color: var(--wvu-gold); }
