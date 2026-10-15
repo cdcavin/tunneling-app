@@ -9,6 +9,7 @@ import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
 import VideoOverlay from "./components/VideoOverlay";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
+import BestTunnels from "./components/BestTunnels";
 import { realLoc } from "./lib/arsenal";
 import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
@@ -329,6 +330,9 @@ export default function App() {
             </label>
           </section>
           </>)}
+
+          <BestTunnels rows={rows} types={arsenal.map((p) => p.type)} selected={pair}
+            onSelect={(p) => { setPair(p); setShowActual(true); if (arsenalMode) setArsenalMode(false); setLastType(p.anchor.type); chooseNextType(p.next.type); }} />
 
           <section>
             <div className="sec-title">Situation</div>

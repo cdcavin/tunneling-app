@@ -375,3 +375,20 @@ button.link:hover { text-decoration: underline; }
   .picker-filters { grid-template-columns: 1fr 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Best tunnels */
+.best-types { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+.hud-check.inline { background: none; padding: 0; margin-bottom: 8px; color: var(--muted); }
+button.primary.wide { width: 100%; }
+.best-list { margin-top: 10px; display: grid; gap: 3px; }
+.best-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--r-ctl); background: var(--raised); color: var(--ink); font-size: 12px; }
+.best-row:hover { background: var(--raised-2); }
+.best-row.is-on { border-color: var(--steel); }
+.best-rank { font: 600 12px/1 var(--font-cond); color: var(--muted); text-align: right; }
+.best-what { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.best-what i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.best-what em { font-style: normal; color: var(--muted); margin: 0 2px; }
+.best-what small { flex-basis: 100%; color: var(--muted); font-variant-numeric: tabular-nums; }
+.best-nums { display: grid; text-align: right; }
+.best-nums b { font: 600 15px/1.1 var(--font-cond); color: var(--ink); font-variant-numeric: tabular-nums; }
+.best-nums small { font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
