@@ -63,6 +63,12 @@ const t0 = (v: HTMLVideoElement) => (v.seekable.length ? v.seekable.start(0) : 0
 /** Seconds into the clip, from its own start. */
 const tIn = (v: HTMLVideoElement) => v.currentTime - t0(v);
 
+/**
+ * Trackman stamps UTCDateTime about 0.8 s after the ball leaves the hand (checked frame by frame
+ * against AWRE's clock on the center-field and home-plate cameras). Release = UTCDateTime − this.
+ */
+const TRACKMAN_UTC_LAG = 0.8;
+
 /** Release inside a clip, seconds from its start: Trackman's UTC release time against the stream's wall clock. */
 function releaseFromUtc(utc: string | undefined, startMs: number | null): number | null {
   if (!utc || startMs == null) return null;
@@ -70,7 +76,7 @@ function releaseFromUtc(utc: string | undefined, startMs: number | null): number
   const iso = utc.trim().replace(" ", "T").replace(/(\.\d{3})\d+/, "$1");
   const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
   if (Number.isNaN(t)) return null;
-  const s = (t - startMs) / 1000;
+  const s = (t - startMs) / 1000 - TRACKMAN_UTC_LAG;
   return s >= 0 && s <= 120 ? s : null;
 }
 
