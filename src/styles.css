@@ -47,7 +47,7 @@ button, select, input { font: inherit; color: inherit; }
 /* ── Two columns, full height ── */
 .layout {
   flex: 1; min-height: 0; display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 272px minmax(0, 1fr);
 }
 .panel { background: var(--panel); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 .panel.left { border-right: 1px solid var(--line); }
@@ -113,7 +113,7 @@ button.primary:disabled { opacity: 0.45; cursor: default; }
 
 /* ── Center: 3D and video side by side, then metrics, then cards ── */
 .center { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
-.views { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); min-height: 400px; flex-shrink: 0; }
+.views { display: grid; grid-template-columns: 1fr 1.3fr; gap: 1px; background: var(--line); min-height: 400px; flex-shrink: 0; }
 .stage { position: relative; min-width: 0; min-height: 0; background: var(--bg); overflow: hidden; }
 .video { position: relative; background: var(--bg); padding: 12px; display: flex; }
 .scene { position: absolute; inset: 0; }
@@ -262,7 +262,7 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .pitch-dot:hover { opacity: 1; }
 
 /* ── Video overlay ── */
-.video { padding: 10px; flex-direction: column; gap: 8px; }
+.video { padding: 8px; flex-direction: column; gap: 6px; }
 .overlay { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
 .overlay-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
 .overlay-head .sec-title { margin: 0; white-space: nowrap; }
