@@ -290,3 +290,6 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .tag-warn { color: var(--wvu-gold); }
 
 .overlay-debug { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: 10px; color: #8a97ad; font-family: ui-monospace, monospace; user-select: all; }
+.clip-scrub { margin-top: 2px; }
+.clip-label { display: inline-flex; align-items: center; gap: 5px; width: 92px; flex-shrink: 0; font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clip-label i { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }

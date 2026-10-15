@@ -19,7 +19,6 @@ interface Props {
 const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
 const VIDEO_SPEEDS = [0.1, 0.25, 0.5, 1];
 /** How much of the clip the scrubber covers around release (seconds before, seconds after). */
-const WINDOW = { before: 1.5, after: 2.0 };
 
 /**
  * Attach an HLS stream to a video element (native on Safari, hls.js elsewhere) and report
@@ -89,7 +88,12 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
   const [startB, setStartB] = useState<number | null>(null);
   const [manualA, setManualA] = useState<number | null>(null); // hand-marked release, seconds into clip A
   const [manualB, setManualB] = useState<number | null>(null);
-  const [pos, setPos] = useState(0);                           // scrubber position: seconds relative to release
+  const [pos, setPos] = useState(0);                           // A's time relative to its release
+  const [posA, setPosA] = useState(0);                         // seconds into clip A / clip B
+  const [posB, setPosB] = useState(0);
+  const [durA, setDurA] = useState(10);
+  const [durB, setDurB] = useState(10);
+  const [locked, setLocked] = useState(true);                  // B follows A
   const vA = useRef<HTMLVideoElement>(null), vB = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -126,11 +130,11 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
 
   // B follows A so both sit at the same time relative to their own release (plus the nudge).
   const sync = useCallback(() => {
-    const a = vA.current, b = vB.current; if (!a || !b) return;
+    const a = vA.current, b = vB.current; if (!a || !b || !locked) return;
     const rel = tIn(a) - (releaseA ?? 0);
     const want = t0(b) + Math.max(0, (releaseB ?? 0) + rel + nudgeMs / 1000);
     if (Math.abs(b.currentTime - want) > 0.02) b.currentTime = want;
-  }, [releaseA, releaseB, nudgeMs]);
+  }, [releaseA, releaseB, nudgeMs, locked]);
   useEffect(sync, [sync]);
 
   const seekRel = useCallback((rel: number) => {
@@ -147,6 +151,12 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
     const tick = () => {
       const rel = tIn(a) - (releaseA ?? 0);
       setPos(rel);
+      setPosA(tIn(a));
+      const b = vB.current;
+      if (b) setPosB(tIn(b));
+      const clipLen = (v: HTMLVideoElement) => (Number.isFinite(v.duration) && v.duration > 0 ? v.duration - t0(v) : 10);
+      setDurA(clipLen(a));
+      if (b) setDurB(clipLen(b));
       // Drive the 3D clock only while the video is playing or sits after release; a clip parked
       // before release leaves the 3D showing the full paths instead of two balls in the hand.
       const drive = linked && drivesScene && releaseA != null && (!a.paused || rel > 0);
@@ -176,6 +186,13 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
     Promise.all([a.play(), b.play()]).then(() => setPlaying(true)).catch((e: Error) => setStatus(`Play was blocked: ${e.name}: ${e.message}`));
   };
   const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
+  const scrubA = (t: number) => { const a = vA.current; if (!a) return; pauseBoth(); a.currentTime = t0(a) + t; sync(); };
+  // Scrubbing B while locked re-aligns it: wherever B is parked now is taken as the frame that matches A's current frame.
+  const scrubB = (t: number) => {
+    const a = vA.current, b = vB.current; if (!b) return; pauseBoth();
+    b.currentTime = t0(b) + t;
+    if (locked && a && releaseA != null) { setNudgeMs(0); setManualB(t - (tIn(a) - releaseA)); }
+  };
   const markA = () => { const a = vA.current; if (a) setManualA(tIn(a)); };
   const markB = () => { const b = vB.current; if (b) setManualB(tIn(b)); };
 
@@ -224,16 +241,26 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
             <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
             <button type="button" className="ghost" onClick={() => step(-33)} aria-label="Back one frame">−1f</button>
             <button type="button" className="ghost" onClick={() => step(33)} aria-label="Forward one frame">+1f</button>
-            <div className="scrub-wrap">
-              <input type="range" className="scrub" min={-WINDOW.before} max={WINDOW.after} step={0.001} value={Math.min(WINDOW.after, Math.max(-WINDOW.before, pos))}
-                onChange={(e) => { pauseBoth(); seekRel(Number(e.target.value)); }} aria-label="Time relative to release" />
-              <i className="release-tick" style={{ left: `${(WINDOW.before / (WINDOW.before + WINDOW.after)) * 100}%` }} aria-hidden="true" />
-            </div>
-            <span className="clock">{fmt(pos)}</span>
+            <span className="clock" title="Time relative to the first pitch's release">{fmt(pos)}</span>
             <select className="speed" aria-label="Video speed" value={rate} onChange={(e) => setRate(Number(e.target.value))}>
               {VIDEO_SPEEDS.map((r) => <option key={r} value={r}>{r}×</option>)}
             </select>
+            <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
           </div>
+          {[
+            { key: "A", type: anchorType, pos: posA, dur: durA, rel: releaseA, onScrub: scrubA },
+            { key: "B", type: nextType, pos: posB, dur: durB, rel: releaseB, onScrub: scrubB },
+          ].map((bar) => (
+            <div className="scrub-row clip-scrub" key={bar.key}>
+              <span className="clip-label"><i style={{ background: pitchColorOnDark(bar.type) }} />{bar.type}</span>
+              <div className="scrub-wrap">
+                <input type="range" className="scrub" min={0} max={bar.dur} step={0.001} value={Math.min(bar.dur, Math.max(0, bar.pos))}
+                  onChange={(e) => bar.onScrub(Number(e.target.value))} aria-label={`${bar.type} clip time`} />
+                {bar.rel != null && <i className="release-tick" style={{ left: `${(bar.rel / bar.dur) * 100}%` }} aria-hidden="true" title="Release" />}
+              </div>
+              <span className="clock">{bar.pos.toFixed(2)} s</span>
+            </div>
+          ))}
           <div className="overlay-controls">
             <label className="mini"><span>Blend</span><input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Blend between the two clips" /></label>
             <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
