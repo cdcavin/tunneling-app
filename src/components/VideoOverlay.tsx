@@ -190,13 +190,19 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
       // before release leaves the 3D showing the full paths instead of two balls in the hand.
       const drive = linked && drivesScene && releaseA != null && (!a.paused || rel > 0);
       onFlightTime(drive ? Math.max(0, rel) : null);
-      // While playing, only pull B back if it has drifted a few frames, and not in the moment play() is still starting.
-      if (!a.paused && performance.now() - playedAt.current > 600) sync(0.08);
+      // While playing, keep B locked to A by steering its playback rate (no seeks, so nothing stutters or
+      // aborts). Only a big drift, e.g. after a stall, gets a hard seek.
+      if (b && !a.paused && !b.paused && locked) {
+        const want = t0(b) + Math.max(0, (releaseB ?? 0) + rel + nudgeMs / 1000);
+        const drift = b.currentTime - want;            // + = B is ahead
+        if (Math.abs(drift) > 0.4 && performance.now() - playedAt.current > 600) b.currentTime = want;
+        else b.playbackRate = rate * Math.max(0.5, Math.min(1.5, 1 - drift * 2.5));
+      } else if (b && b.playbackRate !== rate) b.playbackRate = rate;
       raf = requestAnimationFrame(tick);
     };
     tick();
     return () => { cancelAnimationFrame(raf); onFlightTime(null); };
-  }, [linked, drivesScene, releaseA, urlA, onFlightTime, sync]);
+  }, [linked, drivesScene, releaseA, releaseB, nudgeMs, locked, rate, urlA, onFlightTime]);
 
   useEffect(() => {
     const a = vA.current; if (!a) return;
@@ -208,7 +214,11 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
   // Once both releases are known, park the clips just before release.
   useEffect(() => { if (aligned) seekRel(-0.6); }, [aligned, seekRel]);
 
-  const pauseBoth = () => { vA.current?.pause(); vB.current?.pause(); setPlaying(false); };
+  const pauseBoth = () => {
+    vA.current?.pause(); vB.current?.pause(); setPlaying(false);
+    if (vB.current) vB.current.playbackRate = rate;
+    sync();   // the two pause a frame or two apart; park B exactly on A's frame
+  };
   const toggle = () => {
     const a = vA.current, b = vB.current; if (!a || !b) return;
     if (playing) { pauseBoth(); return; }
