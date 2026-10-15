@@ -32,6 +32,11 @@ function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | nul
   }, [ref, url, onError]);
 }
 
+/** Where a clip's timeline starts. Clips cut from a continuous recording don't start at 0. */
+const t0 = (v: HTMLVideoElement) => (v.seekable.length ? v.seekable.start(0) : 0);
+/** Seconds into the clip, from its own start. */
+const tIn = (v: HTMLVideoElement) => v.currentTime - t0(v);
+
 const pick = (clips: AwreClip[], want: string) =>
   clips.find((c) => c.perspective === want) ?? clips.find((c) => /home ?plate|center ?field/i.test(c.perspective)) ?? clips[0] ?? null;
 
@@ -79,7 +84,7 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
     const a = vA.current;
     if (!linked || !a || release == null || !urlA) { onFlightTime(null); return; }
     let raf = 0;
-    const tick = () => { onFlightTime(Math.max(0, a.currentTime - release)); raf = requestAnimationFrame(tick); };
+    const tick = () => { onFlightTime(Math.max(0, tIn(a) - release)); raf = requestAnimationFrame(tick); };
     tick();
     return () => { cancelAnimationFrame(raf); onFlightTime(null); };
   }, [linked, release, urlA, onFlightTime]);
@@ -98,7 +103,7 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
   // Keep B offset from A by offsetMs, and play/pause both together.
   const sync = () => {
     const a = vA.current, b = vB.current; if (!a || !b) return;
-    const want = Math.max(0, a.currentTime + offsetMs / 1000);
+    const want = t0(b) + Math.max(0, tIn(a) + offsetMs / 1000);
     if (Math.abs(b.currentTime - want) > 0.02) b.currentTime = want;   // only seek when actually out of step
   };
   const toggle = () => {
@@ -107,8 +112,8 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
     sync();
     Promise.all([a.play(), b.play()]).then(() => setPlaying(true)).catch((e: Error) => setStatus(`Play was blocked: ${e.name}: ${e.message}`));
   };
-  const restart = () => { const a = vA.current, b = vB.current; if (!a || !b) return; a.currentTime = release != null ? Math.max(0, release - 0.5) : 0; sync(); };
-  const markRelease = () => { const a = vA.current; if (a) setRelease(a.currentTime); };
+  const restart = () => { const a = vA.current, b = vB.current; if (!a || !b) return; a.currentTime = t0(a) + (release != null ? Math.max(0, release - 0.5) : 0); sync(); };
+  const markRelease = () => { const a = vA.current; if (a) setRelease(tIn(a)); };
   const step = (ms: number) => { const a = vA.current; if (!a) return; a.pause(); vB.current?.pause(); setPlaying(false); a.currentTime = Math.max(0, a.currentTime + ms / 1000); sync(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(sync, [offsetMs]);
