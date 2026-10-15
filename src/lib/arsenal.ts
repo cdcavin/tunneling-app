@@ -4,7 +4,9 @@ import type { Loc } from "./grid";
 /** Where a pitch's average trajectory actually crosses the front of the plate. */
 export function realLoc(c: Coeffs): Loc {
   const p = posAtDist(c, PLATE_X);
-  return p ? { side: p.side, height: p.height } : { side: 0, height: 2.5 };
+  if (!p) return { side: 0, height: 2.5 };
+  // Keep inside the slider ranges: a few-pitch average can cross below ground or far off the plate.
+  return { side: Math.max(-2, Math.min(2, p.side)), height: Math.max(0.5, Math.min(5, p.height)) };
 }
 
 export interface Grade { cls: "elite" | "good" | "avg" | "poor"; label: string }
