@@ -76,10 +76,13 @@ async function stream(env: Env, request: Request): Promise<Response> {
   if (!raw) return json({ error: "Missing u." }, 400);
   let target: URL;
   try { target = new URL(raw); } catch { return json({ error: "Bad url." }, 400); }
-  if (!/(^|\.)awresports\.com$/.test(target.hostname)) return json({ error: "Host not allowed." }, 403);
+  // Playlists come from AWRE; the video pieces live in AWRE's S3 bucket.
+  const awreHost = /(^|\.)awresports\.com$/.test(target.hostname);
+  const s3Host = /^awresports-[a-z0-9-]+\.s3[.a-z0-9-]*\.amazonaws\.com$/.test(target.hostname);
+  if (!awreHost && !s3Host) return json({ error: "Host not allowed." }, 403);
 
   const headers: Record<string, string> = {};
-  if (env.AWRE_API_KEY) headers.Authorization = `Api-Key ${env.AWRE_API_KEY}`;
+  if (awreHost && env.AWRE_API_KEY) headers.Authorization = `Api-Key ${env.AWRE_API_KEY}`;
   const range = request.headers.get("range");
   if (range) headers.Range = range;
   const up = await fetch(target.toString(), { headers, cf: { cacheTtl: 300, cacheEverything: true } });
