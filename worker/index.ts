@@ -41,6 +41,7 @@ async function awre(env: Env, pathname: string): Promise<Response> {
     base = b;
     if (p.ok || p.status === 404) break;
   }
+  if (p?.status === 404) return json({ error: "AWRE has no record of this pitch.", notFound: true, clips: [] }, 404);
   if (!p || !p.ok) return json({ error: `AWRE pitch lookup failed (HTTP ${p?.status}).`, detail: (await p?.text())?.slice(0, 300) }, 502);
   const pitch = (await p.json()) as { pitch?: { pitch_id?: number } };
   const pitchId = pitch.pitch?.pitch_id;

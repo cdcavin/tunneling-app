@@ -129,8 +129,11 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
     Promise.all([lookupClips(selected.anchor.id), lookupClips(selected.next.id)]).then(([a, b]) => {
       if (cancelled) return;
       setClipsA(a.clips); setClipsB(b.clips);
+      const missing = [["A", a], ["B", b]].filter(([, r]) => !(r as { clips: AwreClip[] }).clips.length).map(([k]) => k);
       const err = a.error ?? b.error;
-      setStatus(err ?? (a.clips.length && b.clips.length ? null : "AWRE has no clip for one of these pitches."));
+      setStatus(missing.length
+        ? `No AWRE video for pitch ${missing.join(" and ")} (${missing.length === 1 ? "it" : "they"} may not have been filmed or synced). Pick another.`
+        : err ?? null);
       const names = a.clips.map((c) => c.perspective).filter((p) => b.clips.some((c) => c.perspective === p));
       setPerspective((cur) => (names.includes(cur) ? cur : names.find((n) => /center ?field/i.test(n)) ?? names.find((n) => /home ?plate/i.test(n)) ?? names[0] ?? ""));
     });
