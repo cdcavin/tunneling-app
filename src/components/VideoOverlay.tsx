@@ -213,13 +213,24 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
     const a = vA.current, b = vB.current; if (!a || !b) return;
     if (playing) { pauseBoth(); return; }
     sync();
-    playedAt.current = performance.now();
-    const start = () => Promise.all([a.play(), b.play()]);
-    start().then(() => setPlaying(true)).catch((e: Error) => {
-      // A seek landing mid-start aborts play(); that's benign, so try once more before reporting.
-      if (e.name === "AbortError") { playedAt.current = performance.now(); setTimeout(() => start().then(() => setPlaying(true)).catch((e2: Error) => setStatus(`Play was blocked: ${e2.name}: ${e2.message}`)), 150); return; }
-      setStatus(`Play was blocked: ${e.name}: ${e.message}`);
+    // Safari's native HLS seeks can take a moment; a play() issued mid-seek is aborted. Let any seek settle first.
+    const settled = (v: HTMLVideoElement) => new Promise<void>((res) => {
+      if (!v.seeking) return res();
+      const done = () => { v.removeEventListener("seeked", done); res(); };
+      v.addEventListener("seeked", done);
+      setTimeout(done, 1500);
     });
+    const start = () => Promise.all([a.play(), b.play()]);
+    Promise.all([settled(a), settled(b)]).then(() => { playedAt.current = performance.now(); return start(); })
+      .then(() => setPlaying(true))
+      .catch((e: Error) => {
+        if (e.name === "AbortError") {
+          setTimeout(() => Promise.all([settled(a), settled(b)]).then(() => { playedAt.current = performance.now(); return start(); })
+            .then(() => setPlaying(true)).catch((e2: Error) => setStatus(`Play was blocked: ${e2.name}: ${e2.message}`)), 250);
+          return;
+        }
+        setStatus(`Play was blocked: ${e.name}: ${e.message}`);
+      });
   };
   const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
   const scrubA = (t: number) => { const a = vA.current; if (!a) return; pauseBoth(); a.currentTime = t0(a) + t; sync(); };
