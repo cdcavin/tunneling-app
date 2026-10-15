@@ -64,6 +64,45 @@ async function sample(env: Env, request: Request) {
   return res.json() as Promise<{ generated: string; dataThrough: string; sample: boolean; pitchers: { id: string; name: string; throws: string; season: string; pitches: unknown[] }[] }>;
 }
 
+/**
+ * Video pass-through: the browser can't fetch AWRE's video server directly (no CORS),
+ * so playlists and segments come through here. Playlists are rewritten so every
+ * segment URL also points back here. Only awresports.com hosts are allowed.
+ *   GET /api/awre/stream?u=<encoded AWRE video URL>
+ */
+async function stream(env: Env, request: Request): Promise<Response> {
+  const self = new URL(request.url);
+  const raw = self.searchParams.get("u");
+  if (!raw) return json({ error: "Missing u." }, 400);
+  let target: URL;
+  try { target = new URL(raw); } catch { return json({ error: "Bad url." }, 400); }
+  if (!/(^|\.)awresports\.com$/.test(target.hostname)) return json({ error: "Host not allowed." }, 403);
+
+  const headers: Record<string, string> = {};
+  if (env.AWRE_API_KEY) headers.Authorization = `Api-Key ${env.AWRE_API_KEY}`;
+  const range = request.headers.get("range");
+  if (range) headers.Range = range;
+  const up = await fetch(target.toString(), { headers, cf: { cacheTtl: 300, cacheEverything: true } });
+  const ct = up.headers.get("content-type") ?? "";
+  const isPlaylist = /mpegurl|m3u8/i.test(ct) || /\.m3u8(\?|$)/.test(target.pathname + target.search);
+  const cors = { "access-control-allow-origin": "*", "cache-control": "private, max-age=300" };
+
+  if (!isPlaylist) {
+    const h = new Headers(cors);
+    for (const k of ["content-type", "content-length", "content-range", "accept-ranges"]) { const v = up.headers.get(k); if (v) h.set(k, v); }
+    return new Response(up.body, { status: up.status, headers: h });
+  }
+  const text = await up.text();
+  const proxied = (u: string) => `${self.origin}/api/awre/stream?u=${encodeURIComponent(new URL(u, target).toString())}`;
+  const out = text.split("\n").map((line) => {
+    const t = line.trim();
+    if (!t) return line;
+    if (t.startsWith("#")) return t.replace(/URI="([^"]+)"/g, (_m, u: string) => `URI="${proxied(u)}"`);
+    return proxied(t);
+  }).join("\n");
+  return new Response(out, { status: up.status, headers: { ...cors, "content-type": "application/vnd.apple.mpegurl" } });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url);
@@ -87,6 +126,7 @@ export default {
       return p ? json(p) : json({ error: `No pitcher ${id}.` }, 404);
     }
 
+    if (pathname === "/api/awre/stream") return stream(env, request);
     if (pathname.startsWith("/api/awre/")) return awre(env, pathname);
     if (pathname.startsWith("/api/")) return json({ error: "Not found." }, 404);
     return env.ASSETS.fetch(request);

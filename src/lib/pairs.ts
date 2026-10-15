@@ -52,3 +52,6 @@ export function guessRelease(clip: AwreClip | null, pitch: Record<string, unknow
   const off = t - start;
   return Number.isFinite(off) && off >= 0 && off <= 60 ? off : null;
 }
+
+/** Route an AWRE video URL through the Worker so the browser can load it. */
+export const streamUrl = (u: string) => `${import.meta.env.BASE_URL}api/awre/stream?u=${encodeURIComponent(u)}`;

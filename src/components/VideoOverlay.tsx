@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { guessRelease, lookupClips, type AwreClip, type RealPair } from "../lib/pairs";
+import { guessRelease, lookupClips, streamUrl, type AwreClip, type RealPair } from "../lib/pairs";
 import { pitchColorOnDark } from "../lib/pitchColors";
 
 interface Props {
@@ -13,12 +13,15 @@ interface Props {
   onFlightTime: (t: number | null) => void;
 }
 
+// Safari plays HLS natively; every other browser answers "maybe" to canPlayType and then can't, so go by the browser.
+const IS_SAFARI = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
+
 /** Attach an HLS stream to a video element (native on Safari, hls.js elsewhere). */
 function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | null, onError: (msg: string) => void) {
   useEffect(() => {
     const v = ref.current;
     if (!v || !url) return;
-    if (v.canPlayType("application/vnd.apple.mpegurl")) { v.src = url; return () => { v.removeAttribute("src"); v.load(); }; }
+    if (IS_SAFARI) { v.src = url; return () => { v.removeAttribute("src"); v.load(); }; }
     if (!Hls.isSupported()) { onError("This browser can't play HLS video."); return; }
     const hls = new Hls({ enableWorker: true });
     hls.on(Hls.Events.ERROR, (_e, d) => {
@@ -73,8 +76,9 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
   }, [selected]);
 
   const clipA = pick(clipsA, perspective);
-  const urlA = clipA?.video_url ?? null;
-  const urlB = pick(clipsB, perspective)?.video_url ?? null;
+  const urlA = clipA ? streamUrl(clipA.video_url) : null;
+  const clipB = pick(clipsB, perspective);
+  const urlB = clipB ? streamUrl(clipB.video_url) : null;
   // Default release mark from AWRE's timestamps, until the user marks it by hand.
   useEffect(() => { if (release == null) { const g = guessRelease(clipA, pitchA); if (g != null) setRelease(g); } }, [clipA, pitchA, release]);
   // Playback rate on both players.
