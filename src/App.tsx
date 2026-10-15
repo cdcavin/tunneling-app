@@ -148,7 +148,13 @@ export default function App() {
   const nextAimed = useMemo(() => (actual ? actual.next.coeffs : shaped ? aimAt(shaped, curNextLoc.side, curNextLoc.height) : null), [actual, pair, shaped, curNextLoc]);
   const pairs = useMemo(() => (last && next ? realPairs(rows, last.type, next.type) : []), [rows, last, next]);
   // Drop the pair if the selection or the pitch types no longer include it.
-  useEffect(() => { if (pair && !(rows.some((r) => r.id === pair.anchor.id) && rows.some((r) => r.id === pair.next.id))) setPair(null); }, [rows, pair]);
+  // Drop the real pair when it no longer fits: a pitch filtered out, or the anchor/tunnel types changed under it.
+  useEffect(() => {
+    if (!pair) return;
+    const inRows = rows.some((r) => r.id === pair.anchor.id) && rows.some((r) => r.id === pair.next.id);
+    const sameTypes = !last || !next || (pair.anchor.type === last.type && pair.next.type === next.type);
+    if (!inRows || !sameTypes) setPair(null);
+  }, [rows, pair, last, next]);
   const cells = useMemo(() => (lastAimed && shaped ? nextPitchCells(lastAimed, shaped) : []), [lastAimed, shaped]);
   const bestTight = useMemo(() => tightest(cells), [cells]);
   const bestFar = useMemo(() => provisionalBest(cells, maxDecision), [cells, maxDecision]);
