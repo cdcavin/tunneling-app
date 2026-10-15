@@ -82,11 +82,12 @@ export default function FilterPanel({ all, selected, filters, onChange }: Props)
       </div>
 
       <div className="filter-group">
-        <span className="filter-label">Pitch</span>
+        <span className="filter-label">Pitch <small>(all in; click to leave one out)</small></span>
         <div className="chips">
           {types.map((t) => (
-            <button key={t} type="button" className={`chip${filters.types.includes(t) ? " is-on" : ""}`}
-              onClick={() => onChange({ ...filters, types: toggle(filters.types, t) })}>
+            <button key={t} type="button" className={`chip${filters.hiddenTypes.includes(t) ? " is-off" : " is-on"}`}
+              aria-pressed={!filters.hiddenTypes.includes(t)} title={filters.hiddenTypes.includes(t) ? "Click to bring this pitch back" : "Click to leave this pitch out"}
+              onClick={() => onChange({ ...filters, hiddenTypes: toggle(filters.hiddenTypes, t) })}>
               <i style={{ background: pitchColorOnDark(t) }} />{t}
             </button>
           ))}
