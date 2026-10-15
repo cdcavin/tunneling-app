@@ -21,7 +21,11 @@ function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | nul
     if (v.canPlayType("application/vnd.apple.mpegurl")) { v.src = url; return () => { v.removeAttribute("src"); v.load(); }; }
     if (!Hls.isSupported()) { onError("This browser can't play HLS video."); return; }
     const hls = new Hls({ enableWorker: true });
-    hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) onError(`Video failed to load (${d.type}: ${d.details}).`); });
+    hls.on(Hls.Events.ERROR, (_e, d) => {
+      const code = (d.response as { code?: number } | undefined)?.code;
+      if (d.fatal) onError(`Video failed to load (${d.type}: ${d.details}${code ? `, HTTP ${code}` : ""}).`);
+      else if (d.details === "manifestLoadError" || d.details === "fragLoadError") onError(`Video server refused a piece of the clip (${d.details}${code ? `, HTTP ${code}` : ""}).`);
+    });
     hls.loadSource(url);
     hls.attachMedia(v);
     return () => hls.destroy();
@@ -99,7 +103,9 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
   };
   const toggle = () => {
     const a = vA.current, b = vB.current; if (!a || !b) return;
-    if (playing) { a.pause(); b.pause(); setPlaying(false); } else { sync(); void a.play(); void b.play(); setPlaying(true); }
+    if (playing) { a.pause(); b.pause(); setPlaying(false); return; }
+    sync();
+    Promise.all([a.play(), b.play()]).then(() => setPlaying(true)).catch((e: Error) => setStatus(`Play was blocked: ${e.name}: ${e.message}`));
   };
   const restart = () => { const a = vA.current, b = vB.current; if (!a || !b) return; a.currentTime = release != null ? Math.max(0, release - 0.5) : 0; sync(); };
   const markRelease = () => { const a = vA.current; if (a) setRelease(a.currentTime); };
@@ -160,6 +166,7 @@ export default function VideoOverlay({ pairs, selected, onSelect, anchorType, ne
           <label className="hud-check"><input type="checkbox" checked={linked} onChange={(e) => setLinked(e.target.checked)} />Link to 3D</label>
           <span className="hint">{release == null ? "Mark release to link the 3D flight to the clip." : `Release at ${release.toFixed(2)} s`}</span>
           {status && <span className="hint">{status}</span>}
+          <a className="hint" href={urlA} target="_blank" rel="noreferrer">Open anchor clip in a new tab</a>
         </div>
       )}
     </div>
