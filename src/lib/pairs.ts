@@ -36,3 +36,19 @@ export async function lookupClips(pitchUID: string): Promise<AwreLookup> {
   if (!r.ok) return { clips: [], error: body.error ?? `HTTP ${r.status}` };
   return body;
 }
+
+/**
+ * Guess where release sits inside a clip, in seconds from the clip's start.
+ * AWRE clip URLs carry the clip's start time (e.g. "...=2025-02-27T00:37:06.568000^15"),
+ * and the pitch record carries a timestamp for the pitch. Returns null if either is missing.
+ */
+export function guessRelease(clip: AwreClip | null, pitch: Record<string, unknown> | undefined): number | null {
+  if (!clip || !pitch) return null;
+  const m = clip.video_url.match(/=(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)/);
+  const ts = pitch.timestamp;
+  if (!m || typeof ts !== "number") return null;
+  const start = Date.parse(m[1] + "Z") / 1000;
+  const t = ts > 1e11 ? ts / 1000 : ts;   // milliseconds vs seconds
+  const off = t - start;
+  return Number.isFinite(off) && off >= 0 && off <= 60 ? off : null;
+}

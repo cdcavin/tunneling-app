@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Scene3D, { CAMERA_PRESETS, type CameraPreset } from "./components/Scene3D";
 import ZonePicker from "./components/ZonePicker";
 import { MovementPlot, SeparationChart } from "./components/Charts";
@@ -83,6 +83,8 @@ export default function App() {
   const [speed, setSpeed] = useState(0.1);
   const [clock, setClock] = useState<number | null>(null);
   const clockRef = useRef<number | null>(null);
+  const [videoClock, setVideoClock] = useState<number | null>(null);   // flight time driven by the video, when linked
+  const onFlightTime = useCallback((t: number | null) => setVideoClock(t), []);
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/index.json`, { cache: "no-store" })
@@ -265,7 +267,7 @@ export default function App() {
           <div className="views">
             <div className="stage">
               <Scene3D last={sceneLast} next={sceneNext} aim={aim} aimColor={next ? pitchColorOnDark(next.type) : "#ffffff"} camera={camera}
-                heat={heat} selected={placing === 0 ? lastLoc : nextLoc} anchorLoc={lastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={clock} />
+                heat={heat} selected={placing === 0 ? lastLoc : nextLoc} anchorLoc={lastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={videoClock ?? clock} />
               <div className="hud hud-legend">
                 {last && <span><i style={{ background: pitchColorOnDark(last.type) }} />Anchor: {last.type}</span>}
                 {next && <span><i style={{ background: pitchColorOnDark(next.type) }} className={sameType ? "dashed" : ""} />Tunnel: {next.type}{shapedPitch && " (modified)"}</span>}
@@ -298,7 +300,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <VideoOverlay pairs={pairs} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} />
+              <VideoOverlay pairs={pairs} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} />
             </div>
           </div>
 

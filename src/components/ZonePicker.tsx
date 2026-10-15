@@ -1,8 +1,8 @@
 import { HEIGHTS, SIDES, ZONE, sameLoc, type Cell, type Loc } from "../lib/grid";
 
-// Sequential blue ramp, light (worse) to dark (better), from the validated palette.
-const RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#2a78d6", "#256abf", "#184f95", "#104281"];
-const INK_ON = (i: number) => (i >= 4 ? "#ffffff" : "#13294b");
+// Sequential red ramp, light (worse) to dark red (better).
+const RAMP = ["#fde0df", "#f9b9b7", "#f4918f", "#ec6b69", "#e34948", "#c43636", "#9c2525", "#731717"];
+const INK_ON = (i: number) => (i >= 3 ? "#ffffff" : "#3a0d0d");
 const EMPTY = "#1b2740";
 
 // Catcher's view: third-base side (+ side) on the left, high pitches on top.
