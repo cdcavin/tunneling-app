@@ -24,19 +24,39 @@ const VIDEO_SPEEDS = [0.1, 0.25, 0.5, 1];
  * Attach an HLS stream to a video element (native on Safari, hls.js elsewhere) and report
  * the wall-clock time (ms since epoch) of media time 0, from the stream's PROGRAM-DATE-TIME tags.
  */
+/**
+ * Wall-clock time (ms since epoch) of a clip's media time 0, read from the first
+ * EXT-X-PROGRAM-DATE-TIME tag of its variant playlist. Browser-independent: Safari's
+ * getStartDate() is often an Invalid Date, hls.js only knows it after a level loads.
+ */
+async function playlistStart(url: string): Promise<number | null> {
+  const text = async (u: string) => { const r = await fetch(u); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); };
+  let body = await text(url);
+  // Master playlist: follow the first variant.
+  if (/#EXT-X-STREAM-INF/.test(body)) {
+    const lines = body.split(/\r?\n/);
+    const i = lines.findIndex((l) => l.startsWith("#EXT-X-STREAM-INF"));
+    const uri = lines.slice(i + 1).find((l) => l && !l.startsWith("#"));
+    if (!uri) return null;
+    body = await text(new URL(uri, window.location.href).toString());
+  }
+  const m = body.match(/#EXT-X-PROGRAM-DATE-TIME:(\S+)/);
+  if (!m) return null;
+  const t = Date.parse(m[1]);
+  return Number.isNaN(t) ? null : t;
+}
+
 function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | null, onError: (msg: string) => void, onStart: (ms: number | null) => void) {
   useEffect(() => {
     const v = ref.current;
     onStart(null);
     if (!v || !url) return;
+    let alive = true;
+    playlistStart(url).then((ms) => { if (alive && ms != null) onStart(ms); })
+      .catch((e: Error) => { if (alive) onError(`Could not read the clip's clock (${e.message}).`); });
     if (IS_SAFARI) {
       v.src = url;
-      const read = () => {
-        const d = (v as HTMLVideoElement & { getStartDate?: () => Date }).getStartDate?.();
-        if (d && !Number.isNaN(d.getTime())) onStart(d.getTime());
-      };
-      v.addEventListener("loadedmetadata", read);
-      return () => { v.removeEventListener("loadedmetadata", read); v.removeAttribute("src"); v.load(); };
+      return () => { alive = false; v.removeAttribute("src"); v.load(); };
     }
     if (!Hls.isSupported()) { onError("This browser can't play HLS video."); return; }
     const hls = new Hls({ enableWorker: true });
@@ -45,13 +65,9 @@ function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | nul
       if (d.fatal) onError(`Video failed to load (${d.type}: ${d.details}${code ? `, HTTP ${code}` : ""}).`);
       else if (d.details === "manifestLoadError" || d.details === "fragLoadError") onError(`Video server refused a piece of the clip (${d.details}${code ? `, HTTP ${code}` : ""}).`);
     });
-    hls.on(Hls.Events.LEVEL_LOADED, (_e, d) => {
-      const f = d.details.fragments[0];
-      if (f?.programDateTime != null) onStart(f.programDateTime - f.start * 1000);
-    });
     hls.loadSource(url);
     hls.attachMedia(v);
-    return () => hls.destroy();
+    return () => { alive = false; hls.destroy(); };
   }, [ref, url, onError, onStart]);
 }
 
