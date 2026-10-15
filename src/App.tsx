@@ -8,6 +8,8 @@ import { suggestShapes, type Suggestion } from "./lib/suggest";
 import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
 import VideoOverlay from "./components/VideoOverlay";
+import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
+import { realLoc } from "./lib/arsenal";
 import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
 import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher } from "./lib/types";
@@ -69,9 +71,11 @@ export default function App() {
   const [lastLoc, setLastLoc] = useState<Loc>({ side: 0, height: 2.0 });
   const [nextLoc, setNextLoc] = useState<Loc>({ side: 0, height: 1.5 });
   const [placing, setPlacing] = useState<0 | 1>(1);   // 0 = anchor, 1 = tunnel pitch
+  const [arsenalMode, setArsenalMode] = useState(false);
+  const [arsLoc, setArsLoc] = useState<Record<string, Loc>>({});     // arsenal mode: where each pitch is placed (default: its real average)
+  const [arsOff, setArsOff] = useState<string[]>([]);                // arsenal mode: pitches unchecked (not drawn)
   const [pair, setPair] = useState<RealPair | null>(null);        // a real back-to-back pair he threw
   const [showActual, setShowActual] = useState(true);              // draw the real pair instead of the aimed averages
-  const place = (loc: Loc) => (placing === 0 ? setLastLoc(loc) : setNextLoc(loc));
   const [heatMetric, setHeatMetric] = useState<HeatMetric>("decision");
   const [maxDecision, setMaxDecision] = useState(4);
   const [delta, setDelta] = useState<ShapeDelta>(NO_DELTA);
@@ -128,9 +132,19 @@ export default function App() {
   const next = arsenal.find((p) => p.type === nextType) ?? arsenal.find((p) => p.type !== last?.type) ?? arsenal[0] ?? null;
   const shaped = useMemo(() => (next ? perturb(next.coeffs, delta) : null), [next, delta]);
 
+  // In arsenal mode every pitch has its own spot (real average unless moved); the anchor and the active pitch read from there.
+  const locOf = (p: ArsenalPitch): Loc => arsLoc[p.type] ?? realLoc(p.coeffs);
+  const curLastLoc = arsenalMode && last ? locOf(last) : lastLoc;
+  const curNextLoc = arsenalMode && next ? locOf(next) : nextLoc;
+  const moveTo = (type: string, loc: Loc) => setArsLoc((m) => ({ ...m, [type]: loc }));
+  const place = (loc: Loc) => {
+    if (arsenalMode) { const p = placing === 0 ? last : next; if (p) moveTo(p.type, loc); return; }
+    if (placing === 0) setLastLoc(loc); else setNextLoc(loc);
+  };
+
   const actual = pair && showActual;
-  const lastAimed = useMemo(() => (actual ? pair.anchor.coeffs : last ? aimAt(last.coeffs, lastLoc.side, lastLoc.height) : null), [actual, pair, last, lastLoc]);
-  const nextAimed = useMemo(() => (actual ? pair.next.coeffs : shaped ? aimAt(shaped, nextLoc.side, nextLoc.height) : null), [actual, pair, shaped, nextLoc]);
+  const lastAimed = useMemo(() => (actual ? pair.anchor.coeffs : last ? aimAt(last.coeffs, curLastLoc.side, curLastLoc.height) : null), [actual, pair, last, curLastLoc]);
+  const nextAimed = useMemo(() => (actual ? pair.next.coeffs : shaped ? aimAt(shaped, curNextLoc.side, curNextLoc.height) : null), [actual, pair, shaped, curNextLoc]);
   const pairs = useMemo(() => (last && next ? realPairs(rows, last.type, next.type) : []), [rows, last, next]);
   // Drop the pair if the selection or the pitch types no longer include it.
   useEffect(() => { if (pair && !pairs.some((p) => p.anchor.id === pair.anchor.id && p.next.id === pair.next.id)) setPair(null); }, [pairs, pair]);
@@ -175,6 +189,37 @@ export default function App() {
   const sameType = !!last && !!next && last.type === next.type;
   const sceneLast = lastAimed && last ? { coeffs: lastAimed, color: pitchColorOnDark(last.type) } : null;
   const sceneNext = nextAimed && next ? { coeffs: nextAimed, color: pitchColorOnDark(next.type), dashed: sameType } : null;
+  // Arsenal mode: every other checked pitch, aimed at its own spot, measured off the anchor.
+  const arsenalRows: ArsenalRow[] = useMemo(() => {
+    if (!arsenalMode || !last || !lastAimed) return [];
+    return arsenal.map((p) => {
+      const loc = locOf(p);
+      const isAnchor = p.type === last.type;
+      const geo = isAnchor ? null : pairGeometry(lastAimed, aimAt(p.coeffs, loc.side, loc.height));
+      const real = realLoc(p.coeffs);
+      return { pitch: p, on: !arsOff.includes(p.type), isAnchor, isActive: isAnchor ? placing === 0 : p.type === next?.type && placing === 1, loc,
+        moved: !!arsLoc[p.type] && (Math.abs(loc.side - real.side) > 1e-6 || Math.abs(loc.height - real.height) > 1e-6),
+        decisionSep: geo?.decisionSep ?? null, plateSep: geo?.plateSep ?? null };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arsenalMode, arsenal, last, lastAimed, next, arsLoc, arsOff, placing]);
+  const extraTracks = useMemo(() => arsenalRows
+    .filter((r) => r.on && !r.isAnchor && r.pitch.type !== next?.type)
+    .map((r) => ({ coeffs: aimAt(r.pitch.coeffs, r.loc.side, r.loc.height), color: pitchColorOnDark(r.pitch.type), faint: true })), [arsenalRows, next]);
+  const optimizeAll = () => {
+    if (!lastAimed || !last) return;
+    const m: Record<string, Loc> = { ...arsLoc };
+    for (const p of arsenal) {
+      if (p.type === last.type || arsOff.includes(p.type)) continue;
+      const best = tightest(nextPitchCells(lastAimed, p.coeffs));
+      if (best) m[p.type] = { side: best.side, height: best.height };
+    }
+    setArsLoc(m);
+  };
+  const activate = (type: string) => {
+    if (last && type === last.type) { setPlacing(0); return; }
+    chooseNextType(type); setPlacing(1);
+  };
   const shapedPitch = next && (delta.ivb || delta.hb || delta.velo)
     ? { type: next.type, ivb: next.ivb + delta.ivb, hb: next.hb + delta.hb, velo: next.velo + delta.velo } : null;
 
@@ -211,6 +256,37 @@ export default function App() {
             <p className="hint">Every pitch type below is the average of the selected pitches.</p>
           </section>
 
+          <div className="mode-switch" role="radiogroup" aria-label="Mode">
+            <button type="button" role="radio" aria-checked={!arsenalMode} className={!arsenalMode ? "is-on" : ""} onClick={() => setArsenalMode(false)}>Pair</button>
+            <button type="button" role="radio" aria-checked={arsenalMode} className={arsenalMode ? "is-on" : ""} onClick={() => { setArsenalMode(true); setPair(null); }}>Arsenal mode</button>
+          </div>
+
+          {arsenalMode && (
+            <>
+              <ArsenalPanel rows={arsenalRows} canOptimize={!!lastAimed}
+                onToggle={(t, on) => setArsOff((o) => (on ? o.filter((x) => x !== t) : [...o, t]))}
+                onAnchor={(t) => { setLastType(t); if (next?.type === t) { const other = arsenal.find((p) => p.type !== t); if (other) chooseNextType(other.type); } setPlacing(0); }}
+                onActivate={activate} onMove={moveTo}
+                onResetOne={(t) => setArsLoc((m) => { const n = { ...m }; delete n[t]; return n; })}
+                onOptimizeAll={optimizeAll} onResetAll={() => setArsLoc({})} />
+              <section className="pitch-block" style={{ ["--accent" as string]: (placing === 0 ? last : next) ? pitchColorOnDark((placing === 0 ? last : next)!.type) : "#9aa7ba" }}>
+                <div className="sec-title">Place {(placing === 0 ? last : next)?.type ?? ""}{placing === 0 ? " (anchor)" : ""}</div>
+                <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
+                  {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
+                    <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
+                      {HEAT_METRICS[m].label}
+                    </button>
+                  ))}
+                </div>
+                <ZonePicker label="Where every pitch is placed; shaded by how the active pitch tunnels off the anchor" active={arsenalRows.filter((r) => r.on).findIndex((r) => r.isActive)} onSelect={place}
+                  best={placing === 1 ? bestTight : null} heat={placing === 1 ? heatProps : undefined}
+                  markers={arsenalRows.filter((r) => r.on).map((r) => ({ loc: r.loc, color: pitchColorOnDark(r.pitch.type), name: r.isAnchor ? `anchor ${r.pitch.type}` : r.pitch.type }))} />
+                <p className="hint">Red is better for the active pitch. Click a cell to move it there.</p>
+              </section>
+            </>
+          )}
+
+          {!arsenalMode && (<>
           <section className="pitch-block" style={{ ["--accent" as string]: last ? pitchColorOnDark(last.type) : "#9aa7ba" }}>
             <div className="sec-title">Anchor pitch</div>
             <PitchButtons pitches={arsenal} value={last?.type ?? ""} onChange={setLastType} label="Anchor pitch type" />
@@ -252,6 +328,7 @@ export default function App() {
               <input type="range" min={1} max={10} step={0.5} value={maxDecision} onChange={(e) => setMaxDecision(Number(e.target.value))} aria-label="Tight-then-far limit at 23.8 ft, inches" />
             </label>
           </section>
+          </>)}
 
           <section>
             <div className="sec-title">Situation</div>
@@ -266,11 +343,14 @@ export default function App() {
         <main className="center">
           <div className="views">
             <div className="stage">
-              <Scene3D last={sceneLast} next={sceneNext} aim={aim} aimColor={next ? pitchColorOnDark(next.type) : "#ffffff"} camera={camera}
-                heat={heat} selected={placing === 0 ? lastLoc : nextLoc} anchorLoc={lastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={playing || videoClock == null ? clock : videoClock} />
+              <Scene3D last={sceneLast} next={sceneNext} extra={extraTracks} aim={aim} aimColor={next ? pitchColorOnDark(next.type) : "#ffffff"} camera={camera}
+                heat={heat} selected={placing === 0 ? curLastLoc : curNextLoc} anchorLoc={curLastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={playing || videoClock == null ? clock : videoClock} />
               <div className="hud hud-legend">
                 {last && <span><i style={{ background: pitchColorOnDark(last.type) }} />Anchor: {last.type}</span>}
                 {next && <span><i style={{ background: pitchColorOnDark(next.type) }} className={sameType ? "dashed" : ""} />Tunnel: {next.type}{shapedPitch && " (modified)"}</span>}
+                {arsenalRows.filter((r) => r.on && !r.isAnchor && r.pitch.type !== next?.type).map((r) => (
+                  <span key={r.pitch.type}><i style={{ background: pitchColorOnDark(r.pitch.type) }} />{r.pitch.type}</span>
+                ))}
                 <span><i className="gold" />Decision point, 23.8 ft</span>
                 {actual && <span className="legend-note">Real pair, {pair.next.date}</span>}
               </div>

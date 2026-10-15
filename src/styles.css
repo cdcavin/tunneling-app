@@ -295,3 +295,35 @@ button.link { border: 0; background: none; color: var(--wvu-gold); cursor: point
 .clip-label i { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .chip.is-off { opacity: 0.38; text-decoration: line-through; }
 .filter-label small { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+
+/* Arsenal mode */
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 10px; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.mode-switch button { padding: 7px; border: 0; background: var(--well); color: var(--ink-2); font-size: 12px; font-weight: 600; cursor: pointer; }
+.mode-switch button.is-on { background: var(--wvu-gold); color: var(--wvu-navy); }
+.arsenal-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.arsenal-actions { display: flex; gap: 4px; }
+.arsenal-actions button { padding: 3px 8px; font-size: 11px; }
+.arsenal-row { border-radius: 6px; padding: 6px 8px; margin-bottom: 5px; background: var(--well); border: 1.5px solid transparent; transition: border-color .15s; }
+.arsenal-row.is-anchor { border-color: rgba(234, 170, 0, 0.45); }
+.arsenal-row.is-active { box-shadow: 0 0 0 2px var(--accent); }
+.arsenal-row.is-off { opacity: 0.5; }
+.arsenal-row-hdr { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.arsenal-row-hdr input { accent-color: var(--accent); margin: 0; width: 13px; height: 13px; }
+.arsenal-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.arsenal-name { flex: 1; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.arsenal-name small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.anchor-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; border: 1px solid var(--line-strong); background: transparent; color: var(--muted); cursor: pointer; }
+.anchor-tag.is-anchor { background: var(--wvu-gold); color: var(--wvu-navy); border-color: var(--wvu-gold); font-weight: 700; }
+.arsenal-sliders { padding-top: 4px; }
+.arsl { display: grid; grid-template-columns: 12px 1fr 40px; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
+.arsl input { width: 100%; margin: 0; accent-color: var(--accent); }
+.arsl b { font-size: 10px; color: var(--ink-2); text-align: right; font-weight: 500; }
+.arsl-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 2px; font-size: 10px; }
+.arsl-foot .link { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 10px; padding: 0; text-decoration: underline; }
+.arsl-foot .link:disabled { opacity: 0.4; cursor: default; }
+.gold-note { color: var(--wvu-gold); font-size: 9px; }
+.grade { font-weight: 700; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+.grade.elite { background: #0f5132; color: #b7f5d1; }
+.grade.good { background: #1d4b8a; color: #cfe3ff; }
+.grade.avg { background: #6b4a00; color: #ffe4a6; }
+.grade.poor { background: #6e1d1d; color: #ffd0d0; }

@@ -20,7 +20,7 @@ export const CAMERA_PRESETS: Record<CameraPreset, { label: string; pos: [number,
   overhead: { label: "Overhead", pos: [0, 48, 29.9], target: [0, 0, 30] },
 };
 
-export interface SceneTrack { coeffs: Coeffs; color: string; dashed?: boolean }
+export interface SceneTrack { coeffs: Coeffs; color: string; dashed?: boolean; faint?: boolean }
 
 export interface HeatLayer {
   cells: Cell[];
@@ -31,6 +31,8 @@ export interface HeatLayer {
 interface Props {
   last: SceneTrack | null;
   next: SceneTrack | null;
+  /** Arsenal mode: every other active pitch, drawn off the anchor. */
+  extra?: SceneTrack[];
   aim: Point | null;
   aimColor: string;
   camera: CameraPreset;
@@ -159,7 +161,7 @@ function trackGroup(t: SceneTrack, flightTime: number | null): THREE.Group {
   if (pts.length >= 2 && tDraw > 0.01) {
     const tube = new THREE.Mesh(
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), Math.max(8, n), t.dashed ? 0.026 : 0.038, 10, false),
-      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4, transparent: !!t.dashed, opacity: t.dashed ? 0.55 : 1, roughness: 0.5 }),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4, transparent: !!t.dashed || !!t.faint, opacity: t.dashed ? 0.55 : t.faint ? 0.8 : 1, roughness: 0.5 }),
     );
     g.add(tube);
   }
@@ -218,7 +220,7 @@ function heatGroup(heat: HeatLayer, selected: Loc | null, best: Loc | null, anch
   return { group, tiles };
 }
 
-export default function Scene3D({ last, next, aim, aimColor, camera, heat, selected, anchorLoc, anchorColor, best, onPick, flightTime }: Props) {
+export default function Scene3D({ last, next, extra = [], aim, aimColor, camera, heat, selected, anchorLoc, anchorColor, best, onPick, flightTime }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const ctx = useRef<{
     scene: THREE.Scene; cam: THREE.PerspectiveCamera; controls: OrbitControls; renderer: THREE.WebGLRenderer;
@@ -301,16 +303,19 @@ export default function Scene3D({ last, next, aim, aimColor, camera, heat, selec
     c.tracks.children.slice().forEach((o) => { c.tracks.remove(o); dispose(o); });
     if (last) c.tracks.add(trackGroup(last, flightTime));
     if (next) c.tracks.add(trackGroup(next, flightTime));
-    if (last && next && flightTime == null) {
-      const a = posAtDist(last.coeffs, DECISION_X), b = posAtDist(next.coeffs, DECISION_X);
+    const connect = (t: SceneTrack) => {
+      if (!last || flightTime != null) return;
+      const a = posAtDist(last.coeffs, DECISION_X), b = posAtDist(t.coeffs, DECISION_X);
       if (a && b) c.tracks.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([toVec(a), toVec(b)]), new THREE.LineBasicMaterial({ color: GOLD })));
-    }
+    };
+    if (next) connect(next);
+    for (const t of extra) { c.tracks.add(trackGroup(t, flightTime)); connect(t); }
     if (aim) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 10, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(aimColor) }));
       ring.position.copy(toVec(aim));
       c.tracks.add(ring);
     }
-  }, [last, next, aim, aimColor, flightTime]);
+  }, [last, next, extra, aim, aimColor, flightTime]);
 
   useEffect(() => {
     const c = ctx.current;
