@@ -12,10 +12,10 @@ const toVec = (p: Point) => new THREE.Vector3(p.side, p.height, p.dist);
 export type CameraPreset = "catcher" | "pitcher" | "rhh" | "lhh" | "side" | "overhead";
 
 export const CAMERA_PRESETS: Record<CameraPreset, { label: string; pos: [number, number, number]; target: [number, number, number] }> = {
-  catcher: { label: "Catcher", pos: [0, 3.6, -11], target: [0, 2.9, 30] },
-  rhh: { label: "RHH", pos: [3.4, 5.4, -2.5], target: [0, 2.8, 22] },
-  lhh: { label: "LHH", pos: [-3.4, 5.4, -2.5], target: [0, 2.8, 22] },
-  pitcher: { label: "Pitcher", pos: [0, 7.2, 68], target: [0, 2.8, 0] },
+  catcher: { label: "Catcher", pos: [0, 3.4, -6.5], target: [0, 2.9, 30] },
+  rhh: { label: "RHH", pos: [3.2, 5.4, -1.5], target: [0, 2.8, 22] },
+  lhh: { label: "LHH", pos: [-3.2, 5.4, -1.5], target: [0, 2.8, 22] },
+  pitcher: { label: "Pitcher", pos: [0, 6.8, 64], target: [0, 2.6, 0] },
   side: { label: "Side", pos: [-78, 5, 30], target: [0, 3.5, 30] },
   overhead: { label: "Overhead", pos: [0, 48, 29.9], target: [0, 0, 30] },
 };
@@ -86,6 +86,14 @@ function buildField(scene: THREE.Scene) {
     scene.add(new THREE.Line(box, chalk));
   }
 
+  // Distance lines every 10 ft from the plate's front edge, so depth reads on screen.
+  const tick = new THREE.LineBasicMaterial({ color: 0xdfe6f0, transparent: true, opacity: 0.22 });
+  for (const ft of [10, 20, 30, 40, 50]) {
+    const z = PLATE_X + ft;
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-7, 0.01, z), new THREE.Vector3(7, 0.01, z)]), tick));
+    scene.add(distanceLabel(`${ft} ft`, -7.6, z));
+  }
+
   // Home plate: front edge at PLATE_X, point at the back tip (z = 0).
   const hw = 8.5 / 12;
   const plate = new THREE.Shape();
@@ -117,6 +125,22 @@ function buildField(scene: THREE.Scene) {
     new THREE.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0.6 })));
   plane.position.set(0, 3.5, DECISION_X);
   scene.add(plane);
+}
+
+/** A small flat text label lying on the grass. */
+function distanceLabel(text: string, x: number, z: number): THREE.Sprite {
+  const c = document.createElement("canvas");
+  c.width = 128; c.height = 48;
+  const g = c.getContext("2d")!;
+  g.font = "600 28px Barlow, system-ui, sans-serif";
+  g.fillStyle = "rgba(223,230,240,0.7)";
+  g.textAlign = "right"; g.textBaseline = "middle";
+  g.fillText(text, 124, 24);
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sp.scale.set(2.4, 0.9, 1);
+  sp.position.set(x, 0.3, z);
+  return sp;
 }
 
 function ballMesh(color: THREE.Color, r = 0.121) {
@@ -214,7 +238,7 @@ export default function Scene3D({ last, next, aim, aimColor, camera, heat, selec
     buildField(scene);
     const tracks = new THREE.Group(), heatG = new THREE.Group();
     scene.add(tracks, heatG);
-    const cam = new THREE.PerspectiveCamera(34, 1, 0.05, 400);
+    const cam = new THREE.PerspectiveCamera(52, 1, 0.05, 400);
     const controls = new OrbitControls(cam, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.12;
