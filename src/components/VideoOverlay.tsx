@@ -157,11 +157,12 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
   useEffect(() => { for (const v of [vA.current, vB.current]) if (v) v.playbackRate = rate; }, [rate, urlA, urlB]);
 
   // B follows A so both sit at the same time relative to their own release (plus the nudge).
-  const sync = useCallback(() => {
+  const playedAt = useRef(0);   // when play() was last called; drift seeks are held off right after it
+  const sync = useCallback((tolerance = 0.02) => {
     const a = vA.current, b = vB.current; if (!a || !b || !locked) return;
     const rel = tIn(a) - (releaseA ?? 0);
     const want = t0(b) + Math.max(0, (releaseB ?? 0) + rel + nudgeMs / 1000);
-    if (Math.abs(b.currentTime - want) > 0.02) b.currentTime = want;
+    if (Math.abs(b.currentTime - want) > tolerance) b.currentTime = want;
   }, [releaseA, releaseB, nudgeMs, locked]);
   useEffect(sync, [sync]);
 
@@ -189,7 +190,8 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
       // before release leaves the 3D showing the full paths instead of two balls in the hand.
       const drive = linked && drivesScene && releaseA != null && (!a.paused || rel > 0);
       onFlightTime(drive ? Math.max(0, rel) : null);
-      if (!a.paused) sync();
+      // While playing, only pull B back if it has drifted a few frames, and not in the moment play() is still starting.
+      if (!a.paused && performance.now() - playedAt.current > 600) sync(0.08);
       raf = requestAnimationFrame(tick);
     };
     tick();
@@ -211,7 +213,13 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
     const a = vA.current, b = vB.current; if (!a || !b) return;
     if (playing) { pauseBoth(); return; }
     sync();
-    Promise.all([a.play(), b.play()]).then(() => setPlaying(true)).catch((e: Error) => setStatus(`Play was blocked: ${e.name}: ${e.message}`));
+    playedAt.current = performance.now();
+    const start = () => Promise.all([a.play(), b.play()]);
+    start().then(() => setPlaying(true)).catch((e: Error) => {
+      // A seek landing mid-start aborts play(); that's benign, so try once more before reporting.
+      if (e.name === "AbortError") { playedAt.current = performance.now(); setTimeout(() => start().then(() => setPlaying(true)).catch((e2: Error) => setStatus(`Play was blocked: ${e2.name}: ${e2.message}`)), 150); return; }
+      setStatus(`Play was blocked: ${e.name}: ${e.message}`);
+    });
   };
   const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
   const scrubA = (t: number) => { const a = vA.current; if (!a) return; pauseBoth(); a.currentTime = t0(a) + t; sync(); };
