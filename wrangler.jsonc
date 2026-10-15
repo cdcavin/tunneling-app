@@ -3,6 +3,8 @@
   "name": "wvu-tunneling",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
+  // Keep variables and secrets set in the dashboard across deploys from GitHub.
+  "keep_vars": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
