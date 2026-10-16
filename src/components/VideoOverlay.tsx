@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { lookupClips, streamUrl, type AwreClip, type RealPair } from "../lib/pairs";
+import { atWvuPark, lookupClips, streamUrl, type AwreClip, type RealPair } from "../lib/pairs";
 import PitchPicker from "./PitchPicker";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
@@ -8,6 +8,8 @@ import { pitchColorOnDark } from "../lib/pitchColors";
 interface Props {
   pairs: RealPair[];
   rows: PitchRow[];
+  /** The pitcher's team code, to tell home from away for video. */
+  pitcherTeam?: string;
   selected: RealPair | null;
   onSelect: (p: RealPair | null) => void;
   anchorType: string;
@@ -99,7 +101,7 @@ function releaseFromUtc(utc: string | undefined, startMs: number | null): number
   return s >= 0 && s <= 120 ? s : null;
 }
 
-export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene }: Props) {
+export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene }: Props) {
   const [clipsA, setClipsA] = useState<AwreClip[]>([]);
   const [clipsB, setClipsB] = useState<AwreClip[]>([]);
   const [linked, setLinked] = useState(true);
@@ -123,6 +125,12 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
 
   useEffect(() => {
     if (!selected || selected.anchor.id === selected.next.id) { setClipsA([]); setClipsB([]); setStatus(selected ? "Now pick pitch B." : null); return; }
+    const away = [["A", selected.anchor], ["B", selected.next]].filter(([, p]) => !atWvuPark(p as PitchRow, pitcherTeam)).map(([k]) => k);
+    if (away.length) {
+      setClipsA([]); setClipsB([]);
+      setStatus(`No video available: pitch ${away.join(" and ")} ${away.length === 1 ? "wasn't" : "weren't"} thrown at WVU. Video exists only for home games.`);
+      return;
+    }
     let cancelled = false;
     setStatus("Looking up video…");
     setManualA(null); setManualB(null); setNudgeMs(0);
@@ -138,7 +146,7 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
       setPerspective((cur) => (names.includes(cur) ? cur : names.find((n) => /center ?field/i.test(n)) ?? names.find((n) => /home ?plate/i.test(n)) ?? names[0] ?? ""));
     });
     return () => { cancelled = true; };
-  }, [selected]);
+  }, [selected, pitcherTeam]);
 
   const clipA = pick(clipsA, perspective), clipB = pick(clipsB, perspective);
   const urlA = clipA ? streamUrl(clipA.video_url) : null;
@@ -275,7 +283,9 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
             </div>
           </>
         ) : (
-          <div className="video-empty"><p>{status ?? (selected ? "Loading…" : "Pick any two pitches to stack their clips.")}</p></div>
+          <div className="video-empty"><p>{status ?? (selected ? "Loading…" : !rows.some((r) => atWvuPark(r, pitcherTeam))
+                ? "No video available: none of these pitches were thrown at WVU. Video exists only for home games."
+                : "Pick any two pitches to stack their clips.")}</p></div>
         )}
       </div>
 

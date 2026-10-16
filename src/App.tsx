@@ -428,7 +428,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={loadPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
+              <VideoOverlay pairs={pairs} rows={rows} pitcherTeam={pitcher?.team} selected={pair} onSelect={loadPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
             </div>
           </div>
 
