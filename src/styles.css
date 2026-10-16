@@ -392,3 +392,12 @@ button.primary.wide { width: 100%; }
 .best-nums { display: grid; text-align: right; }
 .best-nums b { font: 600 15px/1.1 var(--font-cond); color: var(--ink); font-variant-numeric: tabular-nums; }
 .best-nums small { font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Distance chips on the 3D view */
+.hud-jumps { left: 12px; right: 12px; bottom: 58px; justify-content: flex-end; gap: 3px; pointer-events: none; }
+.hud-jumps button { pointer-events: auto; min-width: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--glass); backdrop-filter: blur(8px); color: var(--ink-2); font: 500 12px/1.2 var(--font-cond); font-variant-numeric: tabular-nums; }
+.hud-jumps button:hover:not(:disabled) { color: var(--ink); background: var(--raised-2); }
+.hud-jumps button.is-on { background: var(--wvu-gold); border-color: var(--wvu-gold); color: var(--wvu-navy); font-weight: 600; }
+.hud-jumps button:disabled { opacity: 0.4; }
+.jumps-unit { font-size: 11px; color: var(--muted); padding: 0 4px; pointer-events: none; }
+.hud-legend { bottom: 96px; }

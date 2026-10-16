@@ -16,6 +16,8 @@ interface Props {
   onFlightTime: (t: number | null) => void;
   /** Whether the 3D view is showing this real pair (so the video may drive its clock). */
   drivesScene: boolean;
+  /** A request from outside to park both clips at `t` seconds after release; `n` changes on each request. */
+  seekTo?: { t: number; n: number } | null;
 }
 
 // Safari plays HLS natively; every other browser answers "maybe" to canPlayType and then can't, so go by the browser.
@@ -99,7 +101,7 @@ function releaseFromUtc(utc: string | undefined, startMs: number | null): number
   return s >= 0 && s <= 120 ? s : null;
 }
 
-export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene }: Props) {
+export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene, seekTo }: Props) {
   const [clipsA, setClipsA] = useState<AwreClip[]>([]);
   const [clipsB, setClipsB] = useState<AwreClip[]>([]);
   const [linked, setLinked] = useState(true);
@@ -210,6 +212,14 @@ export default function VideoOverlay({ pairs, rows, selected, onSelect, anchorTy
     a.addEventListener("ended", done); a.addEventListener("pause", done);
     return () => { a.removeEventListener("ended", done); a.removeEventListener("pause", done); };
   }, [urlA]);
+
+  // Outside request (the distance chips on the 3D view): pause and park both clips at that flight time.
+  useEffect(() => {
+    if (!seekTo || !urlA) return;
+    vA.current?.pause(); vB.current?.pause(); setPlaying(false);
+    seekRel(seekTo.t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seekTo?.n]);
 
   // Once both releases are known, park the clips just before release.
   useEffect(() => { if (aligned) seekRel(-0.6); }, [aligned, seekRel]);

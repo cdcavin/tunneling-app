@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Scene3D, { CAMERA_PRESETS, type CameraPreset } from "./components/Scene3D";
 import ZonePicker from "./components/ZonePicker";
 import { MovementPlot, SeparationChart } from "./components/Charts";
-import { aimAt, aimPoint, pairGeometry, perturb, PLATE_X, separationCurve, timeAtDist, type ShapeDelta } from "./lib/physics";
+import { aimAt, aimPoint, DECISION_FT, pairGeometry, perturb, PLATE_X, posAtTime, separationCurve, timeAtDist, type ShapeDelta } from "./lib/physics";
 import { HEAT_METRICS, metricValue, nextPitchCells, provisionalBest, tightest, type Cell, type HeatMetric, type Loc } from "./lib/grid";
 import { suggestShapes, type Suggestion } from "./lib/suggest";
 import { pitchColorOnDark } from "./lib/pitchColors";
@@ -189,6 +189,17 @@ export default function App() {
   const play = () => { if (clockRef.current == null || clockRef.current >= flightEnd) clockRef.current = 0; setPlaying(true); };
   const reset = () => { setPlaying(false); clockRef.current = null; setClock(null); };
   const scrub = (t: number) => { setPlaying(false); clockRef.current = t; setClock(t); };
+  // Jump both the 3D clock and (when a real pair is loaded) the two clips to the moment the anchor pitch is `ft` from the plate.
+  const [seekTo, setSeekTo] = useState<{ t: number; n: number } | null>(null);
+  const jumpTo = (ft: number) => {
+    if (!lastAimed) return;
+    const t = ft <= 0 ? timeAtDist(lastAimed, PLATE_X) : timeAtDist(lastAimed, PLATE_X + ft);
+    if (t == null) return;
+    scrub(t);
+    if (actual) setSeekTo((p) => ({ t, n: (p?.n ?? 0) + 1 }));
+  };
+  const ballFt = clock == null ? null : (() => { const p = lastAimed ? posAtTime(lastAimed, clock) : null; return p ? p.dist - PLATE_X : null; })();
+  const JUMPS = [50, 40, 30, DECISION_FT, 20, 10, 0];
 
   const runSuggestions = () => { if (lastAimed && next) setSuggestions(suggestShapes(lastAimed, next.coeffs, "tightThenFar", maxDecision)); };
   const applySuggestion = (s: Suggestion) => { setDelta(s.delta); setNextLoc({ side: s.cell.side, height: s.cell.height }); };
@@ -376,6 +387,15 @@ export default function App() {
                 <label className="hud-check"><input type="checkbox" checked={showAim} onChange={(e) => setShowAim(e.target.checked)} />Aim point</label>
                 {pair && <label className="hud-check"><input type="checkbox" checked={showActual} onChange={(e) => setShowActual(e.target.checked)} />Show the real pair</label>}
               </div>
+              <div className="hud hud-jumps" role="group" aria-label="Jump to a distance from the plate">
+                {JUMPS.map((ft) => (
+                  <button key={ft} type="button" className={ballFt != null && Math.abs(ballFt - ft) < 0.6 ? "is-on" : ""} onClick={() => jumpTo(ft)} disabled={!lastAimed}
+                    title={ft === DECISION_FT ? "Decision point" : ft === 0 ? "Front of the plate" : `${ft} ft from the plate`}>
+                    {ft === 0 ? "Plate" : ft === DECISION_FT ? "23.8" : ft}
+                  </button>
+                ))}
+                <span className="jumps-unit">ft out{actual ? " · 3D and video" : ""}</span>
+              </div>
               <div className="hud hud-play">
                 <button type="button" className="play" onClick={playing ? () => setPlaying(false) : play} aria-label={playing ? "Pause" : "Play both pitches"}>
                   {playing ? "❚❚" : "▶"}
@@ -390,7 +410,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
+              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} seekTo={seekTo} />
             </div>
           </div>
 
