@@ -21,6 +21,12 @@ const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.
 const SPEEDS = [0.05, 0.1, 0.25, 0.5, 1];
 const NO_DELTA: ShapeDelta = { ivb: 0, hb: 0, velo: 0 };
 
+/** Parse JSON written by Python, which spells missing values as bare NaN / Infinity. */
+async function readJson<T>(r: Response): Promise<T> {
+  const text = await r.text();
+  return JSON.parse(text.replace(/(?<=[:\[,]\s*)(?:NaN|-?Infinity)(?=\s*[,}\]])/g, "null")) as T;
+}
+
 function primaryFastball(arsenal: ArsenalPitch[]): ArsenalPitch | null {
   const fbs = arsenal.filter((x) => FASTBALLS.includes(x.type));
   const pool = fbs.length ? fbs : arsenal;
@@ -94,7 +100,7 @@ export default function App() {
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/index.json`, { cache: "no-store" })
-      .then((r) => { if (!r.ok) throw new Error(`The pitcher list did not load (HTTP ${r.status}).`); return r.json(); })
+      .then((r) => { if (!r.ok) throw new Error(`The pitcher list did not load (HTTP ${r.status}).`); return readJson<IndexFile>(r); })
       .then((d: IndexFile) => {
         setData(d);
         const wvu = d.pitchers.filter((p) => p.team === "WES_MOU");
@@ -111,7 +117,7 @@ export default function App() {
     let cancelled = false;
     setLoadingPitcher(true);
     fetch(`${import.meta.env.BASE_URL}data/pitcher/${encodeURIComponent(pitcherId)}.json`, { cache: "no-store" })
-      .then((r) => { if (!r.ok) throw new Error(`This pitcher's data did not load (HTTP ${r.status}).`); return r.json(); })
+      .then((r) => { if (!r.ok) throw new Error(`This pitcher's data did not load (HTTP ${r.status}).`); return readJson<Pitcher>(r); })
       .then((p: Pitcher) => { if (!cancelled) { setPitcher(p); setUpPitcher(p); } })
       .catch((e: Error) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoadingPitcher(false); });
@@ -258,7 +264,7 @@ export default function App() {
   const shapedPitch = next && (delta.ivb || delta.hb || delta.velo)
     ? { type: next.type, ivb: next.ivb + delta.ivb, hb: next.hb + delta.hb, velo: next.velo + delta.velo } : null;
 
-  if (error) return <div className="state-msg"><h1>WVU Pitch Tunneling</h1><p>{error} Check that <code>public/data/pitchers.json</code> exists, then reload.</p></div>;
+  if (error) return <div className="state-msg"><h1>WVU Pitch Tunneling</h1><p>{error} Reload; if it keeps happening, the data upload needs checking.</p></div>;
   if (!data) return <div className="state-msg"><p>Loading pitchers…</p></div>;
 
   return (
