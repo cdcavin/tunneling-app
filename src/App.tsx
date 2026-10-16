@@ -134,6 +134,18 @@ export default function App() {
     setDelta(NO_DELTA); setSuggestions(null);
   }
   function chooseNextType(t: string) { setNextType(t); setDelta(NO_DELTA); setSuggestions(null); }
+  // Load a real pair (or the first half of one): the anchor/tunnel types follow the pitches picked.
+  const loadPair = (p: RealPair | null) => {
+    setPair(p);
+    if (!p) return;
+    setShowActual(true);
+    if (arsenalMode) setArsenalMode(false);
+    setLastType(p.anchor.type);
+    if (p.next.id !== p.anchor.id) chooseNextType(p.next.type);
+  };
+  // Picking a type by hand means "show me the averages": drop any real pair that no longer matches.
+  const pickAnchorType = (t: string) => { setLastType(t); if (pair && pair.anchor.type !== t) setPair(null); };
+  const pickTunnelType = (t: string) => { chooseNextType(t); if (pair && pair.next.type !== t) setPair(null); };
 
   // If a filter removes the selected type, fall back to what's left.
   const last = arsenal.find((p) => p.type === lastType) ?? arsenal[0] ?? null;
@@ -159,9 +171,8 @@ export default function App() {
   useEffect(() => {
     if (!pair) return;
     const inRows = rows.some((r) => r.id === pair.anchor.id) && rows.some((r) => r.id === pair.next.id);
-    const sameTypes = !last || !next || (pair.anchor.type === last.type && pair.next.type === next.type);
-    if (!inRows || !sameTypes) setPair(null);
-  }, [rows, pair, last, next]);
+    if (!inRows) setPair(null);
+  }, [rows, pair]);
   const cells = useMemo(() => (lastAimed && shaped ? nextPitchCells(lastAimed, shaped) : []), [lastAimed, shaped]);
   const bestTight = useMemo(() => tightest(cells), [cells]);
   const bestFar = useMemo(() => provisionalBest(cells, maxDecision), [cells, maxDecision]);
@@ -308,12 +319,12 @@ export default function App() {
           {!arsenalMode && (<>
           <section className="pitch-block" style={{ ["--accent" as string]: last ? pitchColorOnDark(last.type) : "#9aa7ba" }}>
             <div className="sec-title">Anchor pitch</div>
-            <PitchButtons pitches={arsenal} value={last?.type ?? ""} onChange={setLastType} label="Anchor pitch type" />
+            <PitchButtons pitches={arsenal} value={last?.type ?? ""} onChange={pickAnchorType} label="Anchor pitch type" />
           </section>
 
           <section className="pitch-block" style={{ ["--accent" as string]: next ? pitchColorOnDark(next.type) : "#9aa7ba" }}>
             <div className="sec-title">Tunnel pitch</div>
-            <PitchButtons pitches={arsenal} value={next?.type ?? ""} onChange={chooseNextType} label="Tunnel pitch type" />
+            <PitchButtons pitches={arsenal} value={next?.type ?? ""} onChange={pickTunnelType} label="Tunnel pitch type" />
             <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
               {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
@@ -350,7 +361,7 @@ export default function App() {
           </>)}
 
           <BestTunnels rows={rows} types={arsenal.map((p) => p.type)} selected={pair}
-            onSelect={(p) => { setPair(p); setShowActual(true); if (arsenalMode) setArsenalMode(false); setLastType(p.anchor.type); chooseNextType(p.next.type); }} />
+            onSelect={loadPair} />
 
           <section>
             <div className="sec-title">Situation</div>
@@ -411,7 +422,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
+              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={loadPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
             </div>
           </div>
 
