@@ -1,4 +1,4 @@
-// Serves the data API from Cloudflare KV and everything else from the built site.
+// Serves the data API from R2 (gzipped JSON, KV as fallback) and everything else from the built site.
 //
 //   GET /data/index.json        list of pitchers (no pitch rows)
 //   GET /data/pitcher/<id>.json one pitcher with all tracked pitches
@@ -8,6 +8,7 @@
 
 interface Env {
   DATA: KVNamespace;
+  BUCKET?: R2Bucket;       // pitch data (gzipped JSON objects); KV is the fallback for older uploads
   ASSETS: Fetcher;
   AWRE_API_KEY?: string;   // set in the Worker's Settings > Variables and Secrets; never in code
   AWRE_TEAM_ID?: string;   // defaults to WVU's id below
@@ -111,7 +112,17 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url);
 
+    // Data objects are stored gzipped; hand the bytes through with the encoding declared so the
+    // browser inflates them (encodeBody "manual" stops the edge from gzipping twice).
+    const fromR2 = async (key: string) => {
+      const obj = await env.BUCKET?.get(key);
+      if (!obj) return null;
+      return new Response(obj.body, { headers: { ...JSON_HEADERS, "content-encoding": "gzip", "cache-control": "public, max-age=3600" }, encodeBody: "manual" });
+    };
+
     if (pathname === "/data/index.json") {
+      const r2 = await fromR2("index.json.gz");
+      if (r2) return r2;
       const kv = await env.DATA.get("index", "text");
       if (kv) return new Response(kv, { headers: JSON_HEADERS });
       const s = await sample(env, request);
@@ -123,6 +134,8 @@ export default {
     const m = pathname.match(/^\/data\/pitcher\/([^/]+)\.json$/);
     if (m) {
       const id = decodeURIComponent(m[1]);
+      const r2 = await fromR2(`pitchers/${id}.json.gz`);
+      if (r2) return r2;
       const kv = await env.DATA.get(`pitcher:${id}`, "text");
       if (kv) return new Response(kv, { headers: JSON_HEADERS });
       const s = await sample(env, request);

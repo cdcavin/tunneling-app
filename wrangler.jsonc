@@ -13,5 +13,9 @@
   },
   "kv_namespaces": [
     { "binding": "DATA", "id": "07dec3dd433e4b378bd5e29fb50aa769" }
+  ],
+  // Pitch data: one gzipped JSON per pitcher-season, plus index.json.gz. Uploaded from Colab.
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "tunneling-data" }
   ]
 }

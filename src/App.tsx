@@ -10,6 +10,7 @@ import FilterPanel from "./components/FilterPanel";
 import VideoOverlay from "./components/VideoOverlay";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
+import PitcherFinder from "./components/PitcherFinder";
 import { realLoc } from "./lib/arsenal";
 import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
@@ -94,7 +95,13 @@ export default function App() {
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/index.json`, { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(`The pitcher list did not load (HTTP ${r.status}).`); return r.json(); })
-      .then((d: IndexFile) => { setData(d); if (d.pitchers[0]) setPitcherId(d.pitchers[0].id); })
+      .then((d: IndexFile) => {
+        setData(d);
+        const wvu = d.pitchers.filter((p) => p.team === "WES_MOU");
+        const pool = wvu.length ? wvu : d.pitchers;
+        const top = [...pool].sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || Number(b.fall ?? 0) - Number(a.fall ?? 0) || b.n - a.n)[0];
+        if (top) setPitcherId(top.id);
+      })
       .catch((e: Error) => setError(e.message));
   }, []);
 
@@ -258,13 +265,8 @@ export default function App() {
         <aside className="panel left" aria-label="Pitch selection">
           <section>
             <div className="sec-title">Pitcher</div>
-            <select id="pitcher" aria-label="Pitcher" value={pitcherId} onChange={(e) => setPitcherId(e.target.value)}>
-              {[...data.pitchers].sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.throws === "Right" ? "R" : "L"}, {p.season})</option>
-              ))}
-            </select>
-            {loadingPitcher ? <p className="hint">Loading pitches…</p>
-              : pitcher && <p className="hint">{pitcher.pitches.length.toLocaleString()} tracked pitches, latest {pitcher.season}</p>}
+            <PitcherFinder pitchers={data.pitchers} value={pitcherId} onChange={setPitcherId} />
+            {loadingPitcher && <p className="hint">Loading pitches…</p>}
           </section>
 
           <section>

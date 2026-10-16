@@ -27,6 +27,8 @@ export interface Pitcher {
   name: string;
   throws: "Right" | "Left";
   season: string;
+  team?: string;
+  conf?: string;
   pitches: PitchRow[];
 }
 
@@ -41,13 +43,18 @@ export interface ArsenalPitch {
   coeffs: Coeffs;
 }
 
-export interface PitcherSummary { id: string; name: string; throws: "Right" | "Left"; season: string; n: number }
+export interface PitcherSummary {
+  id: string; name: string; throws: "Right" | "Left"; season: string; n: number;
+  team?: string; conf?: string; year?: number; fall?: boolean; first?: string; last?: string; games?: number;
+}
 
 /** /data/index.json: who is available, without pitch rows. */
 export interface DataIndex {
   generated: string;     // ISO date the data was built
   dataThrough: string;   // last game date in the data
   sample: boolean;       // true = made-up pitchers, safe to show publicly
+  teams?: string[];
+  confs?: string[];
   pitchers: PitcherSummary[];
 }
 
