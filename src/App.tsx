@@ -189,14 +189,13 @@ export default function App() {
   const play = () => { if (clockRef.current == null || clockRef.current >= flightEnd) clockRef.current = 0; setPlaying(true); };
   const reset = () => { setPlaying(false); clockRef.current = null; setClock(null); };
   const scrub = (t: number) => { setPlaying(false); clockRef.current = t; setClock(t); };
-  // Jump both the 3D clock and (when a real pair is loaded) the two clips to the moment the anchor pitch is `ft` from the plate.
-  const [seekTo, setSeekTo] = useState<{ t: number; n: number } | null>(null);
+  // Park the 3D clock at the moment the anchor pitch is `ft` from the plate. The video is left alone:
+  // its frames are 33 ms apart (about 4 ft of ball flight), so it can't honestly be put "at 23.8 ft".
   const jumpTo = (ft: number) => {
     if (!lastAimed) return;
     const t = ft <= 0 ? timeAtDist(lastAimed, PLATE_X) : timeAtDist(lastAimed, PLATE_X + ft);
     if (t == null) return;
     scrub(t);
-    if (actual) setSeekTo((p) => ({ t, n: (p?.n ?? 0) + 1 }));
   };
   const ballFt = clock == null ? null : (() => { const p = lastAimed ? posAtTime(lastAimed, clock) : null; return p ? p.dist - PLATE_X : null; })();
   const JUMPS = [50, 40, 30, DECISION_FT, 20, 10, 0];
@@ -394,7 +393,7 @@ export default function App() {
                     {ft === 0 ? "Plate" : ft === DECISION_FT ? "23.8" : ft}
                   </button>
                 ))}
-                <span className="jumps-unit">ft out{actual ? " · 3D and video" : ""}</span>
+                <span className="jumps-unit">ft out</span>
               </div>
               <div className="hud hud-play">
                 <button type="button" className="play" onClick={playing ? () => setPlaying(false) : play} aria-label={playing ? "Pause" : "Play both pitches"}>
@@ -410,7 +409,7 @@ export default function App() {
             </div>
 
             <div className="video">
-              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} seekTo={seekTo} />
+              <VideoOverlay pairs={pairs} rows={rows} selected={pair} onSelect={setPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
             </div>
           </div>
 
