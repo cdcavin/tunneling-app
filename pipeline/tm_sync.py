@@ -3,8 +3,9 @@
 explore: connect and print the folder layout (names and counts only).
 peek:    walk all of /v3, summarise the game files, and open a few sample files to print their columns
          and team / league / pitch-type values.
-dry:     build WVU pitch rows from every WVU-park game/scrimmage file (2025 on) and compare them with what's
-         live in R2. Uploads nothing.
+dry:     the full sync (pipeline/sync.py) without uploading: prints what would change.
+sync:    the full sync, uploading to R2.
+compare: build WVU rows from the WVU-park files and compare them field by field with what's live.
 Never prints player names, the host, user or password.
 """
 import ftplib, io, os, re, sys
@@ -20,7 +21,7 @@ if not (HOST and USER and PASS):
 
 class FTP:
     """Same three calls over FTPS, FTP or SFTP."""
-    def __init__(self):
+    def __init__(self, quiet=False):
         self.kind, self.c = None, None
         errors = []
         order = [PROTO] if PROTO in ("sftp", "ftps", "ftp") else ["sftp", "ftps", "ftp"]
@@ -36,7 +37,7 @@ class FTP:
                 else:
                     c = ftplib.FTP(HOST, timeout=30); c.login(USER, PASS); self.c = c
                 self.kind = kind
-                print(f"connected over {kind.upper()}")
+                if not quiet: print(f"connected over {kind.upper()}")
                 return
             except Exception as e:
                 errors.append(f"{kind}: {type(e).__name__}")
@@ -363,8 +364,13 @@ def dry(f: FTP):
     print(f"  pitches in FTP files but not in the app (would be added): {len(new)} by season {new.seasonLabel.value_counts().sort_index().to_dict()}")
 
 
+if MODE in ("dry", "sync"):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import sync
+    sync.run(lambda quiet=False: FTP(quiet), upload=(MODE == "sync"))
+    sys.exit(0)
 f = FTP()
-if MODE == "dry":
+if MODE == "compare":
     dry(f)
 elif MODE == "explore":
     explore(f)

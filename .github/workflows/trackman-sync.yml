@@ -6,18 +6,22 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "explore = list the folder layout; peek = summarise all game files and open a few samples; dry = build WVU rows and compare with the live app (uploads nothing)"
+        description: "dry = full sync without uploading (shows what would change); sync = full sync, uploads to R2; compare / peek / explore = diagnostics"
         required: true
         default: dry
         type: choice
-        options: [dry, peek, explore]
+        options: [dry, sync, compare, peek, explore]
   # schedule:                      # turned on once the sync step is written and tested
   #   - cron: "0 10 * * 1"         # Mondays 6 AM Eastern
+
+concurrency:            # never two syncs writing at once
+  group: trackman-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,5 +36,5 @@ jobs:
           TM_FTP_PROTOCOL: ${{ secrets.TM_FTP_PROTOCOL }}
           R2_KEY: ${{ secrets.R2_KEY }}
           R2_SECRET: ${{ secrets.R2_SECRET }}
-          MODE: ${{ inputs.mode || 'explore' }}
+          MODE: ${{ inputs.mode || 'sync' }}       # scheduled runs (no inputs) do the real sync
         run: python -I pipeline/tm_sync.py
