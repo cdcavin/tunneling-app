@@ -131,6 +131,11 @@ export default {
         pitchers: s.pitchers.map((p) => ({ id: p.id, name: p.name, throws: p.throws, season: p.season, n: p.pitches.length })) });
     }
 
+    if (pathname === "/data/reference.json") {
+      const r2 = await fromR2("reference.json.gz");
+      return r2 ?? json({ error: "No reference built yet." }, 404);
+    }
+
     const m = pathname.match(/^\/data\/pitcher\/([^/]+)\.json$/);
     if (m) {
       const id = decodeURIComponent(m[1]);

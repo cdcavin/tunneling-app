@@ -11,7 +11,6 @@ import VideoOverlay from "./components/VideoOverlay";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
 import PitcherFinder from "./components/PitcherFinder";
-import OutcomesByTunnel from "./components/OutcomesByTunnel";
 import { realLoc } from "./lib/arsenal";
 import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
@@ -479,7 +478,6 @@ export default function App() {
             <section className="card">
               <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
             </section>
-            <OutcomesByTunnel rows={rows} anchorType={last?.type ?? null} tunnelType={next?.type ?? null} />
           </div>
         </main>
       </div>
