@@ -11,6 +11,7 @@ import VideoOverlay from "./components/VideoOverlay";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
 import PitcherFinder from "./components/PitcherFinder";
+import SepReference from "./components/SepReference";
 import { realLoc } from "./lib/arsenal";
 import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
@@ -433,6 +434,8 @@ export default function App() {
               <VideoOverlay pairs={pairs} rows={rows} pitcherTeam={pitcher?.team} selected={pair} onSelect={loadPair} anchorType={last?.type ?? ""} nextType={next?.type ?? ""} onFlightTime={onFlightTime} drivesScene={!!actual} />
             </div>
           </div>
+
+          <SepReference rows={rows} anchorType={last?.type ?? null} tunnelType={next?.type ?? null} sep={geo ? geo.decisionSep : null} />
 
           <div className="metrics" aria-live="polite">
             <Metric label="Apart at 23.8 ft" value={geo ? geo.decisionSep.toFixed(1) : "—"} unit="in" accent />

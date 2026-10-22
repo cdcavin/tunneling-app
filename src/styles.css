@@ -431,3 +431,28 @@ button.primary.wide { width: 100%; }
 .outcomes-table td.worse { color: #ffb3b3; }
 .outcomes-table td.thin { opacity: 0.45; }
 .outcomes-table .all-row th, .outcomes-table .all-row td { color: var(--ink-2); border-bottom: 0; }
+
+/* Separation reference: P4 vs his, by band */
+.sepref { background: var(--panel); padding: 14px 16px; border-top: 1px solid var(--line); flex-shrink: 0; }
+.sepref-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.sepref-head .sec-title { margin: 0 0 3px; }
+.sepref-head .segmented { margin: 0; }
+.sepref-sub { font-size: 12px; color: var(--muted); }
+.sepref-sub b { color: var(--ink); font-family: var(--font-cond); font-size: 13px; }
+.sepref-scroll { overflow-x: auto; }
+.sepref-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sepref-table th, .sepref-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.sepref-table thead th { font-weight: 500; color: var(--muted); font-size: 12px; }
+.sepref-table thead tr.grp th { color: var(--ink-2); border-bottom: 0; padding-bottom: 0; text-align: center; }
+.sepref-table .gl { border-left: 1px solid var(--line); }
+.sepref-table .num { text-align: right; font: 500 14px/1.2 var(--font-cond); font-variant-numeric: tabular-nums; }
+.sepref-table thead .num { font: 500 12px/1.2 var(--font); }
+.sepref-table tbody th { font-weight: 500; color: var(--ink); }
+.sepref-table td.p4 { color: var(--muted); font-weight: 400; }
+.sepref-table td.his { color: var(--ink); }
+.sepref-table td.his.good { color: #7fe0a6; background: rgba(63, 180, 110, 0.14); }
+.sepref-table td.his.bad { color: #ff9e9e; background: rgba(224, 92, 92, 0.14); }
+.sepref-table td.thin { color: var(--muted); font-weight: 400; }
+.sepref-table tr.on th, .sepref-table tr.on td { box-shadow: inset 0 1px 0 var(--wvu-gold), inset 0 -1px 0 var(--wvu-gold); }
+.sepref-table tr.on th { color: var(--wvu-gold); }
+.sepref-table .you { font-weight: 400; font-size: 11px; color: var(--wvu-gold); }
