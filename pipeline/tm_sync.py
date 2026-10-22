@@ -3,7 +3,7 @@
 explore: connect and print the folder layout (names and counts only).
 peek:    walk all of /v3, summarise the game files, and open a few sample files to print their columns
          and team / league / pitch-type values.
-dry:     build WVU pitch rows from every WVU-park game/scrimmage file (2024 on) and compare them with what's
+dry:     build WVU pitch rows from every WVU-park game/scrimmage file (2025 on) and compare them with what's
          live in R2. Uploads nothing.
 Never prints player names, the host, user or password.
 """
@@ -188,7 +188,7 @@ def peek(f: FTP):
 
 
 # ---------- dry run ----------
-def pick_files(csvs, since="20240101"):
+def pick_files(csvs, since="20250101"):
     """WVU-park game/scrimmage/BP files from `since` on: one per game, verified copy if it exists, newest delivery."""
     best = {}
     for p, n, sz, mt in csvs:
@@ -235,7 +235,7 @@ def dry(f: FTP):
     picked = pick_files(csvs)
     kinds = {}
     for _, n in picked: kinds[kind(n)] = kinds.get(kind(n), 0) + 1
-    print(f"WVU-park files since 2024 (one per game, verified preferred): {len(picked)} {kinds}; "
+    print(f"WVU-park files since 2025 (one per game, verified preferred): {len(picked)} {kinds}; "
           f"unverified-only: {sum(1 for _, n in picked if '_unverified' in n)}")
 
     frames, empty, bad = [], 0, []
