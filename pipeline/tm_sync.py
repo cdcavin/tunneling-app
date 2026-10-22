@@ -2,7 +2,10 @@
 
 explore: connect and print the folder layout (names and counts only).
 peek:    walk all of /v3, summarise the game files, and open a few sample files to print their columns
-         and team / league / pitch-type values. Never prints player names, the host, user or password.
+         and team / league / pitch-type values.
+dry:     build WVU pitch rows from every WVU-park game/scrimmage file (2024 on) and compare them with what's
+         live in R2. Uploads nothing.
+Never prints player names, the host, user or password.
 """
 import ftplib, io, os, re, sys
 
@@ -184,8 +187,130 @@ def peek(f: FTP):
             print(f"  {len(m)} pitches in both; columns that differ on >1% of them: {diff}")
 
 
+# ---------- dry run ----------
+def pick_files(csvs, since="20240101"):
+    """WVU-park game/scrimmage/BP files from `since` on: one per game, verified copy if it exists, newest delivery."""
+    best = {}
+    for p, n, sz, mt in csvs:
+        if not WVU_NAME.search(n) or n[:8] < since: continue
+        key = n.replace("_unverified", "")
+        rank = (0 if "_unverified" in n else 1, p)            # verified beats unverified, then latest folder
+        if key not in best or rank > best[key][0]: best[key] = (rank, p, n)
+    return [(p, n) for _, p, n in best.values()]
+
+
+def kind(n):
+    return "BP" if "-BP-" in n else ("Private" if "-Private-" in n else "game")
+
+
+def r2_client():
+    k, sec = os.environ.get("R2_KEY", ""), os.environ.get("R2_SECRET", "")
+    if not (k and sec): return None
+    for v in (k, sec): print(f"::add-mask::{v}")
+    import boto3
+    from botocore.config import Config
+    return boto3.client("s3", endpoint_url="https://7e54275932eb85e9ef346c9e2d731750.r2.cloudflarestorage.com",
+                        aws_access_key_id=k, aws_secret_access_key=sec, region_name="auto", config=Config(retries={"max_attempts": 8}))
+
+
+def r2_json(s3, key):
+    import gzip, json
+    body = s3.get_object(Bucket="tunneling-data", Key=key)["Body"].read()
+    try: body = gzip.decompress(body)
+    except OSError: pass
+    return json.loads(body)
+
+
+def dry(f: FTP):
+    import pandas as pd
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import rows as R
+
+    files = walk_v3(f)
+    csvs = [x for x in files if x[1].lower().endswith(".csv") and not SKIP.search(x[1])]
+    picked = pick_files(csvs)
+    kinds = {}
+    for _, n in picked: kinds[kind(n)] = kinds.get(kind(n), 0) + 1
+    print(f"WVU-park files since 2024 (one per game, verified preferred): {len(picked)} {kinds}; "
+          f"unverified-only: {sum(1 for _, n in picked if '_unverified' in n)}")
+
+    frames, empty, bad = [], 0, []
+    for p, n in sorted(picked, key=lambda x: x[1]):
+        try:
+            df = pd.read_csv(io.BytesIO(f.read(p)), low_memory=False)
+        except Exception as e:
+            bad.append((n, type(e).__name__)); continue
+        if df.empty: empty += 1; continue
+        df["_kind"] = kind(n); df["_file"] = n
+        frames.append(df)
+    raw = pd.concat(frames, ignore_index=True)
+    print(f"read {len(frames)} files, {len(raw)} rows; empty files: {empty}; unreadable: {bad[:5]}")
+    missing = [c for c in R.TRAJ + ["Top/Bottom", "TaggedPitchType", "UTCDateTime", "PlayResult", "KorBB", "ExitSpeed"] if c not in raw.columns]
+    print("needed columns missing:", missing or "none")
+    if missing: sys.exit("Stopping: the files don't have every column the app needs.")
+    print("PitcherTeam values (top):", raw.PitcherTeam.astype(str).value_counts().head(6).to_dict())
+
+    # Same verified/unverified game: how do the date/time fields differ? (video sync uses UTCDateTime)
+    pair = next(((p, n) for p, n in picked if "_unverified" not in n and any(x[1] == n.replace(".csv", "_unverified.csv") for x in csvs)), None)
+    if pair:
+        unv = next(x for x in csvs if x[1] == pair[1].replace(".csv", "_unverified.csv"))
+        a = pd.read_csv(io.BytesIO(f.read(pair[0])), low_memory=False); b = pd.read_csv(io.BytesIO(f.read(unv[0])), low_memory=False)
+        m = a.merge(b, on="PitchUID", suffixes=("_v", "_u"))
+        print(f"\nverified vs unverified ({kind(pair[1])}, {len(m)} shared pitches):")
+        for c in ["UTCDateTime", "Date", "Time", "PitcherThrows", "PitchCall"]:
+            d = m[m[f"{c}_v"].astype(str) != m[f"{c}_u"].astype(str)]
+            ex = f" e.g. verified {d[f'{c}_v'].iloc[0]!r} vs unverified {d[f'{c}_u'].iloc[0]!r}" if len(d) else ""
+            print(f"  {c}: {len(d)} differ{ex}")
+
+    wv = R.prep_wvu(raw[raw._kind != "BP"])
+    unmapped = wv[wv.type.isna()].TaggedPitchType.astype(str).value_counts().to_dict()
+    built = R.finish(R.match_away_types(wv))
+    print(f"\nbuilt {len(built)} WVU pitches from {built.id.nunique()} pitchers (BP files left out)")
+    print("  by season:", built.seasonLabel.value_counts().sort_index().to_dict())
+    print("  by type:", built.type.value_counts().to_dict())
+    print("  tags not mapped to a type (dropped):", unmapped)
+    print(f"  dropped for missing trajectory/location: {len(wv) - len(built) - sum(unmapped.values())} (approx)")
+
+    s3 = r2_client()
+    if not s3:
+        print("\nR2_KEY / R2_SECRET not set: skipping the comparison with the live data."); return
+    idx = r2_json(s3, "index.json.gz")
+    live = [p for p in idx["pitchers"] if p.get("team") == R.WVU]
+    ids_live, ids_built = {p["id"] for p in live}, set(built.id)
+    print(f"\nlive app: {len(live)} WVU pitchers, data through {idx.get('dataThrough')}")
+    print(f"  pitcher ids: {len(ids_live & ids_built)} match, {len(ids_built - ids_live)} only in FTP files, {len(ids_live - ids_built)} only in app")
+
+    # Which kind of file each live pitch came from (by PitchUID), and how well rebuilt rows agree with live rows.
+    src = dict(zip(raw.PitchUID.astype(str), raw._kind))
+    new_rows = {r["id"]: r for pid, g in built.groupby("id") for r in R.rows(g)}
+    from collections import Counter
+    origin, agree, seen = Counter(), Counter(), set()
+    fields = ["type", "utc", "call", "velo", "side", "height", "season", "home", "result", "ev", "count", "opponent"]
+    live_by_season = Counter()
+    for p in live:
+        doc = r2_json(s3, f"pitchers/{p['id']}.json.gz")
+        for r in doc["pitches"]:
+            live_by_season[r["season"]] += 1
+            origin[(r["season"], src.get(str(r["id"]), "not in WVU-park files (away)"))] += 1
+            b = new_rows.get(r["id"])
+            if not b: continue
+            seen.add(r["id"]); agree["_n"] += 1
+            for k in fields:
+                if r.get(k) == b.get(k): agree[k] += 1
+            if all(abs((r["coeffs"].get(k) or 0) - (b["coeffs"].get(k) or 0)) < 1e-4 for k in b["coeffs"]): agree["coeffs"] += 1
+    print("  live WVU pitches by season:", dict(sorted(live_by_season.items())))
+    print("  where they came from:")
+    for (season, k), v in sorted(origin.items()): print(f"    {season:10s} {k}: {v}")
+    n = agree.pop("_n", 0)
+    print(f"  {n} live pitches rebuilt from FTP files; fields that match:", {k: f"{v / n:.1%}" for k, v in agree.items()} if n else "-")
+    new = built[~built.PitchUID.astype(str).isin(seen)]
+    print(f"  pitches in FTP files but not in the app (would be added): {len(new)} by season {new.seasonLabel.value_counts().sort_index().to_dict()}")
+
+
 f = FTP()
-if MODE == "explore":
+if MODE == "dry":
+    dry(f)
+elif MODE == "explore":
     explore(f)
 elif MODE == "peek":
     peek(f)

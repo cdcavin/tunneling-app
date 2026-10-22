@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "explore = list the folder layout; peek = summarise all game files and open a few samples (columns and team codes, no player names)"
+        description: "explore = list the folder layout; peek = summarise all game files and open a few samples; dry = build WVU rows and compare with the live app (uploads nothing)"
         required: true
-        default: peek
+        default: dry
         type: choice
-        options: [peek, explore]
+        options: [dry, peek, explore]
   # schedule:                      # turned on once the sync step is written and tested
   #   - cron: "0 10 * * 1"         # Mondays 6 AM Eastern
 
@@ -23,12 +23,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install paramiko==3.5.1 pandas==2.2.3
+      - run: pip install paramiko==3.5.1 pandas==2.2.3 boto3==1.35.99
       - name: Run
         env:
           TM_FTP_HOST: ${{ secrets.TM_FTP_HOST }}
           TM_FTP_USER: ${{ secrets.TM_FTP_USER }}
           TM_FTP_PASS: ${{ secrets.TM_FTP_PASS }}
           TM_FTP_PROTOCOL: ${{ secrets.TM_FTP_PROTOCOL }}
+          R2_KEY: ${{ secrets.R2_KEY }}
+          R2_SECRET: ${{ secrets.R2_SECRET }}
           MODE: ${{ inputs.mode || 'explore' }}
         run: python -I pipeline/tm_sync.py
