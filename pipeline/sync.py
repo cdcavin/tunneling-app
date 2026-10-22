@@ -273,9 +273,9 @@ def run(open_ftp, upload=False):
         # Keep each pitcher's existing entry: if most of a name's pitches are already in someone's file, use that id.
         for fid, g in wv.groupby("id"):
             owners = Counter(uid_owner[u] for u in g.PitchUID.astype(str) if u in uid_owner)
-            if owners:
-                own = owners.most_common(1)[0][0]
-                if own != fid: wv.loc[g.index, "id"] = own; remapped += 1
+            if owners and fid not in live:             # a name the app doesn't have, mostly already in one pitcher's file
+                own, k = owners.most_common(1)[0]
+                if own != fid and k >= 0.5 * len(g): wv.loc[g.index, "id"] = own; remapped += 1
         # Readable opponent names: learn code -> name from pitches already in the app, keep what earlier runs learned.
         votes = defaultdict(Counter)
         live_opp = {str(r["id"]): r.get("opponent") for d in docs.values() for r in d["pitches"]}
@@ -300,13 +300,18 @@ def run(open_ftp, upload=False):
     # 4. merge
     out_docs = {}
     conv = Counter()
+    utc_ex = []
+    # The server decides who threw a pitch: if it's now in another pitcher's rows, it leaves the old file.
+    moved = {u: pid for u, pid in zip(built.PitchUID.astype(str), built.id) if u in uid_owner and uid_owner[u] != pid} if len(built) else {}
+    losers = {uid_owner[u] for u in moved}
     for pid in set(docs) | (set(built.id) if len(built) else set()):
         old = docs.get(pid)
         new_rows = R.rows(built[built.id == pid]) if len(built) else []
-        if not new_rows and old and old.get("v") == 2: continue
+        if not new_rows and old and old.get("v") == 2 and pid not in losers: continue
         keep = {}
         if old:
             for r in old["pitches"]:
+                if str(r["id"]) in moved: continue
                 if old.get("v") != 2: r = legacy_fix(r); conv["legacy rows converted"] += 1
                 keep[str(r["id"])] = r
         for r in new_rows:
@@ -315,7 +320,9 @@ def run(open_ftp, upload=False):
                 conv["checked"] += 1
                 conv["side ok"] += abs((o["side"] or 0) - (r["side"] or 0)) <= 0.002
                 conv["height ok"] += abs((o["height"] or 0) - (r["height"] or 0)) <= 0.002
-                conv["utc ok"] += str(o.get("utc"))[:23] == str(r.get("utc"))[:23]
+                ok_u = str(o.get("utc"))[:23] == str(r.get("utc"))[:23]
+                conv["utc ok"] += ok_u
+                if not ok_u and len(utc_ex) < 5: utc_ex.append((docs[pid]["pitches"][0].get("utc") and next((x.get("utc") for x in old["pitches"] if str(x["id"]) == str(r["id"])), None), o.get("utc"), r.get("utc"), r.get("home")))
             if str(r["id"]) in keep: replaced += 1
             else: added_by_season[r["season"]] += 1
             keep[str(r["id"])] = r
@@ -337,6 +344,8 @@ def run(open_ftp, upload=False):
         n = conv["checked"]
         print(f"  converted older rows vs the server's copy of the same pitch ({n}): side {conv['side ok'] / n:.1%}, "
               f"height {conv['height ok'] / n:.1%}, release time {conv['utc ok'] / n:.1%} agree")
+        if utc_ex: print("  release-time mismatches (app as stored, after conversion, server, home park):", utc_ex)
+    if moved: print(f"  {len(moved)} pitches the server credits to a different WVU pitcher than the app did: moved to the server's pitcher")
     if hs: print(f"  plate height across WVU files: median {np.median(hs):.2f} ft, 1st-99th pct {np.percentile(hs, 1):.2f}-{np.percentile(hs, 99):.2f} ft")
     epoch_left = sum(1 for d in out_docs.values() for r in d["pitches"] if r.get("utc") and EPOCH.match(str(r["utc"])))
     print(f"  release times still in epoch format: {epoch_left}")
