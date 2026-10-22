@@ -1,0 +1,34 @@
+# Weekly Trackman sync. Credentials come from repository secrets and are never printed
+# (GitHub masks secret values in logs).
+name: Trackman sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "explore = only list the FTP folder layout (no downloads)"
+        required: true
+        default: explore
+        type: choice
+        options: [explore]
+  # schedule:                      # turned on once the sync step is written and tested
+  #   - cron: "0 10 * * 1"         # Mondays 6 AM Eastern
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install paramiko==3.5.1
+      - name: Run
+        env:
+          TM_FTP_HOST: ${{ secrets.TM_FTP_HOST }}
+          TM_FTP_USER: ${{ secrets.TM_FTP_USER }}
+          TM_FTP_PASS: ${{ secrets.TM_FTP_PASS }}
+          TM_FTP_PROTOCOL: ${{ secrets.TM_FTP_PROTOCOL }}
+          MODE: ${{ inputs.mode || 'explore' }}
+        run: python -I pipeline/tm_sync.py
