@@ -16,10 +16,12 @@ interface Props {
   pitchers: PitcherSummary[];
   value: string;
   onChange: (id: string) => void;
+  /** The year chosen in the finder ("" = all years), so the loaded pitcher's seasons can follow it. */
+  onYear?: (year: string) => void;
 }
 
 /** Year → conference → team → pitcher, with a text search across all of it and a WVU-only switch. */
-export default function PitcherFinder({ pitchers, value, onChange }: Props) {
+export default function PitcherFinder({ pitchers, value, onChange, onYear }: Props) {
   const [wvuOnly, setWvuOnly] = useState(true);
   const [year, setYear] = useState<string>("");
   const [conf, setConf] = useState("");
@@ -52,7 +54,7 @@ export default function PitcherFinder({ pitchers, value, onChange }: Props) {
         <button type="button" className={`wvu-switch${wvuOnly ? " is-on" : ""}`} onClick={() => setWvuOnly((v) => !v)} aria-pressed={wvuOnly} title="Show only WVU pitchers">WVU</button>
       </div>
       <div className="finder-grid">
-        <select aria-label="Year" value={year} onChange={(e) => setYear(e.target.value)}>
+        <select aria-label="Year" value={year} onChange={(e) => { setYear(e.target.value); onYear?.(e.target.value); }}>
           <option value="">All years</option>
           {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
         </select>

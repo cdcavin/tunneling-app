@@ -130,10 +130,14 @@ export default function App() {
   const rows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
   const arsenal = useMemo(() => buildArsenal(rows), [rows]);
 
-  function setUpPitcher(p: Pitcher) {
-    // Default to his most recent season.
-    const latest = seasonsOf(p.pitches)[0];
-    const f = { ...NO_FILTERS, seasons: latest ? [latest] : [] };
+  // The finder's Year choice ("" = any). Calendar year: "2026" covers the 2026 spring and Fall 2026.
+  const [finderYear, setFinderYear] = useState("");
+  const seasonsForYear = (all: string[], y: string) => (y ? all.filter((x) => x.endsWith(y)) : []);
+  function setUpPitcher(p: Pitcher, year = finderYear) {
+    // Seasons in the chosen year if one is set, otherwise his most recent season.
+    const all = seasonsOf(p.pitches);
+    const inYear = seasonsForYear(all, year);
+    const f = { ...NO_FILTERS, seasons: inYear.length ? inYear : all[0] ? [all[0]] : [] };
     setFilters(f);
     const ars = buildArsenal(applyFilters(p.pitches, f));
     const fb = primaryFastball(ars);
@@ -285,7 +289,8 @@ export default function App() {
         <aside className="panel left" aria-label="Pitch selection">
           <section>
             <div className="sec-title">Pitcher</div>
-            <PitcherFinder pitchers={data.pitchers} value={pitcherId} onChange={setPitcherId} />
+            <PitcherFinder pitchers={data.pitchers} value={pitcherId} onChange={setPitcherId}
+              onYear={(y) => { setFinderYear(y); if (pitcher) { const inYear = seasonsForYear(seasonsOf(pitcher.pitches), y); setFilters((f) => ({ ...f, seasons: inYear.length ? inYear : f.seasons, games: [] })); } }} />
             {loadingPitcher && <p className="hint">Loading pitches…</p>}
           </section>
 
