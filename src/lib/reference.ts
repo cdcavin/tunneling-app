@@ -49,8 +49,29 @@ export function tighterThan(c: ComboRef, sep: number): number {
   return 50;
 }
 
+export interface RefGrade { cls: "elite" | "good" | "avg" | "below" | "poor"; label: string; tighter: number }
+/** Cutoffs (inches at 23.8 ft) for the five grades: the 20th, 40th, 60th and 80th percentiles of real pairs. */
+export const gradeCuts = (c: ComboRef) => [c.pct[3], c.pct[7], c.pct[11], c.pct[15]];
+/** Grade a separation against real pairs of the same combo: Elite = tighter than 80% of them, ... Bad = looser than 80%. */
+export function gradeOf(c: ComboRef, sep: number): RefGrade {
+  const t = tighterThan(c, sep);
+  const [g1, g2, g3, g4] = gradeCuts(c);
+  const cls = sep <= g1 ? "elite" : sep <= g2 ? "good" : sep <= g3 ? "avg" : sep <= g4 ? "below" : "poor";
+  const label = { elite: "Elite", good: "Good", avg: "Average", below: "Below avg", poor: "Bad" }[cls];
+  return { cls, label, tighter: Math.round(t) };
+}
+export const GRADE_ORDER = ["elite", "good", "avg", "below", "poor"] as const;
+
 let cache: Promise<Reference | null> | null = null;
 export function loadReference(): Promise<Reference | null> {
   cache ??= fetch(`${import.meta.env.BASE_URL}data/reference.json`).then((r) => (r.ok ? (r.json() as Promise<Reference>) : null)).catch(() => null);
   return cache;
+}
+
+import { useEffect, useState } from "react";
+/** The reference file, loaded once and shared. */
+export function useReference() {
+  const [ref, setRef] = useState<Reference | null>(null);
+  useEffect(() => { let on = true; loadReference().then((r) => on && setRef(r)); return () => { on = false; }; }, []);
+  return ref;
 }

@@ -12,6 +12,7 @@ import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
 import PitcherFinder from "./components/PitcherFinder";
 import SepReference from "./components/SepReference";
+import { comboKey, gradeOf, useReference } from "./lib/reference";
 import { realLoc } from "./lib/arsenal";
 import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
@@ -132,6 +133,9 @@ export default function App() {
 
   // The finder's Year choice ("" = any). Calendar year: "2026" covers the 2026 spring and Fall 2026.
   const [finderYear, setFinderYear] = useState("");
+  const reference = useReference();
+  /** P4 grade for a pair of pitch types at a given separation, or null when there's no reference. */
+  const gradeFor = (a: string, b: string, sep: number) => { const c = reference?.pools.P4?.[comboKey(a, b)]; return c ? gradeOf(c, sep) : null; };
   const seasonsForYear = (all: string[], y: string) => (y ? all.filter((x) => x.endsWith(y)) : []);
   function setUpPitcher(p: Pitcher, year = finderYear) {
     // Seasons in the chosen year if one is set, otherwise his most recent season.
@@ -247,10 +251,11 @@ export default function App() {
       const real = realLoc(p.coeffs);
       return { pitch: p, on: !arsOff.includes(p.type), isAnchor, isActive: isAnchor ? placing === 0 : p.type === next?.type && placing === 1, loc,
         moved: !!arsLoc[p.type] && (Math.abs(loc.side - real.side) > 1e-6 || Math.abs(loc.height - real.height) > 1e-6),
-        decisionSep: geo?.decisionSep ?? null, plateSep: geo?.plateSep ?? null };
+        decisionSep: geo?.decisionSep ?? null, plateSep: geo?.plateSep ?? null,
+        grade: geo ? gradeFor(last.type, p.type, geo.decisionSep) : null };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arsenalMode, arsenal, last, lastAimed, next, arsLoc, arsOff, placing]);
+  }, [arsenalMode, arsenal, last, lastAimed, next, arsLoc, arsOff, placing, reference]);
   const extraTracks = useMemo(() => arsenalRows
     .filter((r) => r.on && !r.isAnchor && r.pitch.type !== next?.type)
     .map((r) => ({ coeffs: aimAt(r.pitch.coeffs, r.loc.side, r.loc.height), color: pitchColorOnDark(r.pitch.type), faint: true })), [arsenalRows, next]);
@@ -443,7 +448,8 @@ export default function App() {
           <SepReference rows={rows} anchorType={last?.type ?? null} tunnelType={next?.type ?? null} sep={geo ? geo.decisionSep : null} />
 
           <div className="metrics" aria-live="polite">
-            <Metric label="Apart at 23.8 ft" value={geo ? geo.decisionSep.toFixed(1) : "—"} unit="in" accent />
+            <Metric label="Apart at 23.8 ft" value={geo ? geo.decisionSep.toFixed(1) : "—"} unit="in" accent
+              note={(() => { const g = geo && last && next ? gradeFor(last.type, next.type, geo.decisionSep) : null; return g ? `${g.label} · tighter than ${g.tighter}% of P4` : undefined; })()} />
             <Metric label="Apart at plate" value={geo ? geo.plateSep.toFixed(1) : "—"} unit="in" />
             <Metric label="Late separation" value={geo ? geo.lateSep.toFixed(1) : "—"} unit="in" />
             <Metric label="Velo gap" value={last && next ? signed(next.velo + delta.velo - last.velo) : "—"} unit="mph" />

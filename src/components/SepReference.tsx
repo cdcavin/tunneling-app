@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { PitchRow } from "../lib/types";
 import { bestPairs } from "../lib/bestPairs";
 import { countOutcomes, type Outcomes } from "../lib/outcomes";
-import { BANDS, bandOf, bandTotals, comboKey, loadReference, tighterThan, type BinCounts, type Reference } from "../lib/reference";
+import { BANDS, bandOf, bandTotals, comboKey, gradeCuts, gradeOf, loadReference, type BinCounts, type Reference } from "../lib/reference";
 
 interface Props {
   rows: PitchRow[];
@@ -42,7 +42,8 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
 
   if (!anchorType || !tunnelType) return null;
   const cur = sep != null ? bandOf(sep) : -1;
-  const tighter = c && sep != null ? Math.round(tighterThan(c, sep)) : null;
+  const grade = c && sep != null ? gradeOf(c, sep) : null;
+  const cuts = c ? gradeCuts(c) : null;
   const poolName = pool === "P4" ? "P4" : "Big 12";
 
   return (
@@ -52,7 +53,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           <div className="sec-title">{anchorType} → {tunnelType}: outcomes on the {tunnelType.toLowerCase()} by how close the pair was at 23.8 ft</div>
           {sep != null && (
             <div className="sepref-sub">
-              Your pair: <b>{sep.toFixed(1)} in</b>{tighter != null && <> · tighter than {tighter}% of {poolName} pairs</>}
+              Your pair: <b>{sep.toFixed(1)} in</b>{grade && <> · <span className={`grade ${grade.cls}`}>{grade.label}</span> · tighter than {grade.tighter}% of {poolName} pairs</>}
               {his && <> · {his.total} of his real pairs in the selected pitches</>}
             </div>
           )}
@@ -63,6 +64,23 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           ))}
         </div>
       </div>
+      {cuts && (
+        <div className="gradescale" role="img" aria-label={`${poolName} ${anchorType} to ${tunnelType} grades at 23.8 ft: Elite up to ${cuts[0].toFixed(1)} in, Good up to ${cuts[1].toFixed(1)}, Average up to ${cuts[2].toFixed(1)}, Below average up to ${cuts[3].toFixed(1)}, Bad beyond`}>
+          {[
+            { cls: "elite", label: "Elite", range: `≤ ${cuts[0].toFixed(1)} in` },
+            { cls: "good", label: "Good", range: `${cuts[0].toFixed(1)}–${cuts[1].toFixed(1)}` },
+            { cls: "avg", label: "Average", range: `${cuts[1].toFixed(1)}–${cuts[2].toFixed(1)}` },
+            { cls: "below", label: "Below avg", range: `${cuts[2].toFixed(1)}–${cuts[3].toFixed(1)}` },
+            { cls: "poor", label: "Bad", range: `> ${cuts[3].toFixed(1)} in` },
+          ].map((g) => (
+            <div key={g.cls} className={`gs-seg ${g.cls}${grade?.cls === g.cls ? " is-here" : ""}`}>
+              <span className="gs-label">{g.label}</span>
+              <span className="gs-range">{g.range}</span>
+              {grade?.cls === g.cls && <span className="gs-you">your pair · {sep!.toFixed(1)} in</span>}
+            </div>
+          ))}
+        </div>
+      )}
       {!ref ? <p className="hint">Loading the reference…</p> : !c ? <p className="hint">No {poolName} reference for {anchorType} → {tunnelType}.</p> : (
         <div className="sepref-scroll">
           <table className="sepref-table">
@@ -109,7 +127,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           </table>
         </div>
       )}
-      <p className="hint">What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p>
+      <p className="hint">Grades: Elite = tighter than 80% of real {poolName} {anchorType} → {tunnelType} pairs at 23.8 ft, Bad = looser than 80%. What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p>
     </section>
   );
 }

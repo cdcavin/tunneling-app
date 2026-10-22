@@ -2,6 +2,7 @@ import type { ArsenalPitch } from "../lib/types";
 import type { Loc } from "../lib/grid";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { tunnelGrade } from "../lib/arsenal";
+import type { RefGrade } from "../lib/reference";
 
 export interface ArsenalRow {
   pitch: ArsenalPitch;
@@ -11,6 +12,7 @@ export interface ArsenalRow {
   loc: Loc;
   moved: boolean;         // away from its real average location
   decisionSep: number | null;   // inches from the anchor at 23.8 ft (null for the anchor itself)
+  grade?: RefGrade | null;      // P4 grade for this combo, when the reference has it
   plateSep: number | null;
 }
 
@@ -36,9 +38,9 @@ export default function ArsenalPanel({ rows, onToggle, onAnchor, onActivate, onM
           <button type="button" className="secondary" onClick={onResetAll} title="Put every pitch back at its real average location">Reset</button>
         </span>
       </div>
-      {rows.map(({ pitch, on, isAnchor, isActive, loc, moved, decisionSep, plateSep }) => {
+      {rows.map(({ pitch, on, isAnchor, isActive, loc, moved, decisionSep, plateSep, grade }) => {
         const color = pitchColorOnDark(pitch.type);
-        const g = tunnelGrade(decisionSep);
+        const g = grade ?? tunnelGrade(decisionSep);
         return (
           <div key={pitch.type} className={`arsenal-row${isAnchor ? " is-anchor" : ""}${isActive ? " is-active" : ""}${on ? "" : " is-off"}`} style={{ ["--accent" as string]: color }}>
             <div className="arsenal-row-hdr" onClick={() => onActivate(pitch.type)} role="button" tabIndex={0}
