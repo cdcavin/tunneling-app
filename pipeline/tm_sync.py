@@ -221,6 +221,10 @@ def r2_json(s3, key):
     return json.loads(body)
 
 
+def WVU_ID(name):
+    return "WES_MOU__" + re.sub(r"[^a-z0-9]+", "-", re.sub(r"\s+", " ", str(name).strip()).lower()).strip("-")
+
+
 def dry(f: FTP):
     import pandas as pd
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -309,9 +313,24 @@ def dry(f: FTP):
     origin, agree, seen = Counter(), Counter(), set()
     fields = ["type", "utc", "call", "velo", "side", "height", "season", "home", "result", "ev", "count", "opponent"]
     live_by_season = Counter()
+    # Mismatch details (no player names: names are shown only as their letter pattern, e.g. "Aa, Aa").
+    bname = dict(zip(built.PitchUID.astype(str), built.Pitcher))
+    shape = lambda nm: re.sub(r"a+", "a", re.sub(r"A+", "A", re.sub(r"[a-z]", "a", re.sub(r"[A-Z]", "A", str(nm)))))
+    flip = lambda nm: (lambda parts: f"{parts[-1]}, {' '.join(parts[:-1])}")(str(nm).split()) if " " in str(nm) else str(nm)
+    name_pat, id_map, opp, typ, utc_ex, loc = Counter(), {}, Counter(), Counter(), [], []
     for p in live:
         doc = r2_json(s3, f"pitchers/{p['id']}.json.gz")
         for r in doc["pitches"]:
+            b = new_rows.get(r["id"])
+            if b:
+                bn = bname[str(r["id"])]
+                id_map.setdefault(p["id"], set()).add(WVU_ID(bn))
+                name_pat[(shape(doc.get("name", "")), shape(bn), "same slug" if WVU_ID(doc.get("name", "")) == WVU_ID(bn) else
+                          ("same once first/last order is swapped" if WVU_ID(doc.get("name", "")) in (WVU_ID(flip(bn)), WVU_ID(flip(flip(bn)))) or WVU_ID(flip(doc.get("name", ""))) == WVU_ID(bn) else "different"))] += 1
+                if r.get("opponent") != b.get("opponent"): opp[(r.get("opponent"), b.get("opponent"))] += 1
+                if r.get("type") != b.get("type"): typ[(r.get("type"), b.get("type"))] += 1
+                if r.get("utc") != b.get("utc") and len(utc_ex) < 6: utc_ex.append((r.get("utc"), b.get("utc"), r.get("home"), r.get("season")))
+                loc.append((r["side"], b["side"], r["height"], b["height"]))
             live_by_season[r["season"]] += 1
             origin[(r["season"], src.get(str(r["id"]), "not in WVU-park files (away)"))] += 1
             b = new_rows.get(r["id"])
@@ -325,6 +344,21 @@ def dry(f: FTP):
     for (season, k), v in sorted(origin.items()): print(f"    {season:10s} {k}: {v}")
     n = agree.pop("_n", 0)
     print(f"  {n} live pitches rebuilt from FTP files; fields that match:", {k: f"{v / n:.1%}" for k, v in agree.items()} if n else "-")
+    print("\n  name patterns (live app, FTP, does the id match?):")
+    for k, v in name_pat.most_common(8): print(f"    {k}: {v} pitches")
+    print(f"  live pitchers whose pitches map to exactly one FTP pitcher: {sum(1 for v in id_map.values() if len(v) == 1)} of {len(id_map)}")
+    print("  opponent (live, FTP), top:", opp.most_common(10))
+    print("  type (live, FTP), top:", typ.most_common(8))
+    print("  utc examples (live, FTP, home, season):", utc_ex)
+    if loc:
+        import numpy as np
+        L = np.array(loc, dtype=float)
+        for j, nm in [(0, "side"), (2, "height")]:
+            a, b = L[:, j], L[:, j + 1]
+            print(f"  {nm}: corr {np.corrcoef(a, b)[0, 1]:.4f}, median live-FTP {np.median(a - b):+.4f} ft, "
+                  f"median |live-FTP| {np.median(np.abs(a - b)):.4f}, live == -FTP: {np.mean(np.abs(a + b) < 0.002):.1%}, "
+                  f"slope {np.polyfit(b, a, 1)[0]:.4f}")
+        print("  location examples (live side, FTP side, live height, FTP height):", [tuple(round(x, 3) for x in t) for t in loc[:6]])
     new = built[~built.PitchUID.astype(str).isin(seen)]
     print(f"  pitches in FTP files but not in the app (would be added): {len(new)} by season {new.seasonLabel.value_counts().sort_index().to_dict()}")
 

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 WVU = "WES_MOU"
+WVU_CODES = {"WES_MOU", "WVN_MN2"}                  # WVN_MN2 = WVU's scrimmage code in 2024-25 (WVU_DUM = guests, left out)
 WVU_PARKS = {"WestVirginia", "MonogaliaCounty"}       # Stadium values at WVU's park (name changed in 2025)
 TRAJ = [f"PitchTrajectory{a}c{i}" for a in "XYZ" for i in range(3)]
 TAGMAP = {"FourSeamFastBall": "Four-Seam", "Fastball": "Fastball", "TwoSeamFastBall": "Sinker", "Sinker": "Sinker", "Cutter": "Cutter",
@@ -43,9 +44,10 @@ def event(pc, pr, kb):
 def prep_wvu(raw: pd.DataFrame) -> pd.DataFrame:
     """Raw CSV rows (any mix of files) -> WVU pitches with the derived columns, before type matching."""
     wv = raw.rename(columns={"Top/Bottom": "TopBottom"})
-    wv = wv[(wv.PitcherTeam == WVU) & (wv.Pitcher.fillna("").astype(str).str.strip() != "")].copy()
+    wv = wv[wv.PitcherTeam.isin(WVU_CODES) & (wv.Pitcher.fillna("").astype(str).str.strip() != "")].copy()
     wv["home"] = wv.Stadium.isin(WVU_PARKS)
-    wv["opponent"] = np.where(wv.HomeTeam == WVU, wv.AwayTeam, wv.HomeTeam)
+    wv["opponent"] = np.where(wv.HomeTeam.isin(WVU_CODES), wv.AwayTeam, wv.HomeTeam)
+    wv["PitcherTeam"] = WVU
     wv["Date"] = pd.to_datetime(wv["Date"], errors="coerce"); wv = wv[wv.Date.notna()].copy()
     yr = wv.Date.dt.year.astype(int).astype(str)
     wv["seasonLabel"] = np.where(wv.Date.dt.month >= 8, "Fall " + yr, yr)
