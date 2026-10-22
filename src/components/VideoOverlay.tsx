@@ -258,6 +258,22 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     b.currentTime = t0(b) + t;
     if (locked && a && releaseA != null) { setNudgeMs(0); setManualB(t - (tIn(a) - releaseA)); }
   };
+  // Resync: drop any hand marks, nudge and drift, re-lock B to A, and park both at the same moment
+  // relative to their own (UTC-derived) releases. The seek waits for the release values to settle.
+  const pendingResync = useRef<number | null>(null);
+  const resync = () => {
+    pauseBoth();
+    pendingResync.current = Number.isFinite(pos) ? pos : -0.6;
+    setManualA(null); setManualB(null); setNudgeMs(0); setLocked(true);
+    if (vB.current) vB.current.playbackRate = rate;
+    setResyncN((n) => n + 1);
+  };
+  const [resyncN, setResyncN] = useState(0);
+  useEffect(() => {
+    if (pendingResync.current == null) return;
+    const rel = pendingResync.current; pendingResync.current = null;
+    seekRel(rel);
+  }, [resyncN, seekRel]);
   const markA = () => { const a = vA.current; if (a) setManualA(tIn(a)); };
   const markB = () => { const b = vB.current; if (b) setManualB(tIn(b)); };
 
@@ -300,6 +316,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
               {VIDEO_SPEEDS.map((r) => <option key={r} value={r}>{r}×</option>)}
             </select>
             <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
+            <button type="button" className="ghost" onClick={resync} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
           </div>
           {[
             { key: "A", type: anchorType, pos: posA, dur: durA, rel: releaseA, onScrub: scrubA },
