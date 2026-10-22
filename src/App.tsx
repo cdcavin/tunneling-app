@@ -105,7 +105,9 @@ export default function App() {
         setData(d);
         const wvu = d.pitchers.filter((p) => p.team === "WES_MOU");
         const pool = wvu.length ? wvu : d.pitchers;
-        const top = [...pool].sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || Number(b.fall ?? 0) - Number(a.fall ?? 0) || b.n - a.n)[0];
+        // Newest season first ("Fall 2026" after "2026"), then most pitches.
+        const rank = (p: (typeof pool)[number]) => { const s = p.seasons?.[0] ?? p.season; return Number(s.slice(-4)) * 2 + (s.startsWith("Fall") ? 1 : 0); };
+        const top = [...pool].sort((a, b) => rank(b) - rank(a) || b.n - a.n)[0];
         if (top) setPitcherId(top.id);
       })
       .catch((e: Error) => setError(e.message));

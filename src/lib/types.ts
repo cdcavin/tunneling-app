@@ -46,6 +46,8 @@ export interface ArsenalPitch {
 export interface PitcherSummary {
   id: string; name: string; throws: "Right" | "Left"; season: string; n: number;
   team?: string; conf?: string; year?: number; fall?: boolean; first?: string; last?: string; games?: number;
+  seasons?: string[];     // every season he has data for, newest first (one entry per pitcher)
+  years?: number[];
 }
 
 /** /data/index.json: who is available, without pitch rows. */
