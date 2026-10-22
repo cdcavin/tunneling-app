@@ -11,7 +11,7 @@ interface Props {
   sep: number | null;          // the current pair's separation at 23.8 ft, inches
 }
 
-const MIN_HIS = 20;
+const MIN_EVENTS = 15;   // his number shows only when the stat itself rests on at least this many events
 const COLS = [
   { key: "chase", label: "Chase", better: "high" as const, his: (o: Outcomes) => o.chasePct, hisN: (o: Outcomes) => o.outOfZone, ref: (s: BinCounts) => r(s.chases, s.outOfZone) },
   { key: "whiff", label: "Whiff", better: "high" as const, his: (o: Outcomes) => o.whiffPct, hisN: (o: Outcomes) => o.swings, ref: (s: BinCounts) => r(s.whiffs, s.swings) },
@@ -89,13 +89,14 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
                     <th scope="row">{band.label}{i === cur && <span className="you"> your pair</span>}</th>
                     <td className="num">{h?.n ?? 0}</td>
                     {COLS.map((col) => {
-                      const hv = h && h.n >= MIN_HIS ? col.his(h.o) : null;
+                      const hn = h ? col.hisN(h.o) : 0;
+                      const hv = h && hn >= MIN_EVENTS ? col.his(h.o) : null;
                       const pv = col.ref(s);
                       let tone = "";
                       if (hv != null && pv != null && Math.abs(hv - pv) >= 0.03) tone = (col.better === "high" ? hv > pv : hv < pv) ? " good" : " bad";
                       return [
                         <td key={col.key + "h"} className={`num his gl${tone}${hv == null ? " thin" : ""}`}
-                          title={hv == null ? `Fewer than ${MIN_HIS} of his pairs here` : `${pct(hv)} on ${col.hisN(h!.o)} (${poolName} ${pct(pv)})`}>
+                          title={hv == null ? `Only ${hn} to go on here (needs ${MIN_EVENTS})` : `${pct(hv)} on ${hn} (${poolName} ${pct(pv)})`}>
                           {pct(hv)}
                         </td>,
                         <td key={col.key + "p"} className="num p4" title={`${poolName}: ${s.n?.toLocaleString() ?? 0} pairs`}>{pct(pv)}</td>,
@@ -108,7 +109,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           </table>
         </div>
       )}
-      <p className="hint">What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when he has fewer than {MIN_HIS} pairs in a band. Location isn't controlled here; the model separates that out.</p>
+      <p className="hint">What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p>
     </section>
   );
 }
