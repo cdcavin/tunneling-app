@@ -19,6 +19,8 @@ export interface PitchRow {
   side: number;          // ft, PlateLocSide
   height: number;        // ft, PlateLocHeight
   call: string;          // Trackman PitchCall
+  result?: string | null; // PA result when this pitch ended it: Single/Double/Triple/HomeRun/Out/K/BB/HBP/IBB
+  ev?: number | null;     // exit velo, mph, balls in play
   coeffs: Coeffs;        // 9-parameter trajectory fit
 }
 
