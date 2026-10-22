@@ -204,7 +204,7 @@ def kind(n):
 
 
 def r2_client():
-    k, sec = os.environ.get("R2_KEY", ""), os.environ.get("R2_SECRET", "")
+    k, sec = os.environ.get("R2_KEY", "").strip(), os.environ.get("R2_SECRET", "").strip()
     if not (k and sec): return None
     for v in (k, sec): print(f"::add-mask::{v}")
     import boto3
@@ -250,6 +250,23 @@ def dry(f: FTP):
     if missing: sys.exit("Stopping: the files don't have every column the app needs.")
     print("PitcherTeam values (top):", raw.PitcherTeam.astype(str).value_counts().head(6).to_dict())
 
+    # Which team codes are WVU? Break the WVU-looking codes down by season, file kind and park, and check
+    # whether the same pitchers (by name, never printed) also show up under WES_MOU.
+    d = pd.to_datetime(raw.Date, errors="coerce")
+    raw["_season"] = (d.dt.month >= 8).map({True: "Fall ", False: ""}) + d.dt.year.astype("Int64").astype(str)
+    nk = raw.Pitcher.astype(str).str.strip().str.replace(r"\s+", " ", regex=True).str.lower()
+    wes = set(nk[raw.PitcherTeam == "WES_MOU"])
+    col = lambda c: raw[c].astype(str) if c in raw.columns else pd.Series("-", index=raw.index)
+    codes = [c for c in raw.PitcherTeam.astype(str).unique() if re.search(r"WES_|WVN|WVU|West Virginia", c)]
+    print("\nWVU-looking team codes:", codes)
+    for c in codes:
+        m = raw.PitcherTeam.astype(str) == c
+        names = set(nk[m])
+        print(f"  {c}: {m.sum()} pitches, {len(names)} pitchers, {len(names & wes)} of them also pitch as WES_MOU")
+        print(f"    by season/kind: {raw[m].groupby(['_season', '_kind']).size().to_dict()}")
+        print(f"    HomeTeam: {col("HomeTeam")[m].value_counts().head(4).to_dict()} | AwayTeam: {col("AwayTeam")[m].value_counts().head(4).to_dict()}")
+        print(f"    BatterTeam: {col("BatterTeam")[m].value_counts().head(4).to_dict()} | Stadium: {col("Stadium")[m].value_counts().head(3).to_dict()} | League: {col("League")[m].value_counts().head(3).to_dict()}")
+
     # Same verified/unverified game: how do the date/time fields differ? (video sync uses UTCDateTime)
     pair = next(((p, n) for p, n in picked if "_unverified" not in n and any(x[1] == n.replace(".csv", "_unverified.csv") for x in csvs)), None)
     if pair:
@@ -274,7 +291,12 @@ def dry(f: FTP):
     s3 = r2_client()
     if not s3:
         print("\nR2_KEY / R2_SECRET not set: skipping the comparison with the live data."); return
-    idx = r2_json(s3, "index.json.gz")
+    try:
+        idx = r2_json(s3, "index.json.gz")
+    except Exception as e:
+        code = getattr(e, "response", {}).get("Error", {}).get("Code", type(e).__name__)
+        sys.exit(f"\nR2 refused the keys ({code}). SignatureDoesNotMatch = R2_SECRET is wrong; InvalidAccessKeyId = R2_KEY is wrong. "
+                 "Re-paste the values from Colab into the GitHub secrets.")
     live = [p for p in idx["pitchers"] if p.get("team") == R.WVU]
     ids_live, ids_built = {p["id"] for p in live}, set(built.id)
     print(f"\nlive app: {len(live)} WVU pitchers, data through {idx.get('dataThrough')}")
