@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "explore = only list the FTP folder layout (no downloads)"
+        description: "explore = list the folder layout; peek = summarise all game files and open a few samples (columns and team codes, no player names)"
         required: true
-        default: explore
+        default: peek
         type: choice
-        options: [explore]
+        options: [peek, explore]
   # schedule:                      # turned on once the sync step is written and tested
   #   - cron: "0 10 * * 1"         # Mondays 6 AM Eastern
 
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install paramiko==3.5.1
+      - run: pip install paramiko==3.5.1 pandas==2.2.3
       - name: Run
         env:
           TM_FTP_HOST: ${{ secrets.TM_FTP_HOST }}
