@@ -397,15 +397,6 @@ export default function App() {
             <div className="stage">
               <Scene3D last={sceneLast} next={sceneNext} extra={extraTracks} aim={aim} aimColor={next ? pitchColorOnDark(next.type) : "#ffffff"} camera={camera}
                 heat={heat} selected={placing === 0 ? curLastLoc : curNextLoc} anchorLoc={curLastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={playing || videoClock == null ? clock : videoClock} />
-              <div className="hud hud-legend">
-                {last && <span><i style={{ background: pitchColorOnDark(last.type) }} />Anchor: {last.type}</span>}
-                {next && <span><i style={{ background: pitchColorOnDark(next.type) }} className={sameType ? "dashed" : ""} />Tunnel: {next.type}{shapedPitch && " (modified)"}</span>}
-                {arsenalRows.filter((r) => r.on && !r.isAnchor && r.pitch.type !== next?.type).map((r) => (
-                  <span key={r.pitch.type}><i style={{ background: pitchColorOnDark(r.pitch.type) }} />{r.pitch.type}</span>
-                ))}
-                <span><i className="gold" />Decision point, 23.8 ft</span>
-                {actual && <span className="legend-note">Real pitches, {actual.next.date}</span>}
-              </div>
               <div className="hud hud-cams" role="radiogroup" aria-label="Camera">
                 {(Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((k) => (
                   <button key={k} type="button" role="radio" aria-checked={k === camera} className={k === camera ? "is-on" : ""} onClick={() => setCamera(k)}>
@@ -418,6 +409,17 @@ export default function App() {
                 <label className="hud-check"><input type="checkbox" checked={showAim} onChange={(e) => setShowAim(e.target.checked)} />Aim point</label>
                 {pair && <label className="hud-check"><input type="checkbox" checked={showActual} onChange={(e) => setShowActual(e.target.checked)} />Show the real pair</label>}
               </div>
+              <div className="hud-bottom">
+              <div className="hud-bottom-row">
+              <div className="hud hud-legend">
+                {last && <span><i style={{ background: pitchColorOnDark(last.type) }} />Anchor: {last.type}</span>}
+                {next && <span><i style={{ background: pitchColorOnDark(next.type) }} className={sameType ? "dashed" : ""} />Tunnel: {next.type}{shapedPitch && " (modified)"}</span>}
+                {arsenalRows.filter((r) => r.on && !r.isAnchor && r.pitch.type !== next?.type).map((r) => (
+                  <span key={r.pitch.type}><i style={{ background: pitchColorOnDark(r.pitch.type) }} />{r.pitch.type}</span>
+                ))}
+                <span><i className="gold" />Decision point, 23.8 ft</span>
+                {actual && <span className="legend-note">Real pitches, {actual.next.date}</span>}
+              </div>
               <div className="hud hud-jumps" role="group" aria-label="Jump to a distance from the plate">
                 {JUMPS.map((ft) => (
                   <button key={ft} type="button" className={ballFt != null && Math.abs(ballFt - ft) < 0.6 ? "is-on" : ""} onClick={() => jumpTo(ft)} disabled={!lastAimed}
@@ -426,6 +428,7 @@ export default function App() {
                   </button>
                 ))}
                 <span className="jumps-unit">ft out</span>
+              </div>
               </div>
               <div className="hud hud-play">
                 <button type="button" className="play" onClick={playing ? () => setPlaying(false) : play} aria-label={playing ? "Pause" : "Play both pitches"}>
@@ -437,6 +440,7 @@ export default function App() {
                 <select className="speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="Playback speed">
                   {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
                 </select>
+              </div>
               </div>
             </div>
 
