@@ -1,4 +1,4 @@
-/** P4 / Big 12 separation reference, built in Colab from real back-to-back pairs (see /data/reference.json). */
+/** P4 / Big 12 separation reference, rebuilt by the Trackman sync from real back-to-back pairs (see /data/reference.json). */
 
 export type BinCounts = Record<string, number>;   // n, swings, whiffs, contacts, outOfZone, chases, takes, calledStrikes, evN, evSum, hard, pa, ab, hits, tb, k, bb, hbp
 export interface ComboRef { n: number; pct: number[]; bins: Record<string, BinCounts> }
@@ -6,6 +6,8 @@ export interface Reference {
   generated: string;
   minPlateIn: number;
   decisionFt: number;
+  /** Only pairs whose second pitch finished inside this box (ft): |side| <= side, low <= height <= high. */
+  competitive?: { pitch: "second"; side: number; low: number; high: number };
   pools: Record<string, Record<string, ComboRef>>;
 }
 

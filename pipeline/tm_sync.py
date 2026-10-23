@@ -5,6 +5,7 @@ peek:    walk all of /v3, summarise the game files, and open a few sample files 
          and team / league / pitch-type values.
 dry:     the full sync (pipeline/sync.py) without uploading: prints what would change.
 sync:    the full sync, uploading to R2.
+reference: rebuild only the P4 / Big 12 reference from what's in R2 and upload it (reference-dry: print only).
 compare: build WVU rows from the WVU-park files and compare them field by field with what's live.
 Never prints player names, the host, user or password.
 """
@@ -364,6 +365,11 @@ def dry(f: FTP):
     print(f"  pitches in FTP files but not in the app (would be added): {len(new)} by season {new.seasonLabel.value_counts().sort_index().to_dict()}")
 
 
+if MODE in ("reference", "reference-dry"):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import sync
+    sync.reference_only(upload=(MODE == "reference"))
+    sys.exit(0)
 if MODE in ("dry", "sync"):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import sync

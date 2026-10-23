@@ -33,12 +33,15 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
 
   const his = useMemo(() => {
     if (!anchorType || !tunnelType) return null;
+    const comp = ref?.competitive;
     const pairs = bestPairs(rows, { mode: "consecutive", limit: Number.POSITIVE_INFINITY, minPlateIn: ref?.minPlateIn ?? 6,
-      sameType: anchorType === tunnelType, anchorType, nextType: tunnelType });
+      sameType: anchorType === tunnelType, anchorType, nextType: tunnelType })
+      // same pairs as the reference: second pitch within 6 in of the zone
+      .filter((p) => !comp || (Math.abs(p.next.side) <= comp.side && p.next.height >= comp.low && p.next.height <= comp.high));
     const buckets: PitchRow[][] = BANDS.map(() => []);
     for (const p of pairs) { const i = bandOf(p.decisionSep); if (i >= 0) buckets[i].push(p.next); }
     return { total: pairs.length, bands: buckets.map((b) => ({ n: b.length, o: countOutcomes(b) })) };
-  }, [rows, anchorType, tunnelType, ref?.minPlateIn]);
+  }, [rows, anchorType, tunnelType, ref?.minPlateIn, ref?.competitive]);
 
   if (!anchorType || !tunnelType) return null;
   const cur = sep != null ? bandOf(sep) : -1;
@@ -54,7 +57,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           {sep != null && (
             <div className="sepref-sub">
               Your pair: <b>{sep.toFixed(1)} in</b>{grade && <> · <span className={`grade ${grade.cls}`}>{grade.label}</span> · tighter than {grade.tighter}% of {poolName} pairs</>}
-              {his && <> · {his.total} of his real pairs in the selected pitches</>}
+              {his && <> · {his.total} of his competitive pairs in the selected pitches</>}
             </div>
           )}
         </div>
@@ -127,7 +130,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           </table>
         </div>
       )}
-      <p className="hint">Grades: Elite = tighter than 80% of real {poolName} {anchorType} → {tunnelType} pairs at 23.8 ft, Bad = looser than 80%. What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p>
+      <p className="hint">Grades: Elite = tighter than 80% of real {poolName} {anchorType} → {tunnelType} pairs at 23.8 ft, Bad = looser than 80%. What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart{ref?.competitive ? ", counting only pairs whose second pitch landed within 6 in of the zone (competitive pitches)" : ""}. Grades use the same pairs. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p>
     </section>
   );
 }

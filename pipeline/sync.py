@@ -181,11 +181,17 @@ def pairs_of(pitches):
     return P[np.isfinite(P.sep23) & (P.sepP >= 6)]
 
 
-def reference_from(pair_frames):
-    """pair_frames: [(conf, DataFrame)] -> reference.json structure."""
+# Competitive pairs only: the second pitch finishes within 6 in of the zone (zone = +-0.83 ft wide, 1.5-3.5 ft tall).
+COMPETITIVE = {"pitch": "second", "side": 0.83 + 0.5, "low": 1.5 - 0.5, "high": 3.5 + 0.5}
+
+
+def reference_from(pair_frames, competitive=COMPETITIVE):
+    """pair_frames: [(conf, DataFrame)] -> reference.json structure. competitive=None keeps every pair (Colab version)."""
     parts = [df.assign(conf=c) for c, df in pair_frames if df is not None and len(df)]
     if not parts: return None
     P = pd.concat(parts, ignore_index=True)
+    if competitive:
+        P = P[(P.side.abs() <= competitive["side"]) & P.height.between(competitive["low"], competitive["high"])]
     swing = P.call.eq("strikeswinging") | P.call.str.startswith("foulball") | P.call.eq("inplay")
     ooz = ~((P.side.abs() <= 0.83) & P.height.between(1.5, 3.5))
     r = P.result.fillna("")
@@ -208,8 +214,59 @@ def reference_from(pair_frames):
                           "pct": [round(float(x), 2) for x in np.percentile(g.sep23, np.arange(5, 100, 5))],
                           "bins": {int(b): {k: round(float(v), 1) for k, v in row.items()} for b, row in agg.iterrows()}}
         return out
-    return {"generated": dt.date.today().isoformat(), "minPlateIn": 6, "decisionFt": 23.8,
+    return {"generated": dt.date.today().isoformat(), "minPlateIn": 6, "decisionFt": 23.8, "competitive": competitive,
             "pools": {"P4": build(P), "BIG12": build(P[P.conf == "BIG12"])}}
+
+
+def build_reference(s3, idx, readers, wvu_now):
+    """Reference from every other P4 pitcher's file plus the WVU files in wvu_now (real games only). Prints old -> new."""
+    p4 = [p for p in idx["pitchers"] if p.get("conf") in P4 and p.get("team") != R.WVU]
+    def pf(p):
+        return p["conf"], pairs_of(get_json(s3, f"pitchers/{p['id']}.json.gz")["pitches"])
+    games_only = lambda ps: [r for r in ps if not r.get("scrimmage") and r.get("opponent") not in ("West Virginia", "WES_MOU", "WVN_MN2")]
+    frames = readers.map(pf, p4, r2=True) + [("BIG12", pairs_of(games_only(d["pitches"]))) for d in wvu_now.values()]
+    nscr = sum(1 for d in wvu_now.values() for r in d["pitches"] if r not in games_only([r]))
+    print(f"\nreference rebuilt from {len(p4)} other P4 pitchers + {len(wvu_now)} WVU pitchers (games only: {nscr} WVU scrimmage pitches left out; "
+          f"second pitch within 6 in of the zone)")
+    ref = reference_from(frames)
+    old_ref = get_json(s3, "reference.json.gz", missing_ok=True)
+    if ref is None: print("no pairs found: reference left as it is")
+    for pool in (("P4", "BIG12") if ref else ()):
+        new_p, old_p = ref["pools"][pool], (old_ref or {}).get("pools", {}).get(pool, {})
+        print(f"reference {pool}: {len(new_p)} combos (was {len(old_p)}), {sum(c['n'] for c in new_p.values())} pairs "
+              f"(was {sum(c['n'] for c in old_p.values())})")
+        for combo in ["Four-Seam>Slider", "Four-Seam>Changeup", "Sinker>Slider"]:
+            a, b = new_p.get(combo), old_p.get(combo)
+            if not a: continue
+            print(f"  {combo}: n {b['n'] if b else '-'} -> {a['n']}, grade cuts (20/40/60/80th pct) "
+                  f"{[b['pct'][i] for i in (3, 7, 11, 15)] if b else '-'} -> {[a['pct'][i] for i in (3, 7, 11, 15)]} in")
+            if pool == "P4":   # whiff / chase by band, so the change in shape is visible in the log
+                bands = [(0, 4), (4, 8), (8, 12), (12, 16), (16, 99)]
+                def row(c):
+                    out = []
+                    for lo, hi in bands:
+                        v = [x for k, x in c["bins"].items() if lo <= int(k) < hi]
+                        g = lambda key: sum(x.get(key, 0) for x in v)
+                        out.append(f"{lo}-{hi if hi < 99 else '+'}: whiff {g('whiffs') / max(g('swings'), 1):.0%} chase {g('chases') / max(g('outOfZone'), 1):.0%}")
+                    return " | ".join(out)
+                if b: print(f"    before: {row(b)}")
+                print(f"    now:    {row(a)}")
+    return ref, old_ref
+
+
+def reference_only(upload=False):
+    """Rebuild just the reference from what's in R2 (no FTP needed)."""
+    s3 = r2()
+    idx = get_json(s3, "index.json.gz")
+    readers = Readers(lambda quiet=False: None)
+    wvu = [p["id"] for p in idx["pitchers"] if p.get("team") == R.WVU]
+    docs = dict(zip(wvu, readers.map(lambda pid: get_json(s3, f"pitchers/{pid}.json.gz"), wvu, r2=True)))
+    ref, old_ref = build_reference(s3, idx, readers, docs)
+    if not (upload and ref): print("\nnothing uploaded."); return
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H%M")
+    if old_ref: put_json(s3, f"backup/{stamp}/reference.json.gz", old_ref)
+    put_json(s3, "reference.json.gz", ref)
+    print(f"uploaded reference.json.gz (old one backed up to backup/{stamp}/)")
 
 
 # ---------- the run ----------
@@ -376,29 +433,8 @@ def run(open_ftp, upload=False):
                                                 "lastRun": dt.datetime.now(dt.timezone.utc).isoformat()})
         return
 
-    # 5. reference from every P4 pitcher file (WVU's from this run)
-    p4 = [p for p in idx["pitchers"] if p.get("conf") in P4 and p.get("team") != R.WVU]
-    def pf(p):
-        return p["conf"], pairs_of(get_json(s3, f"pitchers/{p['id']}.json.gz")["pitches"])
-    wvu_now = {**docs, **out_docs}                 # every WVU file as it will be after this run
-    games_only = lambda ps: [r for r in ps if not r.get("scrimmage") and r.get("opponent") not in ("West Virginia", "WES_MOU", "WVN_MN2")]
-    frames = readers.map(pf, p4, r2=True) + [("BIG12", pairs_of(games_only(d["pitches"]))) for d in wvu_now.values()]
-    nscr = sum(1 for d in wvu_now.values() for r in d["pitches"] if r not in games_only([r]))
-    print(f"\nreference rebuilt from {len(p4)} other P4 pitchers + {len(wvu_now)} WVU pitchers (games only: {nscr} WVU scrimmage pitches left out)")
-    ref = reference_from(frames)
-    old_ref = get_json(s3, "reference.json.gz", missing_ok=True)
-    if ref is None: print("no pairs found: reference left as it is")
-    for pool in (("P4", "BIG12") if ref else ()):
-        new_p, old_p = ref["pools"][pool], (old_ref or {}).get("pools", {}).get(pool, {})
-        print(f"reference {pool}: {len(new_p)} combos (was {len(old_p)}), {sum(c['n'] for c in new_p.values())} pairs "
-              f"(was {sum(c['n'] for c in old_p.values())})")
-        for combo in ["Four-Seam>Slider", "Four-Seam>Changeup", "Sinker>Slider"]:
-            a, b = new_p.get(combo), old_p.get(combo)
-            if a: print(f"  {combo}: n {b['n'] if b else '-'} -> {a['n']}, grade cuts (20/40/60/80th pct) "
-                        f"{[b['pct'][i] for i in (3, 7, 11, 15)] if b else '-'} -> {[a['pct'][i] for i in (3, 7, 11, 15)]} in")
-            if a and b and pool == "BIG12":
-                tot = lambda c, k: sum(v.get(k, 0) for v in c["bins"].values())
-                print(f"    chase over all bins: {tot(b, 'chases') / max(tot(b, 'outOfZone'), 1):.1%} -> {tot(a, 'chases') / max(tot(a, 'outOfZone'), 1):.1%}")
+    # 5. reference from every P4 pitcher file (WVU's as they'll be after this run)
+    ref, old_ref = build_reference(s3, idx, readers, {**docs, **out_docs})
 
     if not upload:
         print("\nDRY RUN: nothing uploaded."); return
