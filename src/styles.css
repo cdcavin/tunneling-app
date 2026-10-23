@@ -411,7 +411,6 @@ button.primary.wide { width: 100%; }
 .hud-jumps button.is-on { background: var(--wvu-gold); border-color: var(--wvu-gold); color: var(--wvu-navy); font-weight: 600; }
 .hud-jumps button:disabled { opacity: 0.4; }
 .jumps-unit { font-size: 11px; color: var(--muted); padding: 0 4px; pointer-events: none; }
-.hud-legend { bottom: 96px; }
 
 /* Pitcher finder */
 .finder { display: grid; gap: 6px; }
