@@ -114,10 +114,13 @@ export default {
 
     // Data objects are stored gzipped; hand the bytes through with the encoding declared so the
     // browser inflates them (encodeBody "manual" stops the edge from gzipping twice).
+    // no-cache + ETag: the browser checks every load (a cheap 304 when nothing changed), so a sync shows up right away.
     const fromR2 = async (key: string) => {
-      const obj = await env.BUCKET?.get(key);
+      const obj = await env.BUCKET?.get(key, { onlyIf: request.headers });
       if (!obj) return null;
-      return new Response(obj.body, { headers: { ...JSON_HEADERS, "content-encoding": "gzip", "cache-control": "public, max-age=3600" }, encodeBody: "manual" });
+      const base = { "cache-control": "no-cache", etag: obj.httpEtag };
+      if (!("body" in obj)) return new Response(null, { status: 304, headers: base });
+      return new Response((obj as R2ObjectBody).body, { headers: { ...JSON_HEADERS, ...base, "content-encoding": "gzip" }, encodeBody: "manual" });
     };
 
     if (pathname === "/data/index.json") {
