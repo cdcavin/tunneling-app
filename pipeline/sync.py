@@ -210,9 +210,13 @@ def reference_from(pair_frames, competitive=COMPETITIVE):
         for combo, g in sub.groupby("combo"):
             agg = g.groupby("bin")[STATS].sum().astype(float)
             agg["n"] = g.groupby("bin").size()
+            pct = np.percentile(g.sep23, np.arange(5, 100, 5))
+            # Tunneled = Elite + Good (at or under the 40th pct), not tunneled = Below + Bad (at or over the 60th), exact cutoffs.
+            grp = lambda m: {**{k: round(float(v), 1) for k, v in g.loc[m, STATS].sum().astype(float).items()}, "n": int(m.sum())}
             out[combo] = {"n": int(len(g)),
-                          "pct": [round(float(x), 2) for x in np.percentile(g.sep23, np.arange(5, 100, 5))],
-                          "bins": {int(b): {k: round(float(v), 1) for k, v in row.items()} for b, row in agg.iterrows()}}
+                          "pct": [round(float(x), 2) for x in pct],
+                          "bins": {int(b): {k: round(float(v), 1) for k, v in row.items()} for b, row in agg.iterrows()},
+                          "groups": {"tunneled": grp(g.sep23 <= pct[7]), "notTunneled": grp(g.sep23 >= pct[11])}}
         return out
     return {"generated": dt.date.today().isoformat(), "minPlateIn": 6, "decisionFt": 23.8, "competitive": competitive,
             "pools": {"P4": build(P), "BIG12": build(P[P.conf == "BIG12"])}}

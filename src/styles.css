@@ -496,3 +496,18 @@ button.primary.wide { width: 100%; }
 .howto[open] summary::before { transform: rotate(90deg); }
 .howto summary:hover { color: var(--ink-2); }
 .howto .hint { max-width: 110ch; }
+
+/* Tunneled vs not */
+.tvn { max-width: 760px; }
+.tvn-row { display: grid; grid-template-columns: 130px 1fr 1fr 70px; align-items: baseline; gap: 12px; padding: 9px 12px; border-bottom: 1px solid rgba(34, 54, 86, 0.6); }
+.tvn-head { padding-top: 4px; font-size: 12.5px; color: var(--muted); }
+.tvn-head small { color: var(--faint); margin-left: 4px; font-size: 12px; }
+.tvn-head .is-here { color: var(--wvu-gold); }
+.tvn-label { color: var(--ink-2); font-size: 13.5px; }
+.tvn-v { font: 600 20px/1 var(--font-cond); font-variant-numeric: tabular-nums; color: var(--ink); display: flex; align-items: baseline; gap: 10px; }
+.tvn-v.is-here { color: var(--wvu-gold); }
+.tvn-his { font: 500 12.5px/1 var(--font); color: var(--muted); }
+.tvn-diff { text-align: right; font: 600 16px/1 var(--font-cond); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.tvn-diff.good { color: #7fe0a6; }
+.tvn-diff.bad { color: #ff9e9e; }
+.tvn .hint { margin: 10px 12px 0; }

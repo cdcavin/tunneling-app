@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { PitchRow } from "../lib/types";
 import { bestPairs } from "../lib/bestPairs";
 import { countOutcomes, type Outcomes } from "../lib/outcomes";
-import { BANDS, bandOf, bandTotals, comboKey, gradeCuts, gradeOf, loadReference, type BinCounts, type Reference } from "../lib/reference";
+import { comboKey, gradeCuts, gradeOf, loadReference, type BinCounts, type Reference } from "../lib/reference";
 
 interface Props {
   rows: PitchRow[];
@@ -14,8 +14,9 @@ interface Props {
 const MIN_EVENTS = 15;   // his number shows only when the stat itself rests on at least this many events
 const COLS = [
   { key: "chase", label: "Chase", better: "high" as const, his: (o: Outcomes) => o.chasePct, hisN: (o: Outcomes) => o.outOfZone, ref: (s: BinCounts) => r(s.chases, s.outOfZone) },
+  { key: "swing", label: "Swing", better: null, his: (o: Outcomes) => (o.pitches ? o.swings / o.pitches : null), hisN: (o: Outcomes) => o.pitches, ref: (s: BinCounts) => r(s.swings, s.n) },
   { key: "whiff", label: "Whiff", better: "high" as const, his: (o: Outcomes) => o.whiffPct, hisN: (o: Outcomes) => o.swings, ref: (s: BinCounts) => r(s.whiffs, s.swings) },
-  { key: "cs", label: "Called K", better: "high" as const, his: (o: Outcomes) => o.calledStrikePct, hisN: (o: Outcomes) => o.takes, ref: (s: BinCounts) => r(s.calledStrikes, s.takes) },
+  { key: "cs", label: "Called strike", better: "high" as const, his: (o: Outcomes) => o.calledStrikePct, hisN: (o: Outcomes) => o.takes, ref: (s: BinCounts) => r(s.calledStrikes, s.takes) },
   { key: "hard", label: "Hard hit", better: "low" as const, his: (o: Outcomes) => o.hardHitPct, hisN: (o: Outcomes) => o.evN, ref: (s: BinCounts) => r(s.hard, s.evN) },
 ];
 function r(a: number | undefined, b: number | undefined) { return b ? (a ?? 0) / b : null; }
@@ -29,7 +30,6 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
 
   const combo = anchorType && tunnelType ? comboKey(anchorType, tunnelType) : null;
   const c = combo && ref ? ref.pools[pool]?.[combo] ?? null : null;
-  const refBands = useMemo(() => (c ? bandTotals(c) : null), [c]);
 
   const his = useMemo(() => {
     if (!anchorType || !tunnelType) return null;
@@ -38,28 +38,28 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
       sameType: anchorType === tunnelType, anchorType, nextType: tunnelType })
       // same pairs as the reference: second pitch within 6 in of the zone
       .filter((p) => !comp || (Math.abs(p.next.side) <= comp.side && p.next.height >= comp.low && p.next.height <= comp.high));
-    const buckets: PitchRow[][] = BANDS.map(() => []);
-    for (const p of pairs) { const i = bandOf(p.decisionSep); if (i >= 0) buckets[i].push(p.next); }
-    return { total: pairs.length, bands: buckets.map((b) => ({ n: b.length, o: countOutcomes(b) })) };
+    return pairs;
   }, [rows, anchorType, tunnelType, ref?.minPlateIn, ref?.competitive]);
 
   if (!anchorType || !tunnelType) return null;
-  // Show his columns only when at least one of his numbers has enough behind it; otherwise say so once.
-  const showHis = !!his && his.bands.some((b) => COLS.some((col) => col.hisN(b.o) >= MIN_EVENTS));
-  const cur = sep != null ? bandOf(sep) : -1;
   const grade = c && sep != null ? gradeOf(c, sep) : null;
   const cuts = c ? gradeCuts(c) : null;
   const poolName = pool === "P4" ? "P4" : "Big 12";
+  // His pairs split at the same cutoffs: tunneled = Elite + Good, not tunneled = Below + Bad.
+  const hisT = his && cuts ? countOutcomes(his.filter((p) => p.decisionSep <= cuts[1]).map((p) => p.next)) : null;
+  const hisN = his && cuts ? countOutcomes(his.filter((p) => p.decisionSep >= cuts[2]).map((p) => p.next)) : null;
+  const g = c?.groups;
+  const here = grade ? (grade.cls === "elite" || grade.cls === "good" ? "t" : grade.cls === "below" || grade.cls === "poor" ? "n" : null) : null;
 
   return (
     <section className="sepref" aria-label="Outcomes by separation">
       <div className="sepref-head">
         <div>
-          <div className="sec-title">{anchorType} → {tunnelType}: outcomes on the {tunnelType.toLowerCase()} by how close the pair was at 23.8 ft</div>
+          <div className="sec-title">{anchorType} → {tunnelType} · tunneled vs not</div>
           {sep != null && (
             <div className="sepref-sub">
               Your pair: <b>{sep.toFixed(1)} in</b>{grade && <> · <span className={`grade ${grade.cls}`}>{grade.label}</span> · tighter than {grade.tighter}% of {poolName} pairs</>}
-              {his && <> · {his.total} of his competitive pairs in the selected pitches{!showHis && " (not enough for his own numbers yet; showing " + poolName + " only)"}</>}
+
             </div>
           )}
         </div>
@@ -86,53 +86,36 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           ))}
         </div>
       )}
-      {!ref ? <p className="hint">Loading the reference…</p> : !c ? <p className="hint">No {poolName} reference for {anchorType} → {tunnelType}.</p> : (
-        <div className="sepref-scroll">
-          <table className="sepref-table">
-            <thead>
-              <tr className="grp">
-                <th />{showHis && <th />}
-                {COLS.map((col) => <th key={col.key} colSpan={showHis ? 2 : 1} className="gl">{col.label}</th>)}
-              </tr>
-              <tr>
-                <th scope="col">Apart</th>
-                {showHis && <th scope="col" className="num" title="His back-to-back pairs in this band">His pairs</th>}
-                {COLS.map((col) => [
-                  showHis && <th key={col.key + "h"} scope="col" className="num gl">His</th>,
-                  <th key={col.key + "p"} scope="col" className={`num${showHis ? "" : " gl"}`}>{poolName}</th>,
-                ])}
-              </tr>
-            </thead>
-            <tbody>
-              {BANDS.map((band, i) => {
-                const h = his?.bands[i];
-                const s = refBands![i];
-                return (
-                  <tr key={band.label} className={i === cur ? "on" : ""}>
-                    <th scope="row">{band.label}{i === cur && <span className="you"> your pair</span>}</th>
-                    {showHis && <td className={`num${!h?.n ? " zero" : ""}`}>{h?.n ? h.n : "–"}</td>}
-                    {COLS.map((col) => {
-                      const hn = h ? col.hisN(h.o) : 0;
-                      const hv = h && hn >= MIN_EVENTS ? col.his(h.o) : null;
-                      const pv = col.ref(s);
-                      let tone = "";
-                      if (hv != null && pv != null && Math.abs(hv - pv) >= 0.03) tone = (col.better === "high" ? hv > pv : hv < pv) ? " good" : " bad";
-                      return [
-                        showHis && <td key={col.key + "h"} className={`num his gl${tone}${hv == null ? " thin" : ""}`}
-                          title={hv == null ? `Only ${hn} to go on here (needs ${MIN_EVENTS})` : `${pct(hv)} on ${hn} (${poolName} ${pct(pv)})`}>
-                          {pct(hv)}
-                        </td>,
-                        <td key={col.key + "p"} className={`num p4${showHis ? "" : " gl"}`} title={`${poolName}: ${s.n?.toLocaleString() ?? 0} pairs`}>{pct(pv)}</td>,
-                      ];
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {!ref ? <p className="hint">Loading the reference…</p> : !c || !g || !cuts ? <p className="hint">No {poolName} reference for {anchorType} → {tunnelType}.</p> : (
+        <div className="tvn">
+          <div className="tvn-row tvn-head">
+            <span />
+            <span className={here === "t" ? "is-here" : ""}>Tunneled <small>≤ {cuts[1].toFixed(1)} in</small></span>
+            <span className={here === "n" ? "is-here" : ""}>Not tunneled <small>≥ {cuts[2].toFixed(1)} in</small></span>
+            <span className="tvn-diff">Diff</span>
+          </div>
+          {COLS.map((col) => {
+            const a = col.ref(g.tunneled), b = col.ref(g.notTunneled);
+            const d = a != null && b != null ? Math.round((a - b) * 100) : null;
+            const tone = d == null || col.better == null || Math.abs(d) < 3 ? "" : (col.better === "high" ? d > 0 : d < 0) ? " good" : " bad";
+            const his = (o: Outcomes | null) => {
+              if (!o) return null;
+              const n = col.hisN(o), v = col.his(o);
+              return <small className="tvn-his" title={`His: ${n} to go on`}>his {n >= MIN_EVENTS && v != null ? pct(v) : "–"}</small>;
+            };
+            return (
+              <div key={col.key} className="tvn-row">
+                <span className="tvn-label">{col.label}</span>
+                <span className={`tvn-v${here === "t" ? " is-here" : ""}`}>{pct(a)}{his(hisT)}</span>
+                <span className={`tvn-v${here === "n" ? " is-here" : ""}`}>{pct(b)}{his(hisN)}</span>
+                <span className={`tvn-diff${tone}`}>{d == null ? "—" : `${d > 0 ? "+" : ""}${d}`}</span>
+              </div>
+            );
+          })}
+          <p className="hint">{poolName}: {g.tunneled.n.toLocaleString()} vs {g.notTunneled.n.toLocaleString()} real pairs. Outcome on the second pitch. His: {his?.length ?? 0} pairs; "–" under {MIN_EVENTS}.</p>
         </div>
       )}
-      <details className="howto"><summary>How to read this</summary><p className="hint">Grades: Elite = tighter than 80% of real {poolName} {anchorType} → {tunnelType} pairs at 23.8 ft, Bad = looser than 80%. What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart{ref?.competitive ? ", counting only pairs whose second pitch landed within 6 in of the zone (competitive pitches)" : ""}. Grades use the same pairs. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p></details>
+      <details className="howto"><summary>How to read this</summary><p className="hint">Tunneled = Elite or Good for this combo (tighter at 23.8 ft than 60% of {poolName} pairs). Not tunneled = Below avg or Bad. Back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart, second pitch within 6 in of the zone. Chase = swings at pitches out of the zone. Count and hitter aren't controlled; the model will.</p></details>
     </section>
   );
 }
