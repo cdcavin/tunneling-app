@@ -44,6 +44,8 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
   }, [rows, anchorType, tunnelType, ref?.minPlateIn, ref?.competitive]);
 
   if (!anchorType || !tunnelType) return null;
+  // Show his columns only when at least one of his numbers has enough behind it; otherwise say so once.
+  const showHis = !!his && his.bands.some((b) => COLS.some((col) => col.hisN(b.o) >= MIN_EVENTS));
   const cur = sep != null ? bandOf(sep) : -1;
   const grade = c && sep != null ? gradeOf(c, sep) : null;
   const cuts = c ? gradeCuts(c) : null;
@@ -57,7 +59,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           {sep != null && (
             <div className="sepref-sub">
               Your pair: <b>{sep.toFixed(1)} in</b>{grade && <> · <span className={`grade ${grade.cls}`}>{grade.label}</span> · tighter than {grade.tighter}% of {poolName} pairs</>}
-              {his && <> · {his.total} of his competitive pairs in the selected pitches</>}
+              {his && <> · {his.total} of his competitive pairs in the selected pitches{!showHis && " (not enough for his own numbers yet; showing " + poolName + " only)"}</>}
             </div>
           )}
         </div>
@@ -89,15 +91,15 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           <table className="sepref-table">
             <thead>
               <tr className="grp">
-                <th /><th />
-                {COLS.map((col) => <th key={col.key} colSpan={2} className="gl">{col.label}</th>)}
+                <th />{showHis && <th />}
+                {COLS.map((col) => <th key={col.key} colSpan={showHis ? 2 : 1} className="gl">{col.label}</th>)}
               </tr>
               <tr>
                 <th scope="col">Apart</th>
-                <th scope="col" className="num" title="His back-to-back pairs in this band">His pairs</th>
+                {showHis && <th scope="col" className="num" title="His back-to-back pairs in this band">His pairs</th>}
                 {COLS.map((col) => [
-                  <th key={col.key + "h"} scope="col" className="num gl">His</th>,
-                  <th key={col.key + "p"} scope="col" className="num">{poolName}</th>,
+                  showHis && <th key={col.key + "h"} scope="col" className="num gl">His</th>,
+                  <th key={col.key + "p"} scope="col" className={`num${showHis ? "" : " gl"}`}>{poolName}</th>,
                 ])}
               </tr>
             </thead>
@@ -108,7 +110,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
                 return (
                   <tr key={band.label} className={i === cur ? "on" : ""}>
                     <th scope="row">{band.label}{i === cur && <span className="you"> your pair</span>}</th>
-                    <td className={`num${!h?.n ? " zero" : ""}`}>{h?.n ? h.n : "–"}</td>
+                    {showHis && <td className={`num${!h?.n ? " zero" : ""}`}>{h?.n ? h.n : "–"}</td>}
                     {COLS.map((col) => {
                       const hn = h ? col.hisN(h.o) : 0;
                       const hv = h && hn >= MIN_EVENTS ? col.his(h.o) : null;
@@ -116,11 +118,11 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
                       let tone = "";
                       if (hv != null && pv != null && Math.abs(hv - pv) >= 0.03) tone = (col.better === "high" ? hv > pv : hv < pv) ? " good" : " bad";
                       return [
-                        <td key={col.key + "h"} className={`num his gl${tone}${hv == null ? " thin" : ""}`}
+                        showHis && <td key={col.key + "h"} className={`num his gl${tone}${hv == null ? " thin" : ""}`}
                           title={hv == null ? `Only ${hn} to go on here (needs ${MIN_EVENTS})` : `${pct(hv)} on ${hn} (${poolName} ${pct(pv)})`}>
                           {pct(hv)}
                         </td>,
-                        <td key={col.key + "p"} className="num p4" title={`${poolName}: ${s.n?.toLocaleString() ?? 0} pairs`}>{pct(pv)}</td>,
+                        <td key={col.key + "p"} className={`num p4${showHis ? "" : " gl"}`} title={`${poolName}: ${s.n?.toLocaleString() ?? 0} pairs`}>{pct(pv)}</td>,
                       ];
                     })}
                   </tr>
