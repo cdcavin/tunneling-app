@@ -299,9 +299,22 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
             </div>
           </>
         ) : (
-          <div className="video-empty"><p>{status ?? (selected ? "Loading…" : !rows.some((r) => atWvuPark(r, pitcherTeam))
-                ? "No video available: none of these pitches were thrown at WVU. Video exists only for home games."
-                : "Pick any two pitches to stack their clips.")}</p></div>
+          (() => {
+            const noVideo = !status && !selected && !rows.some((r) => atWvuPark(r, pitcherTeam));
+            const title = status ? "Video" : selected ? "Loading clips" : noVideo ? "No video for these pitches" : "No pair loaded";
+            const body = status ?? (selected ? "Fetching both angles from AWRE." : noVideo
+              ? "Video exists only for pitches thrown at WVU's park."
+              : "Pick pitch A and pitch B above, or use Find pitches, to stack their clips.");
+            return (
+              <div className="video-empty">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10l5-3v10l-5-3" />{noVideo && <path d="M3 3l18 18" />}
+                </svg>
+                <b>{title}</b>
+                <p>{body}</p>
+              </div>
+            );
+          })()
         )}
       </div>
 

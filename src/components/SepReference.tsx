@@ -108,7 +108,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
                 return (
                   <tr key={band.label} className={i === cur ? "on" : ""}>
                     <th scope="row">{band.label}{i === cur && <span className="you"> your pair</span>}</th>
-                    <td className="num">{h?.n ?? 0}</td>
+                    <td className={`num${!h?.n ? " zero" : ""}`}>{h?.n ? h.n : "–"}</td>
                     {COLS.map((col) => {
                       const hn = h ? col.hisN(h.o) : 0;
                       const hv = h && hn >= MIN_EVENTS ? col.his(h.o) : null;
@@ -130,7 +130,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           </table>
         </div>
       )}
-      <p className="hint">Grades: Elite = tighter than 80% of real {poolName} {anchorType} → {tunnelType} pairs at 23.8 ft, Bad = looser than 80%. What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart{ref?.competitive ? ", counting only pairs whose second pitch landed within 6 in of the zone (competitive pitches)" : ""}. Grades use the same pairs. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p>
+      <details className="howto"><summary>How to read this</summary><p className="hint">Grades: Elite = tighter than 80% of real {poolName} {anchorType} → {tunnelType} pairs at 23.8 ft, Bad = looser than 80%. What happened on the second pitch of real back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart{ref?.competitive ? ", counting only pairs whose second pitch landed within 6 in of the zone (competitive pitches)" : ""}. Grades use the same pairs. Green or red: his number is at least 3 points better or worse than {poolName} in the same band. "—" when his number would rest on fewer than {MIN_EVENTS} events (swings for whiff, takes for called K, pitches out of the zone for chase, balls in play for hard hit); hover any cell for its count. Location isn't controlled here; the model separates that out.</p></details>
     </section>
   );
 }

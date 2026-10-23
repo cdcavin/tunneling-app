@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PitcherSummary } from "../lib/types";
 
 const WVU = "WES_MOU";
@@ -47,6 +47,14 @@ export default function PitcherFinder({ pitchers, value, onChange, onYear }: Pro
   useEffect(() => { if (team && !teams.includes(team)) setTeam(""); }, [teams, team]);
 
   const current = pitchers.find((p) => p.id === value);
+  const listRef = useRef<HTMLDivElement>(null);
+  // Keep the loaded pitcher in view when the list changes.
+  useEffect(() => { listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); }, [value, list]);
+  const step = (d: number) => {
+    const i = list.findIndex((p) => p.id === value);
+    const next = list[Math.min(list.length - 1, Math.max(0, (i < 0 ? -1 : i) + d))];
+    if (next) onChange(next.id);
+  };
   return (
     <div className="finder">
       <div className="finder-row">
@@ -67,14 +75,16 @@ export default function PitcherFinder({ pitchers, value, onChange, onYear }: Pro
           {teams.map((t) => <option key={t} value={t}>{teamLabel(t)}</option>)}
         </select>
       </div>
-      <select aria-label="Pitcher" value={list.some((p) => p.id === value) ? value : ""} onChange={(e) => e.target.value && onChange(e.target.value)} size={Math.min(8, Math.max(3, list.length))} className="finder-list">
-        {list.length === 0 && <option value="" disabled>No pitchers match</option>}
+      <div ref={listRef} className="finder-list" role="listbox" aria-label="Pitcher" tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "ArrowDown") { e.preventDefault(); step(1); } else if (e.key === "ArrowUp") { e.preventDefault(); step(-1); } }}>
+        {list.length === 0 && <div className="finder-empty">No pitchers match</div>}
         {list.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name} · {p.throws === "Right" ? "R" : "L"} · {p.team === WVU ? "WVU" : teamLabel(p.team ?? "")} · {seasonSpan(p)}
-          </option>
+          <div key={p.id} role="option" aria-selected={p.id === value} className={`finder-item${p.id === value ? " is-on" : ""}`} onClick={() => onChange(p.id)}>
+            <span className="fi-name">{p.name}</span>
+            <span className="fi-meta">{p.throws === "Right" ? "RHP" : "LHP"} · {p.team === WVU ? "WVU" : teamLabel(p.team ?? "")} · {seasonSpan(p)}</span>
+          </div>
         ))}
-      </select>
+      </div>
       {current && <p className="hint">{current.n.toLocaleString()} pitches{current.games ? ` in ${current.games} games` : ""} across {seasonsOf(current).join(", ")}. Pick the season under Pitches in use.</p>}
       {list.length >= 400 && <p className="hint">Showing the first 400. Narrow it down.</p>}
     </div>
