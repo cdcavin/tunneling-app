@@ -282,12 +282,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <span className="mark">WV</span>
+        <img className="logo-wvu" src={`${import.meta.env.BASE_URL}brand/wvu-baseball-bpc.png`} alt="WVU Baseball Biomechanics and Performance Center" />
         <h1>Pitch Tunneling</h1>
-        <span className="brand"><b>West Virginia Baseball</b><span className="x">×</span>BioPrecision Labs</span>
         <span className="stamp">
           {data.sample ? <b className="sample-flag">Sample pitchers, not real data</b> : <>Data through {data.dataThrough}</>}
         </span>
+        <img className="logo-bp" src={`${import.meta.env.BASE_URL}brand/bioprecision.png`} alt="BioPrecision" />
       </header>
 
       <div className="layout">
