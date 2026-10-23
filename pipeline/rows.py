@@ -133,4 +133,5 @@ def rows(g: pd.DataFrame) -> list[dict]:
                  type=r.type, velo=round(r.RelSpeed, 1), ivb=round(r.InducedVertBreak, 1), hb=round(r.HorzBreak, 1),
                  spin=(round(float(r.SpinRate)) if pd.notna(r.SpinRate) else None), side=round(r.PlateLocSide, 3), height=round(r.PlateLocHeight, 3),
                  call=txt(r.PitchCall), result=txt(r.result), ev=fval(r.ev, 1),
-                 coeffs={k[len("PitchTrajectory"):]: round(getattr(r, k), 5) for k in TRAJ}) for r in g.itertuples()]
+                 coeffs={k[len("PitchTrajectory"):]: round(getattr(r, k), 5) for k in TRAJ},
+                 **({"scrimmage": True} if getattr(r, "scrimmage", False) is True else {})) for r in g.itertuples()]

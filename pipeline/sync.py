@@ -34,7 +34,8 @@ SKIP = re.compile(r"_(playerpositioning|battracking|playertracking|playevents)",
 WVU_PARK_FILE = re.compile(r"^\d{8}-(WestVirginia|MonogaliaCounty)(-Private)?-\d+(_unverified)?\.csv$")
 P4 = {"ACC", "BIG10", "BIG12", "SEC"}
 EPOCH = re.compile(r"^\d{9,11}(\.\d+)?$")
-NAMES_FIXED = {"WES_MOU": "West Virginia", "WVN_MN2": "West Virginia"}
+NAMES_FIXED = {"WES_MOU": "West Virginia", "WVN_MN2": "West Virginia",
+               "AKR_ZIP": "Akron", "GLE_STA": "Glenville State", "WRI_RAI": "Wright State"}   # TOR_MET6 left as a code (unconfirmed)
 
 
 # ---------- R2 ----------
@@ -291,6 +292,8 @@ def run(open_ftp, upload=False):
                              for pid, d in docs.items() for r in d["pitches"] if r.get("home") and str(r["id"]) not in new_uids])
         built = R.finish(R.match_types(wv, pool))
         built["opponent"] = built.opponent.map(lambda c: team_names.get(str(c), c))
+        # Scrimmages / private sessions (League "Team", "-Private-" files): kept in his data, left out of the P4 reference.
+        built["scrimmage"] = (built.League.astype(str) == "Team") | built._file.astype(str).str.contains("-Private-")
         unnamed = sorted({c for c in wv.opponent.astype(str).unique() if c not in team_names})
         print(f"built {len(built)} WVU pitches from {built.id.nunique()} pitchers "
               f"({remapped} name spellings attached to an existing pitcher); opponents without a readable name: {unnamed}")
@@ -378,8 +381,10 @@ def run(open_ftp, upload=False):
     def pf(p):
         return p["conf"], pairs_of(get_json(s3, f"pitchers/{p['id']}.json.gz")["pitches"])
     wvu_now = {**docs, **out_docs}                 # every WVU file as it will be after this run
-    frames = readers.map(pf, p4, r2=True) + [("BIG12", pairs_of(d["pitches"])) for d in wvu_now.values()]
-    print(f"\nreference rebuilt from {len(p4)} other P4 pitchers + {len(wvu_now)} WVU pitchers")
+    games_only = lambda ps: [r for r in ps if not r.get("scrimmage") and r.get("opponent") not in ("West Virginia", "WES_MOU", "WVN_MN2")]
+    frames = readers.map(pf, p4, r2=True) + [("BIG12", pairs_of(games_only(d["pitches"]))) for d in wvu_now.values()]
+    nscr = sum(1 for d in wvu_now.values() for r in d["pitches"] if r not in games_only([r]))
+    print(f"\nreference rebuilt from {len(p4)} other P4 pitchers + {len(wvu_now)} WVU pitchers (games only: {nscr} WVU scrimmage pitches left out)")
     ref = reference_from(frames)
     old_ref = get_json(s3, "reference.json.gz", missing_ok=True)
     if ref is None: print("no pairs found: reference left as it is")
