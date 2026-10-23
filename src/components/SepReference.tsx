@@ -49,6 +49,8 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
   const hisT = his && cuts ? countOutcomes(his.filter((p) => p.decisionSep <= cuts[1]).map((p) => p.next)) : null;
   const hisN = his && cuts ? countOutcomes(his.filter((p) => p.decisionSep >= cuts[2]).map((p) => p.next)) : null;
   const g = c?.groups;
+  const hisShows = (o: Outcomes | null) => !!o && COLS.some((col) => col.hisN(o) >= MIN_EVENTS && col.his(o) != null);
+  const showHis = hisShows(hisT) || hisShows(hisN);
   const here = grade ? (grade.cls === "elite" || grade.cls === "good" ? "t" : grade.cls === "below" || grade.cls === "poor" ? "n" : null) : null;
 
   return (
@@ -99,7 +101,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
             const d = a != null && b != null ? Math.round((a - b) * 100) : null;
             const tone = d == null || col.better == null || Math.abs(d) < 3 ? "" : (col.better === "high" ? d > 0 : d < 0) ? " good" : " bad";
             const his = (o: Outcomes | null) => {
-              if (!o) return null;
+              if (!o || !showHis) return null;
               const n = col.hisN(o), v = col.his(o);
               return <small className="tvn-his" title={`His: ${n} to go on`}>his {n >= MIN_EVENTS && v != null ? pct(v) : "–"}</small>;
             };
@@ -112,7 +114,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
               </div>
             );
           })}
-          <p className="hint">{poolName}: {g.tunneled.n.toLocaleString()} vs {g.notTunneled.n.toLocaleString()} real pairs. Outcome on the second pitch. His: {his?.length ?? 0} pairs; "–" under {MIN_EVENTS}.</p>
+          <p className="hint">{poolName}: {g.tunneled.n.toLocaleString()} pairs per group · his: {his?.length ?? 0} pairs{showHis ? "" : " (too few to show)"}</p>
         </div>
       )}
       <details className="howto"><summary>How to read this</summary><p className="hint">Tunneled = Elite or Good for this combo (tighter at 23.8 ft than 60% of {poolName} pairs). Not tunneled = Below avg or Bad. Back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart, second pitch within 6 in of the zone. Chase = swings at pitches out of the zone. Count and hitter aren't controlled; the model will.</p></details>

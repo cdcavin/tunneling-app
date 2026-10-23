@@ -1,7 +1,9 @@
-node_modules
-dist
-.DS_Store
-*.local
 # real team data never goes in git; the weekly job and Cloudflare deploy handle it
-data-private/
+*.local
+*.pyc
+.DS_Store
 .wrangler/
+__pycache__/
+data-private/
+dist
+node_modules
