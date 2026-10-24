@@ -5,7 +5,7 @@ import PitchPicker from "./PitchPicker";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { alignFrames, toGray } from "../lib/align";
-import { armAngle, armShape, bestArmPair, boxAround, fitZoomShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
+import { armAngle, armShape, bestArmPair, boxAround, fitShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
 
 interface Props {
   pairs: RealPair[];
@@ -376,15 +376,19 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       await seekClip(b, B.t); const fB = frameOf(b);
       const hA = await findHitter(m, fA, A.kp!), hB = await findHitter(m, fB, B.kp!);
 
-      // Fit: pitcher's trunk and legs (the arm is what we compare, not what we fit), plus the hitter at lower weight.
-      const P = [K.nose, K.lSho, K.rSho, K.lHip, K.rHip, K.lKne, K.rKne, K.lAnk, K.rAnk];
+      // Zoom from the ballpark (it doesn't change shape between pitches; a body does), capped at +-10%.
+      const g = (f: HTMLCanvasElement) => { const t = document.createElement("canvas"); t.width = 256; t.height = 144; t.getContext("2d")!.drawImage(f, 0, 0, 256, 144); return toGray(t.getContext("2d")!.getImageData(0, 0, 256, 144).data, 256, 144); };
+      const bg = alignFrames(g(fA), g(fB));
+      const zoom = bg.verdict === "unsure" ? 1 : Math.min(1.1, Math.max(0.9, bg.scale));
+      // Shift from the pitcher's trunk (head, shoulders, hips); legs count less since stride changes them. The arm is
+      // what we compare, not what we fit, and the hitter is only measured.
+      const P = [K.nose, K.lSho, K.rSho, K.lHip, K.rHip], LEGS = [K.lKne, K.rKne, K.lAnk, K.rAnk];
       const H = [K.nose, K.lSho, K.rSho, K.lHip, K.rHip, K.lAnk, K.rAnk];
       const pa: Kp[] = [], pb: Kp[] = [], w: number[] = [];
-      for (const i of P) if (A.kp![i].s > 0.3 && B.kp![i].s > 0.3) { pa.push(A.kp![i]); pb.push(B.kp![i]); w.push(1); }
+      for (const i of [...P, ...LEGS]) if (A.kp![i].s > 0.3 && B.kp![i].s > 0.3) { pa.push(A.kp![i]); pb.push(B.kp![i]); w.push(P.includes(i) ? 1 : 0.25); }
       const withHitter = !!(hA && hB);
-      if (withHitter) for (const i of H) if (hA![i].s > 0.3 && hB![i].s > 0.3) { pa.push(hA![i]); pb.push(hB![i]); w.push(0.6); }
       const c = { x: b.videoWidth / 2, y: b.videoHeight / 2 };
-      const fit = fitZoomShift(pa, pb, w, c);
+      const fit = fitShift(pa, pb, w, c, zoom);
       const err = (kA: Kp[], kB: Kp[], idx: number[]) => {
         const d = idx.filter((i) => kA[i].s > 0.3 && kB[i].s > 0.3).map((i) => Math.hypot(fit.s * (kB[i].x - c.x) + fit.tx + c.x - kA[i].x, fit.s * (kB[i].y - c.y) + fit.ty + c.y - kA[i].y));
         return d.length ? d.reduce((x, y) => x + y, 0) / d.length : NaN;

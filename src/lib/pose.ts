@@ -141,3 +141,13 @@ export function bestArmPair(aShapes: (number[] | null)[], bShapes: (number[] | n
   }
   return best;
 }
+
+/** Shift only (zoom s given): weighted mean of a - c - s (b - c). Returns the shift and the weighted RMS error (px). */
+export function fitShift(a: { x: number; y: number }[], b: { x: number; y: number }[], w: number[], c: { x: number; y: number }, s: number) {
+  let W = 0, tx = 0, ty = 0;
+  for (let i = 0; i < a.length; i++) { W += w[i]; tx += w[i] * (a[i].x - c.x - s * (b[i].x - c.x)); ty += w[i] * (a[i].y - c.y - s * (b[i].y - c.y)); }
+  tx /= W; ty /= W;
+  let e = 0;
+  for (let i = 0; i < a.length; i++) e += w[i] * ((s * (b[i].x - c.x) + tx + c.x - a[i].x) ** 2 + (s * (b[i].y - c.y) + ty + c.y - a[i].y) ** 2);
+  return { s, tx, ty, rms: Math.sqrt(e / W) };
+}

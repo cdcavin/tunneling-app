@@ -40,3 +40,13 @@ describe("boxAround", () => {
     expect(x1).toBeLessThan(470); expect(y2).toBeGreaterThan(500);
   });
 });
+
+import { fitShift } from "./pose";
+describe("fitShift", () => {
+  it("recovers the shift for a known zoom", () => {
+    const a = person(500, 300, 200), s = 1.02, t = { x: -40, y: 9 };
+    const b = a.map((p) => ({ x: c.x + (p.x - c.x - t.x) / s, y: c.y + (p.y - c.y - t.y) / s, s: 0.9 }));
+    const f = fitShift(a, b, a.map(() => 1), c, s);
+    expect(f.tx).toBeCloseTo(-40, 6); expect(f.ty).toBeCloseTo(9, 6); expect(f.rms).toBeLessThan(1e-6);
+  });
+});
