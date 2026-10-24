@@ -148,7 +148,7 @@ button.link:hover { text-decoration: underline; }
 
 /* ── Center ──────────────────────────────────────────────────────────── */
 .center { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.views { display: grid; grid-template-columns: 1fr 1.3fr; gap: 1px; background: var(--line); min-height: 460px; flex-shrink: 0; }
+.views { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 1px; background: var(--line); min-height: 460px; flex-shrink: 0; }
 .stage { position: relative; min-width: 0; min-height: 0; background: var(--bg); overflow: hidden; display: flex; flex-direction: column; }
 .stage-canvas { position: relative; flex: 1; min-height: 0; overflow: hidden; }
 /* Playback and distance controls live under the picture, so nothing sits on the pitches. */
@@ -511,4 +511,4 @@ button.primary.wide { width: 100%; }
 .tvn-diff.bad { color: #ff9e9e; }
 .tvn .hint { margin: 10px 12px 0; }
 
-.align-msg { font-size: 12.5px; color: var(--muted); }
+.align-msg { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-2); }

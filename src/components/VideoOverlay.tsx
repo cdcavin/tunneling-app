@@ -5,6 +5,7 @@ import PitchPicker from "./PitchPicker";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { alignFrames, toGray } from "../lib/align";
+import { armAngle, armShape, bestArmPair, boxAround, fitZoomShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
 
 interface Props {
   pairs: RealPair[];
@@ -19,6 +20,8 @@ interface Props {
   onFlightTime: (t: number | null) => void;
   /** Whether the 3D view is showing this real pair (so the video may drive its clock). */
   drivesScene: boolean;
+  /** The pitcher's throwing hand ("Right" / "Left"), to know which arm to match. */
+  throws?: string;
 }
 
 // Safari plays HLS natively; every other browser answers "maybe" to canPlayType and then can't, so go by the browser.
@@ -102,7 +105,7 @@ function releaseFromUtc(utc: string | undefined, startMs: number | null): number
   return s >= 0 && s <= 120 ? s : null;
 }
 
-export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene }: Props) {
+export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene, throws = "Right" }: Props) {
   const [clipsA, setClipsA] = useState<AwreClip[]>([]);
   const [clipsB, setClipsB] = useState<AwreClip[]>([]);
   const [linked, setLinked] = useState(true);
@@ -275,36 +278,135 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     const rel = pendingResync.current; pendingResync.current = null;
     seekRel(rel);
   }, [resyncN, seekRel]);
-  // Auto-align (picture only): match the background of B's current frame to A's and shift / zoom B to fit.
+  // Align: stack the pitcher (and the hitter where possible) by body tracking, and re-sync both clips on the
+  // frames where the throwing arms match best. Falls back to matching the ballpark when no body is found.
   const [xf, setXf] = useState<{ s: number; tx: number; ty: number } | null>(null);
   const [alignMsg, setAlignMsg] = useState<string | null>(null);
   const [aligning, setAligning] = useState(false);
-  useEffect(() => { setXf(null); setAlignMsg(null); }, [urlA, urlB]);
-  const grab = (v: HTMLVideoElement) => {
-    const c = document.createElement("canvas"); c.width = 256; c.height = 144;
-    const ctx = c.getContext("2d", { willReadFrequently: true })!;
-    ctx.drawImage(v, 0, 0, 256, 144);
-    return toGray(ctx.getImageData(0, 0, 256, 144).data, 256, 144);
+  const beforeAlign = useRef<{ manualA: number | null; manualB: number | null; nudgeMs: number } | null>(null);
+  useEffect(() => { setXf(null); setAlignMsg(null); beforeAlign.current = null; }, [urlA, urlB]);
+
+  const frameOf = (v: HTMLVideoElement, w = v.videoWidth, h = v.videoHeight) => {
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d", { willReadFrequently: true })!.drawImage(v, 0, 0, w, h);
+    return c;
   };
-  const autoAlign = () => {
+  const seekClip = (v: HTMLVideoElement, tClip: number) => new Promise<void>((res) => {
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; v.removeEventListener("seeked", onSeeked); res(); };
+    const onSeeked = () => {
+      const rvfc = (v as HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => void }).requestVideoFrameCallback;
+      if (rvfc) rvfc.call(v, finish); setTimeout(finish, 250);
+    };
+    v.addEventListener("seeked", onSeeked);
+    v.currentTime = t0(v) + Math.max(0, tClip);
+    setTimeout(finish, 3000);
+  });
+  /** Css percent for a shift in video pixels (the clip is drawn "contain" in a 16:9 box). */
+  const toXf = (v: HTMLVideoElement, s: number, txPx: number, tyPx: number) => {
+    const ar = v.videoWidth / v.videoHeight || 16 / 9;
+    const rw = Math.min(1, ar / (16 / 9)), rh = Math.min(1, (16 / 9) / ar);
+    return { s, tx: (txPx / v.videoWidth) * 100 * rw, ty: (tyPx / v.videoHeight) * 100 * rh };
+  };
+
+  const backgroundAlign = (why: string) => {
+    const a = vA.current!, b = vB.current!;
+    const g = (v: HTMLVideoElement) => toGray(frameOf(v, 256, 144).getContext("2d")!.getImageData(0, 0, 256, 144).data, 256, 144);
+    const r = alignFrames(g(a), g(b));
+    if (r.verdict === "apply") { setXf(toXf(b, r.scale, r.dx * b.videoWidth, r.dy * b.videoHeight)); setAlignMsg(`${why} Lined up the ballpark instead.`); }
+    else setAlignMsg(`${why} ${r.verdict === "already" ? "The ballpark already lines up." : "Couldn't line up the ballpark either."}`);
+  };
+
+  /** The pitcher in a frame: a wide box around the mound first, then a tight box around what it found. */
+  const findPitcher = async (m: PoseModel, f: HTMLCanvasElement, near?: Box) => {
+    const W = f.width, H = f.height;
+    let kp = await m.estimate(f, near ?? [0.12 * W, 0.22 * H, 0.62 * W, H]);
+    const box = boxAround(kp);
+    if (box) kp = await m.estimate(f, box);
+    return trunkScore(kp) >= 0.5 ? kp : null;
+  };
+  /** The hitter: standing person in the plate area who isn't the pitcher. Best effort. */
+  const findHitter = async (m: PoseModel, f: HTMLCanvasElement, pitcher: Kp[]) => {
+    const W = f.width, H = f.height;
+    const pBox = boxAround(pitcher, 0.1)!;
+    const overlaps = (k: Kp[]) => { const c = boxAround(k, 0); if (!c) return true; const ix = Math.max(0, Math.min(c[2], pBox[2]) - Math.max(c[0], pBox[0])), iy = Math.max(0, Math.min(c[3], pBox[3]) - Math.max(c[1], pBox[1])); return ix * iy > 0.3 * (c[2] - c[0]) * (c[3] - c[1]); };
+    let best: Kp[] | null = null, bestScore = 0;
+    for (const box of [[0.36 * W, 0.12 * H, 0.6 * W, 0.75 * H], [0.55 * W, 0.12 * H, 0.82 * W, 0.75 * H], [0.36 * W, 0.12 * H, 0.82 * W, 0.75 * H]] as Box[]) {
+      let kp = await m.estimate(f, box);
+      const tight = boxAround(kp); if (tight) kp = await m.estimate(f, tight);
+      const sc = trunkScore(kp);
+      if (sc >= 0.5 && standing(kp) && !overlaps(kp) && sc > bestScore) { best = kp; bestScore = sc; }
+    }
+    return best;
+  };
+
+  const autoAlign = async () => {
     const a = vA.current, b = vB.current;
     if (!a || !b || a.readyState < 2 || b.readyState < 2) { setAlignMsg("Clips still loading."); return; }
-    pauseBoth(); setAligning(true); setAlignMsg("Aligning…");
-    setTimeout(() => {
-      try {
-        const r = alignFrames(grab(a), grab(b));
-        if (r.verdict === "already") { setXf(null); setAlignMsg("Already aligned."); return; }
-        if (r.verdict === "unsure") { setAlignMsg("No confident match (different camera angle?). Left as is."); return; }
-        const ar = b.videoWidth / b.videoHeight || 16 / 9;
-        const rw = Math.min(1, ar / (16 / 9)), rh = Math.min(1, (16 / 9) / ar);   // shown video vs the 16:9 box
-        setXf({ s: r.scale, tx: r.dx * 100 * rw, ty: r.dy * 100 * rh });
-        const px = (f: number, size: number, pos: string, neg: string) => { const v = Math.round(f * size); return v === 0 ? null : `${Math.abs(v)} px ${v > 0 ? pos : neg}`; };
-        const moves = [px(r.dx, b.videoWidth, "right", "left"), px(r.dy, b.videoHeight, "down", "up")].filter(Boolean).join(", ");
-        setAlignMsg(`Moved B ${moves || "0 px"}, zoom ${Math.round(r.scale * 100)}%.`);
-      } catch {
-        setAlignMsg("This browser won't let the page read the video frames.");
-      } finally { setAligning(false); }
-    }, 30);
+    pauseBoth(); setAligning(true);
+    const prev = { manualA, manualB, nudgeMs };
+    try {
+      if (releaseA == null || releaseB == null) { backgroundAlign("Release not found, so the pitcher can't be matched."); return; }
+      setAlignMsg("Loading body tracking…");
+      let m: PoseModel;
+      try { m = await loadPose(setAlignMsg); } catch { backgroundAlign("Body tracking didn't load."); return; }
+      setAlignMsg("Finding the pitcher…");
+      const FPS = 30, OFFS = m.device === "webgpu" ? [-3, -2, -1, 0, 1, 2, 3] : [-1, 0, 1];
+      const scan = async (v: HTMLVideoElement, rel: number) => {
+        await seekClip(v, rel);
+        const base = await findPitcher(m, frameOf(v));
+        if (!base) return null;
+        const near = boxAround(base, 0.45)!;
+        const frames: { t: number; kp: Kp[] | null }[] = [];
+        for (const k of OFFS) {
+          const t = rel + k / FPS;
+          await seekClip(v, t);
+          frames.push({ t, kp: await findPitcher(m, frameOf(v), near) });
+        }
+        return frames;
+      };
+      const fa = await scan(a, releaseA), fb = await scan(b, releaseB);
+      if (!fa || !fb) { backgroundAlign(`Couldn't find the pitcher in clip ${!fa ? "A" : "B"}.`); return; }
+      const pick = bestArmPair(fa.map((f) => (f.kp ? armShape(f.kp, throws) : null)), fb.map((f) => (f.kp ? armShape(f.kp, throws) : null)), OFFS, OFFS);
+      if (pick.i < 0) { backgroundAlign("Couldn't see the pitcher's arm at release."); return; }
+      const A = fa[pick.i], B = fb[pick.j];
+
+      setAlignMsg("Finding the hitter…");
+      await seekClip(a, A.t); const fA = frameOf(a);
+      await seekClip(b, B.t); const fB = frameOf(b);
+      const hA = await findHitter(m, fA, A.kp!), hB = await findHitter(m, fB, B.kp!);
+
+      // Fit: pitcher's trunk and legs (the arm is what we compare, not what we fit), plus the hitter at lower weight.
+      const P = [K.nose, K.lSho, K.rSho, K.lHip, K.rHip, K.lKne, K.rKne, K.lAnk, K.rAnk];
+      const H = [K.nose, K.lSho, K.rSho, K.lHip, K.rHip, K.lAnk, K.rAnk];
+      const pa: Kp[] = [], pb: Kp[] = [], w: number[] = [];
+      for (const i of P) if (A.kp![i].s > 0.3 && B.kp![i].s > 0.3) { pa.push(A.kp![i]); pb.push(B.kp![i]); w.push(1); }
+      const withHitter = !!(hA && hB);
+      if (withHitter) for (const i of H) if (hA![i].s > 0.3 && hB![i].s > 0.3) { pa.push(hA![i]); pb.push(hB![i]); w.push(0.6); }
+      const c = { x: b.videoWidth / 2, y: b.videoHeight / 2 };
+      const fit = fitZoomShift(pa, pb, w, c);
+      const err = (kA: Kp[], kB: Kp[], idx: number[]) => {
+        const d = idx.filter((i) => kA[i].s > 0.3 && kB[i].s > 0.3).map((i) => Math.hypot(fit.s * (kB[i].x - c.x) + fit.tx + c.x - kA[i].x, fit.s * (kB[i].y - c.y) + fit.ty + c.y - kA[i].y));
+        return d.length ? d.reduce((x, y) => x + y, 0) / d.length : NaN;
+      };
+      const pitcherErr = err(A.kp!, B.kp!, P), hitterErr = withHitter ? err(hA!, hB!, H) : NaN;
+      const armDiff = Math.abs(((armAngle(A.kp!, throws) - armAngle(B.kp!, throws) + 540) % 360) - 180);
+
+      beforeAlign.current = prev;
+      setXf(toXf(b, fit.s, fit.tx, fit.ty));
+      setManualA(A.t); setManualB(B.t); setNudgeMs(0); setLocked(true);
+      pendingResync.current = 0; setResyncN((n) => n + 1);   // park both on the matched release frames
+      setAlignMsg(`Pitcher stacked (within ${Math.round(pitcherErr)} px) · arm ${Math.round(armDiff)}° apart` +
+        (withHitter ? ` · hitter within ${Math.round(hitterErr)} px` : " · hitter not found") + ` · zoom ${Math.round(fit.s * 100)}%`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setAlignMsg(/security|tainted|cross-origin/i.test(msg) ? "This browser won't let the page read the video frames." : `Align failed: ${msg.slice(0, 120)}`);
+    } finally { setAligning(false); }
+  };
+  const undoAlign = () => {
+    setXf(null); setAlignMsg(null);
+    const p = beforeAlign.current; beforeAlign.current = null;
+    if (p) { setManualA(p.manualA); setManualB(p.manualB); setNudgeMs(p.nudgeMs); }
   };
   const markA = () => { const a = vA.current; if (a) setManualA(tIn(a)); };
   const markB = () => { const b = vB.current; if (b) setManualB(tIn(b)); };
@@ -364,10 +466,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
             <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
             <button type="button" className="ghost" onClick={resync} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
             <button type="button" className="ghost" onClick={autoAlign} disabled={aligning}
-              title="Line the second clip up with the first using the background (stands, wall, logo, lines), shifting and zooming it. Works best paused before the windup.">Align</button>
-            {xf && <button type="button" className="ghost" onClick={() => { setXf(null); setAlignMsg(null); }}>Undo align</button>}
-            {alignMsg && <span className="align-msg">{alignMsg}</span>}
+              title="Stack the pitcher (and the hitter where possible) and re-sync on the frames where the throwing arms match. First use downloads the body-tracking model.">{aligning ? "Aligning…" : "Align"}</button>
+            {(xf || beforeAlign.current) && <button type="button" className="ghost" onClick={undoAlign}>Undo align</button>}
           </div>
+          {alignMsg && <p className="align-msg">{alignMsg}</p>}
           {[
             { key: "A", type: anchorType, pos: posA, dur: durA, rel: releaseA, onScrub: scrubA },
             { key: "B", type: nextType, pos: posB, dur: durB, rel: releaseB, onScrub: scrubB },
