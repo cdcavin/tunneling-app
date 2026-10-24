@@ -365,6 +365,10 @@ def dry(f: FTP):
     print(f"  pitches in FTP files but not in the app (would be added): {len(new)} by season {new.seasonLabel.value_counts().sort_index().to_dict()}")
 
 
+if MODE == "models":
+    import runpy
+    runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fetch_models.py"), run_name="__main__")
+    sys.exit(0)
 if MODE in ("reference", "reference-dry"):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import sync

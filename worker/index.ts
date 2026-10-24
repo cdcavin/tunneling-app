@@ -134,6 +134,18 @@ export default {
         pitchers: s.pitchers.map((p) => ({ id: p.id, name: p.name, throws: p.throws, season: p.season, n: p.pitches.length })) });
     }
 
+    // Pose model files (copied from Hugging Face into R2 by the "models" workflow), served from our own address.
+    if (pathname.startsWith("/models/")) {
+      const key = decodeURIComponent(pathname.slice(1));
+      if (key.includes("..")) return json({ error: "Bad path." }, 400);
+      const obj = await env.BUCKET?.get(key);
+      if (!obj) return json({ error: "No such model file." }, 404);
+      return new Response(obj.body, { headers: {
+        "content-type": key.endsWith(".json") ? "application/json" : "application/octet-stream",
+        "content-length": String(obj.size), "cache-control": "public, max-age=31536000, immutable", etag: obj.httpEtag,
+      } });
+    }
+
     if (pathname === "/data/reference.json") {
       const r2 = await fromR2("reference.json.gz");
       return r2 ?? json({ error: "No reference built yet." }, 404);
