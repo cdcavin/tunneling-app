@@ -182,6 +182,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     const a = vA.current; if (!a) return;
     a.currentTime = t0(a) + Math.max(0, (releaseA ?? 0) + rel);
     sync();
+    // Safari's seeks land late: put B on A's frame again once A has actually arrived.
+    const again = () => { a.removeEventListener("seeked", again); sync(0.005); };
+    a.addEventListener("seeked", again);
+    setTimeout(() => a.removeEventListener("seeked", again), 3000);
   }, [releaseA, sync]);
 
   // Scrubber position, the 3D flight clock, and keeping B in step while playing.
@@ -268,7 +272,9 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const resync = () => {
     pauseBoth();
     pendingResync.current = Number.isFinite(pos) ? pos : -0.6;
-    setManualA(null); setManualB(null); setNudgeMs(0); setLocked(true);
+    // Keep the release frames Align matched (until Undo align); otherwise drop hand marks and go back to Trackman's clock.
+    if (!beforeAlign.current) { setManualA(null); setManualB(null); }
+    setNudgeMs(0); setLocked(true);
     if (vB.current) vB.current.playbackRate = rate;
     setResyncN((n) => n + 1);
   };
