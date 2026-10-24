@@ -4,6 +4,7 @@ import { atWvuPark, lookupClips, streamUrl, type AwreClip, type RealPair } from 
 import PitchPicker from "./PitchPicker";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
+import { alignFrames, toGray } from "../lib/align";
 
 interface Props {
   pairs: RealPair[];
@@ -274,6 +275,37 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     const rel = pendingResync.current; pendingResync.current = null;
     seekRel(rel);
   }, [resyncN, seekRel]);
+  // Auto-align (picture only): match the background of B's current frame to A's and shift / zoom B to fit.
+  const [xf, setXf] = useState<{ s: number; tx: number; ty: number } | null>(null);
+  const [alignMsg, setAlignMsg] = useState<string | null>(null);
+  const [aligning, setAligning] = useState(false);
+  useEffect(() => { setXf(null); setAlignMsg(null); }, [urlA, urlB]);
+  const grab = (v: HTMLVideoElement) => {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 144;
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(v, 0, 0, 256, 144);
+    return toGray(ctx.getImageData(0, 0, 256, 144).data, 256, 144);
+  };
+  const autoAlign = () => {
+    const a = vA.current, b = vB.current;
+    if (!a || !b || a.readyState < 2 || b.readyState < 2) { setAlignMsg("Clips still loading."); return; }
+    pauseBoth(); setAligning(true); setAlignMsg("Aligning…");
+    setTimeout(() => {
+      try {
+        const r = alignFrames(grab(a), grab(b));
+        if (r.verdict === "already") { setXf(null); setAlignMsg("Already aligned."); return; }
+        if (r.verdict === "unsure") { setAlignMsg("No confident match (different camera angle?). Left as is."); return; }
+        const ar = b.videoWidth / b.videoHeight || 16 / 9;
+        const rw = Math.min(1, ar / (16 / 9)), rh = Math.min(1, (16 / 9) / ar);   // shown video vs the 16:9 box
+        setXf({ s: r.scale, tx: r.dx * 100 * rw, ty: r.dy * 100 * rh });
+        const px = (f: number, size: number, pos: string, neg: string) => { const v = Math.round(f * size); return v === 0 ? null : `${Math.abs(v)} px ${v > 0 ? pos : neg}`; };
+        const moves = [px(r.dx, b.videoWidth, "right", "left"), px(r.dy, b.videoHeight, "down", "up")].filter(Boolean).join(", ");
+        setAlignMsg(`Moved B ${moves || "0 px"}, zoom ${Math.round(r.scale * 100)}%.`);
+      } catch {
+        setAlignMsg("This browser won't let the page read the video frames.");
+      } finally { setAligning(false); }
+    }, 30);
+  };
   const markA = () => { const a = vA.current; if (a) setManualA(tIn(a)); };
   const markB = () => { const b = vB.current; if (b) setManualB(tIn(b)); };
 
@@ -290,8 +322,9 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       <div className="overlay-stage">
         {selected && selected.anchor.id !== selected.next.id && urlA && urlB ? (
           <>
-            <video ref={vA} muted playsInline preload="auto" />
-            <video ref={vB} muted playsInline preload="auto" style={{ opacity }} />
+            <video ref={vA} muted playsInline preload="auto" crossOrigin="anonymous" />
+            <video ref={vB} muted playsInline preload="auto" crossOrigin="anonymous"
+              style={{ opacity, transformOrigin: "50% 50%", transform: xf ? `translate(${xf.tx}%, ${xf.ty}%) scale(${xf.s})` : undefined }} />
             <div className="overlay-tags">
               <span><i style={{ background: pitchColorOnDark(anchorType) }} />{anchorType}</span>
               <span><i style={{ background: pitchColorOnDark(nextType) }} />{nextType}</span>
@@ -330,6 +363,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
             </select>
             <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
             <button type="button" className="ghost" onClick={resync} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
+            <button type="button" className="ghost" onClick={autoAlign} disabled={aligning}
+              title="Line the second clip up with the first using the background (stands, wall, logo, lines), shifting and zooming it. Works best paused before the windup.">Align</button>
+            {xf && <button type="button" className="ghost" onClick={() => { setXf(null); setAlignMsg(null); }}>Undo align</button>}
+            {alignMsg && <span className="align-msg">{alignMsg}</span>}
           </div>
           {[
             { key: "A", type: anchorType, pos: posA, dur: durA, rel: releaseA, onScrub: scrubA },
