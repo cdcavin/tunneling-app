@@ -272,8 +272,9 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const resync = () => {
     pauseBoth();
     pendingResync.current = Number.isFinite(pos) ? pos : -0.6;
-    // Keep the release frames Align matched (until Undo align); otherwise drop hand marks and go back to Trackman's clock.
-    if (!beforeAlign.current) { setManualA(null); setManualB(null); }
+    // Back to the release frames Align matched (until Undo align); otherwise drop hand marks and use Trackman's clock.
+    const m = alignMarks.current;
+    setManualA(m ? m.a : null); setManualB(m ? m.b : null);
     setNudgeMs(0); setLocked(true);
     if (vB.current) vB.current.playbackRate = rate;
     setResyncN((n) => n + 1);
@@ -290,7 +291,8 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const [alignMsg, setAlignMsg] = useState<string | null>(null);
   const [aligning, setAligning] = useState(false);
   const beforeAlign = useRef<{ manualA: number | null; manualB: number | null; nudgeMs: number } | null>(null);
-  useEffect(() => { setXf(null); setAlignMsg(null); beforeAlign.current = null; }, [urlA, urlB]);
+  const alignMarks = useRef<{ a: number; b: number } | null>(null);   // release frames Align matched; Resync returns to them
+  useEffect(() => { setXf(null); setAlignMsg(null); beforeAlign.current = null; alignMarks.current = null; }, [urlA, urlB]);
 
   const frameOf = (v: HTMLVideoElement, w = v.videoWidth, h = v.videoHeight) => {
     const c = document.createElement("canvas"); c.width = w; c.height = h;
@@ -403,6 +405,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       const armDiff = Math.abs(((armAngle(A.kp!, throws) - armAngle(B.kp!, throws) + 540) % 360) - 180);
 
       beforeAlign.current = prev;
+      alignMarks.current = { a: A.t, b: B.t };
       setXf(toXf(b, fit.s, fit.tx, fit.ty));
       setManualA(A.t); setManualB(B.t); setNudgeMs(0); setLocked(true);
       pendingResync.current = 0; setResyncN((n) => n + 1);   // park both on the matched release frames
@@ -415,7 +418,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   };
   const undoAlign = () => {
     setXf(null); setAlignMsg(null);
-    const p = beforeAlign.current; beforeAlign.current = null;
+    const p = beforeAlign.current; beforeAlign.current = null; alignMarks.current = null;
     if (p) { setManualA(p.manualA); setManualB(p.manualB); setNudgeMs(p.nudgeMs); }
   };
   const markA = () => { const a = vA.current; if (a) setManualA(tIn(a)); };
