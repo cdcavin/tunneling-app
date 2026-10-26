@@ -14,15 +14,20 @@ interface Props {
 const MIN_EVENTS = 15;   // his number shows only when the stat itself rests on at least this many events
 // Decision stats on the second pitch: did the hitter read it right? (zone = 17 in wide, 1.5-3.5 ft tall)
 const zoneTakes = (takes: number, ooz: number, chases: number) => takes - (ooz - chases);   // takes on in-zone pitches
-const COLS = [
-  { key: "chase", label: "Chase", better: "high" as const, title: "Swings at pitches outside the zone ÷ pitches outside the zone",
-    his: (o: Outcomes) => r(o.chases, o.outOfZone), hisN: (o: Outcomes) => o.outOfZone, ref: (s: BinCounts) => r(s.chases, s.outOfZone) },
-  { key: "ztake", label: "Zone take", better: "high" as const, title: "Takes on pitches inside the zone (frozen) ÷ pitches inside the zone",
-    his: (o: Outcomes) => r(zoneTakes(o.takes, o.outOfZone, o.chases), o.pitches - o.outOfZone), hisN: (o: Outcomes) => o.pitches - o.outOfZone,
-    ref: (s: BinCounts) => r(zoneTakes(s.takes ?? 0, s.outOfZone ?? 0, s.chases ?? 0), (s.n ?? 0) - (s.outOfZone ?? 0)) },
-  { key: "wrong", label: "Wrong decision", better: "high" as const, title: "Chases plus zone takes ÷ all pitches: how often the hitter's read was wrong",
-    his: (o: Outcomes) => r(o.chases + zoneTakes(o.takes, o.outOfZone, o.chases), o.pitches), hisN: (o: Outcomes) => o.pitches,
-    ref: (s: BinCounts) => r((s.chases ?? 0) + zoneTakes(s.takes ?? 0, s.outOfZone ?? 0, s.chases ?? 0), s.n) },
+const avg2 = (a: number | null, b: number | null) => (a == null || b == null ? null : (a + b) / 2);
+type Col = { key: string; label: string; better: "high" | "low" | null; title: string; unit: "pct" | "mph";
+  his: (o: Outcomes) => number | null; hisN: (o: Outcomes) => number; ref: (s: BinCounts) => number | null };
+const COLS: Col[] = [
+  { key: "chase", label: "Chase", better: "high", unit: "pct", title: "Swings at pitches outside the zone ÷ pitches outside the zone",
+    his: (o) => r(o.chases, o.outOfZone), hisN: (o) => o.outOfZone, ref: (s) => r(s.chases, s.outOfZone) },
+  { key: "zswing", label: "Zone swing", better: null, unit: "pct", title: "Swings at pitches inside the zone ÷ pitches inside the zone",
+    his: (o) => r(o.pitches - o.outOfZone - zoneTakes(o.takes, o.outOfZone, o.chases), o.pitches - o.outOfZone), hisN: (o) => o.pitches - o.outOfZone,
+    ref: (s) => r((s.n ?? 0) - (s.outOfZone ?? 0) - zoneTakes(s.takes ?? 0, s.outOfZone ?? 0, s.chases ?? 0), (s.n ?? 0) - (s.outOfZone ?? 0)) },
+  { key: "wrong", label: "Wrong decision", better: "high", unit: "pct", title: "Average of chase % and zone take % (takes on strikes): how often the read was wrong, not skewed by how many pitches were in or out of the zone",
+    his: (o) => avg2(r(o.chases, o.outOfZone), r(zoneTakes(o.takes, o.outOfZone, o.chases), o.pitches - o.outOfZone)), hisN: (o) => Math.min(o.outOfZone, o.pitches - o.outOfZone),
+    ref: (s) => avg2(r(s.chases, s.outOfZone), r(zoneTakes(s.takes ?? 0, s.outOfZone ?? 0, s.chases ?? 0), (s.n ?? 0) - (s.outOfZone ?? 0))) },
+  { key: "ev", label: "Avg EV", better: "low", unit: "mph", title: "Average exit velo on balls in play, mph",
+    his: (o) => o.ev, hisN: (o) => o.evN, ref: (s) => r(s.evSum, s.evN) },
 ];
 function r(a: number | undefined, b: number | undefined) { return b ? (a ?? 0) / b : null; }
 const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)}%`);
@@ -103,26 +108,27 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           </div>
           {COLS.map((col) => {
             const a = col.ref(g.tunneled), b = col.ref(g.notTunneled);
-            const d = a != null && b != null ? Math.round((a - b) * 100) : null;
-            const tone = d == null || col.better == null || Math.abs(d) < 3 ? "" : (col.better === "high" ? d > 0 : d < 0) ? " good" : " bad";
+            const fmt = (v: number | null) => (v == null ? "—" : col.unit === "mph" ? v.toFixed(1) : pct(v));
+            const d = a != null && b != null ? (col.unit === "mph" ? Math.round((a - b) * 10) / 10 : Math.round((a - b) * 100)) : null;
+            const tone = d == null || col.better == null || Math.abs(d) < (col.unit === "mph" ? 1 : 3) ? "" : (col.better === "high" ? d > 0 : d < 0) ? " good" : " bad";
             const his = (o: Outcomes | null) => {
               if (!o || !showHis) return null;
               const n = col.hisN(o), v = col.his(o);
-              return <small className="tvn-his" title={`His: ${n} to go on`}>his {n >= MIN_EVENTS && v != null ? pct(v) : "–"}</small>;
+              return <small className="tvn-his" title={`His: ${n} to go on`}>his {n >= MIN_EVENTS && v != null ? fmt(v) : "–"}</small>;
             };
             return (
               <div key={col.key} className="tvn-row">
                 <span className="tvn-label" title={col.title}>{col.label}</span>
-                <span className={`tvn-v${here === "t" ? " is-here" : ""}`}>{pct(a)}{his(hisT)}</span>
-                <span className={`tvn-v${here === "n" ? " is-here" : ""}`}>{pct(b)}{his(hisN)}</span>
-                <span className={`tvn-diff${tone}`}>{d == null ? "—" : `${d > 0 ? "+" : ""}${d}`}</span>
+                <span className={`tvn-v${here === "t" ? " is-here" : ""}`}>{fmt(a)}{his(hisT)}</span>
+                <span className={`tvn-v${here === "n" ? " is-here" : ""}`}>{fmt(b)}{his(hisN)}</span>
+                <span className={`tvn-diff${tone}`}>{d == null ? "—" : `${d > 0 ? "+" : ""}${col.unit === "mph" ? d.toFixed(1) : d}`}</span>
               </div>
             );
           })}
           <p className="hint">{poolName}: {g.tunneled.n.toLocaleString()} pairs per group · his: {his?.length ?? 0} pairs{showHis ? "" : " (too few to show)"}</p>
         </div>
       )}
-      <details className="howto"><summary>How to read this</summary><p className="hint">Tunneled = Elite or Good for this combo (tighter at 23.8 ft than 60% of {poolName} pairs). Not tunneled = Below avg or Bad. Back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart, second pitch within 6 in of the zone. All on the second pitch, raw: Chase = swings at pitches outside the zone; Zone take = takes on pitches inside the zone; Wrong decision = chases plus zone takes over all pitches. Zone = 17 in wide, 1.5–3.5 ft. Count, hitter and exact location aren't controlled.</p></details>
+      <details className="howto"><summary>How to read this</summary><p className="hint">Tunneled = Elite or Good for this combo (tighter at 23.8 ft than 60% of {poolName} pairs). Not tunneled = Below avg or Bad. Back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart, second pitch within 6 in of the zone. All on the second pitch, raw: Chase = swings at pitches outside the zone; Zone swing = swings at pitches inside it; Wrong decision = the average of chase % and zone take % (strikes taken), so it isn't skewed by how many pitches were in or out of the zone; Avg EV = exit velo on balls in play. Zone = 17 in wide, 1.5–3.5 ft. Count, hitter and exact location aren't controlled.</p></details>
     </section>
   );
 }
