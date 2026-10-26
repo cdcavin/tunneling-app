@@ -296,51 +296,9 @@ export default function App() {
             </section>
           )}
 
-          <section>
-            <div className="sec-title">Pitches in use</div>
-            {pitcher && <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={setFilters} />}
-            <p className="hint">Every pitch type below is the average of the selected pitches.</p>
-          </section>
-
-          <div className="mode-switch" role="radiogroup" aria-label="Mode">
-            <button type="button" role="radio" aria-checked={!arsenalMode} className={!arsenalMode ? "is-on" : ""} onClick={() => setArsenalMode(false)}>Pair</button>
-            <button type="button" role="radio" aria-checked={arsenalMode} className={arsenalMode ? "is-on" : ""} onClick={() => { setArsenalMode(true); setPair(null); }}>Arsenal mode</button>
-          </div>
-
-          {arsenalMode && (
-            <>
-              <ArsenalPanel rows={arsenalRows} canOptimize={!!lastAimed}
-                onToggle={(t, on) => setArsOff((o) => (on ? o.filter((x) => x !== t) : [...o, t]))}
-                onAnchor={(t) => { setLastType(t); if (next?.type === t) { const other = arsenal.find((p) => p.type !== t); if (other) chooseNextType(other.type); } setPlacing(0); }}
-                onActivate={activate} onMove={moveTo}
-                onResetOne={(t) => setArsLoc((m) => { const n = { ...m }; delete n[t]; return n; })}
-                onOptimizeAll={optimizeAll} onResetAll={() => setArsLoc({})} />
-              <section className="pitch-block" style={{ ["--accent" as string]: (placing === 0 ? last : next) ? pitchColorOnDark((placing === 0 ? last : next)!.type) : "#9aa7ba" }}>
-                <div className="sec-title">Place {(placing === 0 ? last : next)?.type ?? ""}{placing === 0 ? " (anchor)" : ""}</div>
-                <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
-                  {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
-                    <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
-                      {HEAT_METRICS[m].label}
-                    </button>
-                  ))}
-                </div>
-                <ZonePicker label="Where every pitch is placed; shaded by how the active pitch tunnels off the anchor" active={arsenalRows.filter((r) => r.on).findIndex((r) => r.isActive)} onSelect={place}
-                  best={placing === 1 ? bestTight : null} heat={placing === 1 ? heatProps : undefined}
-                  markers={arsenalRows.filter((r) => r.on).map((r) => ({ loc: r.loc, color: pitchColorOnDark(r.pitch.type), name: r.isAnchor ? `anchor ${r.pitch.type}` : r.pitch.type }))} />
-                <p className="hint">Green is better for the active pitch. Click a cell to move it there.</p>
-              </section>
-            </>
-          )}
-
-          {!arsenalMode && (<>
-          <section className="pitch-block" style={{ ["--accent" as string]: last ? pitchColorOnDark(last.type) : "#9aa7ba" }}>
-            <div className="sec-title">Anchor pitch</div>
-            <PitchButtons pitches={arsenal} value={last?.type ?? ""} onChange={pickAnchorType} label="Anchor pitch type" />
-          </section>
-
-          <section className="pitch-block" style={{ ["--accent" as string]: next ? pitchColorOnDark(next.type) : "#9aa7ba" }}>
-            <div className="sec-title">Tunnel pitch</div>
-            <PitchButtons pitches={arsenal} value={next?.type ?? ""} onChange={pickTunnelType} label="Tunnel pitch type" />
+          {pitcher && !arsenalMode && (
+          <section className="pitch-block zone-side" style={{ ["--accent" as string]: next ? pitchColorOnDark(next.type) : "#9aa7ba" }}>
+            <div className="sec-title">Locations</div>
             <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
               {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
@@ -373,6 +331,57 @@ export default function App() {
               <span>“Tight, then far” stays within <b>{maxDecision} in</b> at 23.8 ft</span>
               <input type="range" min={1} max={10} step={0.5} value={maxDecision} onChange={(e) => setMaxDecision(Number(e.target.value))} aria-label="Tight-then-far limit at 23.8 ft, inches" />
             </label>
+          </section>
+          )}
+          {pitcher && arsenalMode && (
+            <>
+              <section className="pitch-block" style={{ ["--accent" as string]: (placing === 0 ? last : next) ? pitchColorOnDark((placing === 0 ? last : next)!.type) : "#9aa7ba" }}>
+                <div className="sec-title">Place {(placing === 0 ? last : next)?.type ?? ""}{placing === 0 ? " (anchor)" : ""}</div>
+                <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
+                  {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
+                    <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
+                      {HEAT_METRICS[m].label}
+                    </button>
+                  ))}
+                </div>
+                <ZonePicker label="Where every pitch is placed; shaded by how the active pitch tunnels off the anchor" active={arsenalRows.filter((r) => r.on).findIndex((r) => r.isActive)} onSelect={place}
+                  best={placing === 1 ? bestTight : null} heat={placing === 1 ? heatProps : undefined}
+                  markers={arsenalRows.filter((r) => r.on).map((r) => ({ loc: r.loc, color: pitchColorOnDark(r.pitch.type), name: r.isAnchor ? `anchor ${r.pitch.type}` : r.pitch.type }))} />
+                <p className="hint">Green is better for the active pitch. Click a cell to move it there.</p>
+              </section>
+            </>
+          )}
+          <section>
+            <div className="sec-title">Pitches in use</div>
+            {pitcher && <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={setFilters} />}
+            <p className="hint">Every pitch type below is the average of the selected pitches.</p>
+          </section>
+
+          <div className="mode-switch" role="radiogroup" aria-label="Mode">
+            <button type="button" role="radio" aria-checked={!arsenalMode} className={!arsenalMode ? "is-on" : ""} onClick={() => setArsenalMode(false)}>Pair</button>
+            <button type="button" role="radio" aria-checked={arsenalMode} className={arsenalMode ? "is-on" : ""} onClick={() => { setArsenalMode(true); setPair(null); }}>Arsenal mode</button>
+          </div>
+
+          {arsenalMode && (
+            <>
+              <ArsenalPanel rows={arsenalRows} canOptimize={!!lastAimed}
+                onToggle={(t, on) => setArsOff((o) => (on ? o.filter((x) => x !== t) : [...o, t]))}
+                onAnchor={(t) => { setLastType(t); if (next?.type === t) { const other = arsenal.find((p) => p.type !== t); if (other) chooseNextType(other.type); } setPlacing(0); }}
+                onActivate={activate} onMove={moveTo}
+                onResetOne={(t) => setArsLoc((m) => { const n = { ...m }; delete n[t]; return n; })}
+                onOptimizeAll={optimizeAll} onResetAll={() => setArsLoc({})} />
+            </>
+          )}
+
+          {!arsenalMode && (<>
+          <section className="pitch-block" style={{ ["--accent" as string]: last ? pitchColorOnDark(last.type) : "#9aa7ba" }}>
+            <div className="sec-title">Anchor pitch</div>
+            <PitchButtons pitches={arsenal} value={last?.type ?? ""} onChange={pickAnchorType} label="Anchor pitch type" />
+          </section>
+
+          <section className="pitch-block" style={{ ["--accent" as string]: next ? pitchColorOnDark(next.type) : "#9aa7ba" }}>
+            <div className="sec-title">Tunnel pitch</div>
+            <PitchButtons pitches={arsenal} value={next?.type ?? ""} onChange={pickTunnelType} label="Tunnel pitch type" />
           </section>
           </>)}
 
