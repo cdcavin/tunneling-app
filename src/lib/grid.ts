@@ -9,13 +9,15 @@ export const ZONE = { halfWidth: 0.83, bottom: 1.5, top: 3.5 };
 
 export interface Loc { side: number; height: number }
 
-export type HeatMetric = "decision" | "plate" | "late";
+export type HeatMetric = "decision" | "late" | "plate";
 
-export const HEAT_METRICS: Record<HeatMetric, { label: string; better: "low" | "high" }> = {
-  decision: { label: "Apart at 23.8 ft", better: "low" },
-  plate: { label: "Apart at the plate", better: "high" },
-  late: { label: "Late separation", better: "high" },
+/** The two ways the grid can be shaded ("plate" is still computed for the charts, but not offered as shading). */
+export const HEAT_METRICS: Record<HeatMetric, { label: string; better: "low" | "high"; help: string }> = {
+  decision: { label: "Tunnel", better: "low", help: "How far apart the two pitches are at 23.8 ft, where the hitter has to decide. Closer is better: green = they look like the same pitch." },
+  late: { label: "Late break", better: "high", help: "How much the two pitches split after 23.8 ft (apart at the plate minus apart at 23.8 ft). More is better: green = they look the same, then end up far apart." },
+  plate: { label: "Apart at the plate", better: "high", help: "How far apart the two pitches end up." },
 };
+export const HEAT_CHOICES: HeatMetric[] = ["decision", "late"];
 
 export interface Cell extends Loc { geo: PairGeometry }
 

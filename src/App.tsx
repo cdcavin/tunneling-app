@@ -3,7 +3,7 @@ import Scene3D, { CAMERA_PRESETS, type CameraPreset } from "./components/Scene3D
 import ZonePicker from "./components/ZonePicker";
 import { MovementPlot, SeparationChart } from "./components/Charts";
 import { aimAt, aimPoint, DECISION_FT, pairGeometry, perturb, PLATE_X, posAtTime, separationCurve, timeAtDist, type ShapeDelta } from "./lib/physics";
-import { HEAT_METRICS, metricValue, nextPitchCells, provisionalBest, tightest, type Cell, type HeatMetric, type Loc } from "./lib/grid";
+import { HEAT_CHOICES, HEAT_METRICS, metricValue, nextPitchCells, provisionalBest, tightest, type Cell, type HeatMetric, type Loc } from "./lib/grid";
 import { suggestShapes, type Suggestion } from "./lib/suggest";
 import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
@@ -300,12 +300,13 @@ export default function App() {
           <section className="pitch-block zone-side" style={{ ["--accent" as string]: next ? pitchColorOnDark(next.type) : "#9aa7ba" }}>
             <div className="sec-title">Locations</div>
             <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
-              {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
-                <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
+              {HEAT_CHOICES.map((m) => (
+                <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)} title={HEAT_METRICS[m].help}>
                   {HEAT_METRICS[m].label}
                 </button>
               ))}
             </div>
+            <p className="hint">{HEAT_METRICS[heatMetric].help}</p>
             <div className="placing" role="radiogroup" aria-label="Which pitch a click places">
               <button type="button" role="radio" aria-checked={placing === 0} className={placing === 0 ? "is-on" : ""} onClick={() => setPlacing(0)}>
                 <i style={{ background: last ? pitchColorOnDark(last.type) : "#9aa7ba" }} />Place anchor
@@ -338,12 +339,13 @@ export default function App() {
               <section className="pitch-block" style={{ ["--accent" as string]: (placing === 0 ? last : next) ? pitchColorOnDark((placing === 0 ? last : next)!.type) : "#9aa7ba" }}>
                 <div className="sec-title">Place {(placing === 0 ? last : next)?.type ?? ""}{placing === 0 ? " (anchor)" : ""}</div>
                 <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
-                  {(Object.keys(HEAT_METRICS) as HeatMetric[]).map((m) => (
-                    <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)}>
+                  {HEAT_CHOICES.map((m) => (
+                    <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)} title={HEAT_METRICS[m].help}>
                       {HEAT_METRICS[m].label}
                     </button>
                   ))}
                 </div>
+                <p className="hint">{HEAT_METRICS[heatMetric].help}</p>
                 <ZonePicker label="Where every pitch is placed; shaded by how the active pitch tunnels off the anchor" active={arsenalRows.filter((r) => r.on).findIndex((r) => r.isActive)} onSelect={place}
                   best={placing === 1 ? bestTight : null} heat={placing === 1 ? heatProps : undefined}
                   markers={arsenalRows.filter((r) => r.on).map((r) => ({ loc: r.loc, color: pitchColorOnDark(r.pitch.type), name: r.isAnchor ? `anchor ${r.pitch.type}` : r.pitch.type }))} />
