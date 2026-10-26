@@ -94,6 +94,16 @@ const tIn = (v: HTMLVideoElement) => v.currentTime - t0(v);
  */
 const TRACKMAN_UTC_LAG = 0.8;
 
+/**
+ * The camera clock is off from Trackman's by a different amount each game. When Align finds the real release, the
+ * difference is saved per game and camera, so every other pitch from that game loads in sync. Kept in this browser.
+ */
+const OFFSETS_KEY = "tunneling.clockOffsets.v1";
+function loadOffsets(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(OFFSETS_KEY) ?? "{}") as Record<string, number>; } catch { return {}; }
+}
+function saveOffsets(o: Record<string, number>) { try { localStorage.setItem(OFFSETS_KEY, JSON.stringify(o)); } catch { /* storage off */ } }
+
 /** Release inside a clip, seconds from its start: Trackman's UTC release time against the stream's wall clock. */
 function releaseFromUtc(utc: string | undefined, startMs: number | null): number | null {
   if (!utc || startMs == null) return null;
@@ -156,8 +166,13 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const urlA = clipA ? streamUrl(clipA.video_url) : null;
   const urlB = clipB ? streamUrl(clipB.video_url) : null;
 
-  const releaseA = manualA ?? releaseFromUtc(selected?.anchor.utc, startA);
-  const releaseB = manualB ?? releaseFromUtc(selected?.next.utc, startB);
+  const [offsets, setOffsets] = useState<Record<string, number>>(loadOffsets);
+  const keyA = selected ? `${selected.anchor.game}|${perspective}` : "", keyB = selected ? `${selected.next.game}|${perspective}` : "";
+  const clockA = releaseFromUtc(selected?.anchor.utc, startA), clockB = releaseFromUtc(selected?.next.utc, startB);
+  const guessA = clockA != null ? clockA + (offsets[keyA] ?? 0) : null;
+  const guessB = clockB != null ? clockB + (offsets[keyB] ?? 0) : null;
+  const releaseA = manualA ?? guessA;
+  const releaseB = manualB ?? guessB;
   const aligned = releaseA != null && releaseB != null;
 
   const onError = useCallback((m: string) => setStatus(m), []);
@@ -382,14 +397,16 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       // the video: step through a window around the clock's guess and take the frame where the throwing hand moves
       // fastest relative to the body. Then match the two arms frame by frame around those.
       const findRelease = async (v: HTMLVideoElement, guess: number, label: string) => {
-        const STEP = 2 / FPS, from = Math.max(0, guess - 0.6), to = guess + 1.4;
+        const STEP = 3 / FPS, from = Math.max(0, guess - 0.5), to = guess + 1.3;
         let near: Box | undefined;
         const pts: { t: number; x: number; y: number }[] = [];
         for (let t = from, i = 0; t <= to + 1e-9; t += STEP, i++) {
           if (stale()) return null;
           setAlignMsg(`Finding release in clip ${label}… ${Math.round(((t - from) / (to - from)) * 100)}%`);
           await seekClip(v, t);
-          const kp = await findPitcher(m, frameOf(v), near);
+          const f = frameOf(v);
+          let kp: Kp[] | null = near ? await m.estimate(f, near) : await findPitcher(m, f);
+          if (kp && trunkScore(kp) < 0.5) kp = null;
           if (!kp) continue;
           near = boxAround(kp, 0.45) ?? near;
           const arm = armOf(throws), w = kp[arm.wri];
@@ -420,8 +437,8 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
         }
         return frames;
       };
-      const relA = (await findRelease(a, releaseA, "A")) ?? releaseA;
-      const relB = (await findRelease(b, releaseB, "B")) ?? releaseB;
+      const relA = (await findRelease(a, guessA ?? releaseA, "A")) ?? releaseA;
+      const relB = (await findRelease(b, guessB ?? releaseB, "B")) ?? releaseB;
       if (stale()) return;
       setAlignMsg("Matching the arms…");
       const fa = await scan(a, relA), fb = await scan(b, relB);
@@ -457,6 +474,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       const armDiff = Math.abs(((armAngle(A.kp!, throws) - armAngle(B.kp!, throws) + 540) % 360) - 180);
 
       if (stale()) return;
+      const learned = { ...offsets };
+      if (clockA != null) learned[keyA] = A.t - clockA;
+      if (clockB != null) learned[keyB] = B.t - clockB;
+      setOffsets(learned); saveOffsets(learned);
       beforeAlign.current = prev;
       alignMarks.current = { a: A.t, b: B.t };
       setXf(toXf(b, fit.s, fit.tx, fit.ty));
@@ -469,25 +490,6 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       setAlignMsg(/security|tainted|cross-origin/i.test(msg) ? "This browser won't let the page read the video frames." : `Align failed: ${msg.slice(0, 120)}`);
     } finally { if (!stale()) setAligning(false); }
   };
-  // Start every pair in sync: once both clips can show frames and Trackman's clock has given a first guess, run Align.
-  const autoRan = useRef<string | null>(null);
-  useEffect(() => {
-    const key = `${urlA}|${urlB}`;
-    if (!urlA || !urlB || !aligned || autoRan.current === key) return;
-    const a = vA.current, b = vB.current; if (!a || !b) return;
-    let cancelled = false;
-    const go = () => {
-      if (cancelled || autoRan.current === key) return;
-      if (a.readyState < 2 || b.readyState < 2) return;
-      autoRan.current = key;
-      void autoAlign();
-    };
-    // Poll: the clips may already be loaded, or mid-seek (not ready) when this runs.
-    const iv = setInterval(go, 250);
-    const stop = setTimeout(() => clearInterval(iv), 30000);
-    return () => { cancelled = true; clearInterval(iv); clearTimeout(stop); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlA, urlB, aligned]);
   const undoAlign = () => {
     setXf(null); setAlignMsg(null);
     const p = beforeAlign.current; beforeAlign.current = null; alignMarks.current = null;
