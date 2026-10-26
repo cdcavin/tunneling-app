@@ -5,7 +5,7 @@ import PitchPicker from "./PitchPicker";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { alignFrames, toGray } from "../lib/align";
-import { armAngle, armShape, bestArmPair, boxAround, fitShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
+import { armAngle, armOf, armShape, bestArmPair, boxAround, fitShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
 
 interface Props {
   pairs: RealPair[];
@@ -269,7 +269,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   // Resync: drop any hand marks, nudge and drift, re-lock B to A, and park both at the same moment
   // relative to their own (UTC-derived) releases. The seek waits for the release values to settle.
   const pendingResync = useRef<number | null>(null);
-  const resync = () => {
+  const quickResync = () => {
     pauseBoth();
     pendingResync.current = Number.isFinite(pos) ? pos : -0.6;
     // Back to the release frames Align matched (until Undo align); otherwise drop hand marks and use Trackman's clock.
@@ -346,6 +346,81 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       if (sc >= 0.5 && standing(kp) && !overlaps(kp) && sc > bestScore) { best = kp; bestScore = sc; }
     }
     return best;
+  };
+
+  /**
+   * Resync: Trackman's clock only puts release within about a second (the camera clock is off by a different amount
+   * each game). So find release in each clip from the video: step through a window around the clock's guess and take
+   * the frame where the throwing hand moves fastest relative to the body, then match the two arms frame by frame
+   * around those. Timing only; Align's position and zoom are left alone. Falls back to the clock if no pitcher is found.
+   */
+  const [syncing, setSyncing] = useState(false);
+  const syncRun = useRef(0);
+  useEffect(() => { syncRun.current++; setSyncing(false); }, [urlA, urlB]);
+  const resync = async () => {
+    const a = vA.current, b = vB.current;
+    const clockA = releaseFromUtc(selected?.anchor.utc, startA), clockB = releaseFromUtc(selected?.next.utc, startB);
+    if (!a || !b || clockA == null || clockB == null || a.readyState < 2 || b.readyState < 2) { quickResync(); return; }
+    const run = ++syncRun.current, stale = () => run !== syncRun.current;
+    const keep = Number.isFinite(pos) ? pos : -0.6;
+    pauseBoth(); setSyncing(true);
+    const fallback = (why: string) => { setAlignMsg(`${why} Synced on Trackman's clock.`); alignMarks.current = null; quickResync(); };
+    try {
+      setAlignMsg("Syncing: loading body tracking…");
+      let m: PoseModel;
+      try { m = await loadPose((msg) => setAlignMsg(`Syncing: ${msg}`)); } catch { fallback("Body tracking didn't load."); return; }
+      const FPS = 30;
+      const findRelease = async (v: HTMLVideoElement, guess: number, label: string) => {
+        const STEP = 2 / FPS, from = Math.max(0, guess - 0.6), to = guess + 1.4;
+        let near: Box | undefined;
+        const pts: { t: number; x: number; y: number }[] = [];
+        for (let t = from; t <= to + 1e-9; t += STEP) {
+          if (stale()) return null;
+          setAlignMsg(`Syncing: finding release in clip ${label}… ${Math.round(((t - from) / (to - from)) * 100)}%`);
+          await seekClip(v, t);
+          const kp = await findPitcher(m, frameOf(v), near);
+          if (!kp) continue;
+          near = boxAround(kp, 0.45) ?? near;
+          const w = kp[armOf(throws).wri];
+          if (w.s < 0.2) continue;
+          const hx = (kp[K.lHip].x + kp[K.rHip].x) / 2, hy = (kp[K.lHip].y + kp[K.rHip].y) / 2;
+          const sx = (kp[K.lSho].x + kp[K.rSho].x) / 2, sy = (kp[K.lSho].y + kp[K.rSho].y) / 2;
+          const torso = Math.hypot(sx - hx, sy - hy) || 1;
+          pts.push({ t, x: (w.x - hx) / torso, y: (w.y - hy) / torso });
+        }
+        let best = -1, bestT: number | null = null;
+        for (let i = 1; i < pts.length; i++) {
+          if (pts[i].t - pts[i - 1].t > 3 * STEP) continue;   // skip gaps where the pitcher wasn't found
+          const sp = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) / (pts[i].t - pts[i - 1].t);
+          if (sp > best) { best = sp; bestT = (pts[i].t + pts[i - 1].t) / 2; }
+        }
+        return { t: bestT, near };
+      };
+      const ra = await findRelease(a, clockA, "A"); if (stale() || !ra) return;
+      const rb = await findRelease(b, clockB, "B"); if (stale() || !rb) return;
+      if (ra.t == null || rb.t == null) { fallback(`Couldn't follow the pitcher's arm in clip ${ra.t == null ? "A" : "B"}.`); return; }
+      // Fine match: the frames within 3 either side where the two throwing arms look most alike.
+      setAlignMsg("Syncing: matching the arms…");
+      const OFFS = [-3, -2, -1, 0, 1, 2, 3];
+      const around = async (v: HTMLVideoElement, c: number, near?: Box) => {
+        const out: { t: number; kp: Kp[] | null }[] = [];
+        for (const k of OFFS) { if (stale()) return out; const t = c + k / FPS; await seekClip(v, t); out.push({ t, kp: await findPitcher(m, frameOf(v), near) }); }
+        return out;
+      };
+      const fa = await around(a, ra.t, ra.near), fb = await around(b, rb.t, rb.near);
+      if (stale()) return;
+      const pick = bestArmPair(fa.map((f) => (f.kp ? armShape(f.kp, throws) : null)), fb.map((f) => (f.kp ? armShape(f.kp, throws) : null)), OFFS, OFFS);
+      const tA = pick.i >= 0 ? fa[pick.i].t : ra.t, tB = pick.j >= 0 ? fb[pick.j].t : rb.t;
+      alignMarks.current = { a: tA, b: tB };
+      setManualA(tA); setManualB(tB); setNudgeMs(0); setLocked(true);
+      if (b) b.playbackRate = rate;
+      pendingResync.current = keep; setResyncN((n) => n + 1);
+      const off = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(2)} s`;
+      setAlignMsg(`Synced on release · Trackman's clock was off ${off(tA - clockA)} in clip A, ${off(tB - clockB)} in clip B`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      fallback(/security|tainted|cross-origin/i.test(msg) ? "This browser won't let the page read the video frames." : `Sync failed (${msg.slice(0, 80)}).`);
+    } finally { if (!stale()) setSyncing(false); }
   };
 
   const autoAlign = async () => {
@@ -425,6 +500,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const markB = () => { const b = vB.current; if (b) setManualB(tIn(b)); };
 
   const perspectives = clipsA.map((c) => c.perspective).filter((p) => clipsB.some((c) => c.perspective === p));
+  const busy = aligning || syncing;
   const fmt = (s: number) => `${s >= 0 ? "+" : "−"}${Math.abs(s * 1000).toFixed(0)} ms`;
 
   return (
@@ -469,16 +545,16 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       {selected && selected.anchor.id !== selected.next.id && urlA && urlB && (
         <>
           <div className="scrub-row">
-            <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
-            <button type="button" className="ghost" onClick={() => step(-33)} aria-label="Back one frame">−1f</button>
-            <button type="button" className="ghost" onClick={() => step(33)} aria-label="Forward one frame">+1f</button>
+            <button type="button" className="play" onClick={toggle} disabled={busy} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
+            <button type="button" className="ghost" onClick={() => step(-33)} disabled={busy} aria-label="Back one frame">−1f</button>
+            <button type="button" className="ghost" onClick={() => step(33)} disabled={busy} aria-label="Forward one frame">+1f</button>
             <span className="clock" title="Time relative to the first pitch's release">{fmt(pos)}</span>
             <select className="speed" aria-label="Video speed" value={rate} onChange={(e) => setRate(Number(e.target.value))}>
               {VIDEO_SPEEDS.map((r) => <option key={r} value={r}>{r}×</option>)}
             </select>
-            <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
-            <button type="button" className="ghost" onClick={resync} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
-            <button type="button" className="ghost" onClick={autoAlign} disabled={aligning}
+            <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} disabled={busy} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
+            <button type="button" className="ghost" onClick={() => void resync()} disabled={busy} title="Find the release in both clips from the video and line the timing up there (clears marks and nudge)">{syncing ? "Syncing…" : "Resync"}</button>
+            <button type="button" className="ghost" onClick={autoAlign} disabled={busy}
               title="Stack the pitcher (and the hitter where possible) and re-sync on the frames where the throwing arms match. First use downloads the body-tracking model.">{aligning ? "Aligning…" : "Align"}</button>
             {(xf || beforeAlign.current) && <button type="button" className="ghost" onClick={undoAlign}>Undo align</button>}
           </div>
@@ -490,7 +566,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
             <div className="scrub-row clip-scrub" key={bar.key}>
               <span className="clip-label"><i style={{ background: pitchColorOnDark(bar.type) }} />{bar.type}</span>
               <div className="scrub-wrap">
-                <input type="range" className="scrub" min={0} max={bar.dur} step={0.001} value={Math.min(bar.dur, Math.max(0, bar.pos))}
+                <input type="range" className="scrub" disabled={busy} min={0} max={bar.dur} step={0.001} value={Math.min(bar.dur, Math.max(0, bar.pos))}
                   onChange={(e) => bar.onScrub(Number(e.target.value))} aria-label={`${bar.type} clip time`} />
                 {bar.rel != null && <i className="release-tick" style={{ left: `${(bar.rel / bar.dur) * 100}%` }} aria-hidden="true" title="Release" />}
               </div>
@@ -499,7 +575,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
           ))}
           <div className="overlay-controls">
             <label className="mini"><span>Blend</span><input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Blend between the two clips" /></label>
-            <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
+            <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" disabled={busy} min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
             {perspectives.length > 1 && (
               <select aria-label="Camera" value={perspective} onChange={(e) => setPerspective(e.target.value)}>
                 {perspectives.map((p) => <option key={p} value={p}>{p}</option>)}
