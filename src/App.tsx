@@ -59,15 +59,6 @@ function Metric({ label, value, unit, note, accent }: { label: string; value: st
   );
 }
 
-function DeltaSlider({ label, unit, value, min, max, step, onChange }: { label: string; unit: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
-  return (
-    <label className="delta">
-      <span className="delta-label">{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={label} />
-      <b>{signed(value, 1)} {unit}</b>
-    </label>
-  );
-}
 
 export default function App() {
   const [data, setData] = useState<IndexFile | null>(null);
@@ -299,6 +290,12 @@ export default function App() {
             {loadingPitcher && <p className="hint">Loading pitches…</p>}
           </section>
 
+          {pitcher && (
+            <section className="mvmt-side">
+              <MovementPlot pitches={arsenal} rows={rows} lastType={last?.type ?? null} nextType={next?.type ?? null} throws={pitcher?.throws} modified={shapedPitch} />
+            </section>
+          )}
+
           <section>
             <div className="sec-title">Pitches in use</div>
             {pitcher && <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={setFilters} />}
@@ -463,38 +460,33 @@ export default function App() {
           </div>
 
           <div className="cards">
+            <section className="card">
+              <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
+            </section>
             <section className="card sandbox">
-              <div className="sec-title">Shape sandbox{next && `: ${next.type}`}</div>
-              <DeltaSlider label="Vert" unit="in" value={delta.ivb} min={-8} max={8} step={0.5} onChange={(v) => setDelta({ ...delta, ivb: v })} />
-              <DeltaSlider label="Horz" unit="in" value={delta.hb} min={-8} max={8} step={0.5} onChange={(v) => setDelta({ ...delta, hb: v })} />
-              <DeltaSlider label="Velo" unit="mph" value={delta.velo} min={-4} max={4} step={0.5} onChange={(v) => setDelta({ ...delta, velo: v })} />
+              <div className="sec-title">Change suggestions{next && `: ${next.type}`}</div>
+              <p className="hint" style={{ marginTop: 0 }}>Small changes to the {next?.type.toLowerCase() ?? "tunnel pitch"}'s shape (vert, horz, velo) that would tunnel better off the anchor.</p>
               <div className="sandbox-row">
-                <button type="button" className="secondary" onClick={() => setDelta(NO_DELTA)} disabled={!shapedPitch}>Reset shape</button>
                 <button type="button" className="primary" onClick={runSuggestions} disabled={!next || !lastAimed}>Suggest changes</button>
+                {shapedPitch && <button type="button" className="secondary" onClick={() => setDelta(NO_DELTA)}>Back to real shape</button>}
               </div>
               {shapedPitch && next && (
-                <p className="hint">Now {shapedPitch.velo.toFixed(1)} mph, {shapedPitch.ivb.toFixed(1)} in vert, {shapedPitch.hb.toFixed(1)} in horz (was {next.velo.toFixed(1)}, {next.ivb.toFixed(1)}, {next.hb.toFixed(1)}).</p>
+                <p className="hint">Showing {shapedPitch.velo.toFixed(1)} mph, {shapedPitch.ivb.toFixed(1)} in vert, {shapedPitch.hb.toFixed(1)} in horz (real: {next.velo.toFixed(1)}, {next.ivb.toFixed(1)}, {next.hb.toFixed(1)}).</p>
               )}
               {suggestions && (
                 <div className="suggest">
                   <p className="hint">As is, at its best spot: <b>{suggestions.current.decisionSep.toFixed(1)} in</b> at 23.8 ft, {suggestions.current.plateSep.toFixed(0)} in at the plate.</p>
                   {suggestions.best.length === 0 && <p className="hint">No small change beats the current shape under the tight-then-far rule.</p>}
-                  {suggestions.best.map((s) => (
-                    <button key={s.label} type="button" className="suggest-row" onClick={() => applySuggestion(s)}>
-                      <span className="suggest-label">{s.label}</span>
-                      <span className="suggest-num"><b>{s.decisionSep.toFixed(1)}</b> in at 23.8</span>
-                      <span className="suggest-num">{s.plateSep.toFixed(0)} in at plate</span>
+                  {suggestions.best.map((sg) => (
+                    <button key={sg.label} type="button" className="suggest-row" onClick={() => applySuggestion(sg)}>
+                      <span className="suggest-label">{sg.label}</span>
+                      <span className="suggest-num"><b>{sg.decisionSep.toFixed(1)}</b> in at 23.8</span>
+                      <span className="suggest-num">{sg.plateSep.toFixed(0)} in at plate</span>
                     </button>
                   ))}
                   <p className="hint">Each one moves the pitch to its own best spot. Click to try it.</p>
                 </div>
               )}
-            </section>
-            <section className="card">
-              <MovementPlot pitches={arsenal} rows={rows} lastType={last?.type ?? null} nextType={next?.type ?? null} throws={pitcher?.throws} modified={shapedPitch} />
-            </section>
-            <section className="card">
-              <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
             </section>
           </div>
         </main>

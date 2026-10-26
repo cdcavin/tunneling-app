@@ -47,46 +47,73 @@ export default function PitcherFinder({ pitchers, value, onChange, onYear }: Pro
   useEffect(() => { if (team && !teams.includes(team)) setTeam(""); }, [teams, team]);
 
   const current = pitchers.find((p) => p.id === value);
-  const listRef = useRef<HTMLDivElement>(null);
-  // Keep the loaded pitcher in view when the list changes.
-  useEffect(() => { listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); }, [value, list]);
-  const step = (d: number) => {
-    const i = list.findIndex((p) => p.id === value);
-    const next = list[Math.min(list.length - 1, Math.max(0, (i < 0 ? -1 : i) + d))];
-    if (next) onChange(next.id);
-  };
+  const [open, setOpen] = useState(false);          // the list shows only while searching
+  const [showFilters, setShowFilters] = useState(false);
+  const [hi, setHi] = useState(0);                   // highlighted row for the arrow keys
+  const boxRef = useRef<HTMLDivElement>(null), listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const close = (e: MouseEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  useEffect(() => { setHi(0); }, [needle, wvuOnly, year, conf, team]);
+  useEffect(() => { listRef.current?.children[hi]?.scrollIntoView({ block: "nearest" }); }, [hi]);
+  const choose = (id: string) => { onChange(id); setOpen(false); setQ(""); };
+  const filtered = !!(year || conf || team);
+  const meta = (p: PitcherSummary) => `${p.throws === "Right" ? "RHP" : "LHP"} · ${p.team === WVU ? "WVU" : teamLabel(p.team ?? "")} · ${seasonSpan(p)}`;
+
   return (
-    <div className="finder">
-      <div className="finder-row">
-        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pitcher or team" aria-label="Search pitchers" />
+    <div className="finder" ref={boxRef}>
+      <div className="finder-bar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+        <input type="search" value={q} placeholder={current ? "Switch pitcher" : "Search pitcher or team"} aria-label="Search pitchers"
+          onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setHi((h) => Math.min(list.length - 1, h + 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
+            else if (e.key === "Enter" && list[hi]) { e.preventDefault(); choose(list[hi].id); }
+            else if (e.key === "Escape") { setOpen(false); (e.target as HTMLInputElement).blur(); }
+          }} />
         <button type="button" className={`wvu-switch${wvuOnly ? " is-on" : ""}`} onClick={() => setWvuOnly((v) => !v)} aria-pressed={wvuOnly} title="Show only WVU pitchers">WVU</button>
+        <button type="button" className={`icon-btn${showFilters || filtered ? " is-on" : ""}`} onClick={() => setShowFilters((v) => !v)} aria-pressed={showFilters} title="Year, conference and team">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8z" /></svg>
+        </button>
       </div>
-      <div className="finder-grid">
-        <select aria-label="Year" value={year} onChange={(e) => { setYear(e.target.value); onYear?.(e.target.value); }}>
-          <option value="">All years</option>
-          {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
-        </select>
-        <select aria-label="Conference" value={conf} onChange={(e) => setConf(e.target.value)} disabled={wvuOnly}>
-          <option value="">All conferences</option>
-          {confs.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select aria-label="Team" value={team} onChange={(e) => setTeam(e.target.value)} disabled={wvuOnly} className="span2">
-          <option value="">All teams{conf ? ` in ${conf}` : ""}</option>
-          {teams.map((t) => <option key={t} value={t}>{teamLabel(t)}</option>)}
-        </select>
-      </div>
-      <div ref={listRef} className="finder-list" role="listbox" aria-label="Pitcher" tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "ArrowDown") { e.preventDefault(); step(1); } else if (e.key === "ArrowUp") { e.preventDefault(); step(-1); } }}>
-        {list.length === 0 && <div className="finder-empty">No pitchers match</div>}
-        {list.map((p) => (
-          <div key={p.id} role="option" aria-selected={p.id === value} className={`finder-item${p.id === value ? " is-on" : ""}`} onClick={() => onChange(p.id)}>
-            <span className="fi-name">{p.name}</span>
-            <span className="fi-meta">{p.throws === "Right" ? "RHP" : "LHP"} · {p.team === WVU ? "WVU" : teamLabel(p.team ?? "")} · {seasonSpan(p)}</span>
-          </div>
-        ))}
-      </div>
-      {current && <p className="hint">{current.n.toLocaleString()} pitches{current.games ? ` in ${current.games} games` : ""} across {seasonsOf(current).join(", ")}. Pick the season under Pitches in use.</p>}
-      {list.length >= 400 && <p className="hint">Showing the first 400. Narrow it down.</p>}
+      {showFilters && (
+        <div className="finder-grid">
+          <select aria-label="Year" value={year} onChange={(e) => { setYear(e.target.value); onYear?.(e.target.value); }}>
+            <option value="">All years</option>
+            {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+          </select>
+          <select aria-label="Conference" value={conf} onChange={(e) => setConf(e.target.value)} disabled={wvuOnly}>
+            <option value="">All conferences</option>
+            {confs.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select aria-label="Team" value={team} onChange={(e) => setTeam(e.target.value)} disabled={wvuOnly} className="span2">
+            <option value="">All teams{conf ? ` in ${conf}` : ""}</option>
+            {teams.map((t) => <option key={t} value={t}>{teamLabel(t)}</option>)}
+          </select>
+        </div>
+      )}
+      {open ? (
+        <div ref={listRef} className="finder-list" role="listbox" aria-label="Pitcher">
+          {list.length === 0 && <div className="finder-empty">No pitchers match</div>}
+          {list.map((p, i) => (
+            <div key={p.id} role="option" aria-selected={p.id === value} className={`finder-item${p.id === value ? " is-on" : ""}${i === hi ? " is-hi" : ""}`}
+              onMouseEnter={() => setHi(i)} onMouseDown={(e) => { e.preventDefault(); choose(p.id); }}>
+              <span className="fi-name">{p.name}</span>
+              <span className="fi-meta">{meta(p)}</span>
+            </div>
+          ))}
+          {list.length >= 400 && <div className="finder-empty">Showing the first 400. Narrow it down.</div>}
+        </div>
+      ) : current ? (
+        <button type="button" className="finder-current" onClick={() => setOpen(true)} title="Switch pitcher">
+          <span className="fc-name">{current.name}</span>
+          <span className="fc-meta">{meta(current)}</span>
+          <span className="fc-meta">{current.n.toLocaleString()} pitches{current.games ? ` · ${current.games} games` : ""}</span>
+        </button>
+      ) : null}
     </div>
   );
 }
