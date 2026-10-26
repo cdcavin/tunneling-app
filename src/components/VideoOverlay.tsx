@@ -5,7 +5,7 @@ import PitchPicker from "./PitchPicker";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { alignFrames, toGray } from "../lib/align";
-import { armAngle, armShape, bestArmPair, boxAround, fitShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
+import { armAngle, armOf, armShape, bestArmPair, boxAround, fitShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
 
 interface Props {
   pairs: RealPair[];
@@ -362,7 +362,11 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     return best;
   };
 
+  const alignRun = useRef(0);
+  useEffect(() => { alignRun.current++; }, [urlA, urlB]);
   const autoAlign = async () => {
+    const run = ++alignRun.current;
+    const stale = () => run !== alignRun.current;
     const a = vA.current, b = vB.current;
     if (!a || !b || a.readyState < 2 || b.readyState < 2) { setAlignMsg("Clips still loading."); return; }
     pauseBoth(); setAligning(true);
@@ -374,6 +378,34 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       try { m = await loadPose(setAlignMsg); } catch { backgroundAlign("Body tracking didn't load."); return; }
       setAlignMsg("Finding the pitcher…");
       const FPS = 30, OFFS = m.device === "webgpu" ? [-3, -2, -1, 0, 1, 2, 3] : [-1, 0, 1];
+      // Trackman's clock only puts release within about a second (the camera clocks differ by game), so find it in
+      // the video: step through a window around the clock's guess and take the frame where the throwing hand moves
+      // fastest relative to the body. Then match the two arms frame by frame around those.
+      const findRelease = async (v: HTMLVideoElement, guess: number, label: string) => {
+        const STEP = 2 / FPS, from = Math.max(0, guess - 0.6), to = guess + 1.4;
+        let near: Box | undefined;
+        const pts: { t: number; x: number; y: number }[] = [];
+        for (let t = from, i = 0; t <= to + 1e-9; t += STEP, i++) {
+          if (stale()) return null;
+          setAlignMsg(`Finding release in clip ${label}… ${Math.round(((t - from) / (to - from)) * 100)}%`);
+          await seekClip(v, t);
+          const kp = await findPitcher(m, frameOf(v), near);
+          if (!kp) continue;
+          near = boxAround(kp, 0.45) ?? near;
+          const arm = armOf(throws), w = kp[arm.wri];
+          if (w.s < 0.2) continue;
+          const hx = (kp[K.lHip].x + kp[K.rHip].x) / 2, hy = (kp[K.lHip].y + kp[K.rHip].y) / 2;
+          const sx = (kp[K.lSho].x + kp[K.rSho].x) / 2, sy = (kp[K.lSho].y + kp[K.rSho].y) / 2;
+          const torso = Math.hypot(sx - hx, sy - hy) || 1;
+          pts.push({ t, x: (w.x - hx) / torso, y: (w.y - hy) / torso });
+        }
+        let best = -1, bestT = guess;
+        for (let i = 1; i < pts.length; i++) {
+          const sp = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) / (pts[i].t - pts[i - 1].t);
+          if (sp > best) { best = sp; bestT = (pts[i].t + pts[i - 1].t) / 2; }
+        }
+        return best > 0 ? bestT : null;
+      };
       const scan = async (v: HTMLVideoElement, rel: number) => {
         await seekClip(v, rel);
         const base = await findPitcher(m, frameOf(v));
@@ -381,13 +413,19 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
         const near = boxAround(base, 0.45)!;
         const frames: { t: number; kp: Kp[] | null }[] = [];
         for (const k of OFFS) {
+          if (stale()) return null;
           const t = rel + k / FPS;
           await seekClip(v, t);
           frames.push({ t, kp: await findPitcher(m, frameOf(v), near) });
         }
         return frames;
       };
-      const fa = await scan(a, releaseA), fb = await scan(b, releaseB);
+      const relA = (await findRelease(a, releaseA, "A")) ?? releaseA;
+      const relB = (await findRelease(b, releaseB, "B")) ?? releaseB;
+      if (stale()) return;
+      setAlignMsg("Matching the arms…");
+      const fa = await scan(a, relA), fb = await scan(b, relB);
+      if (stale()) return;
       if (!fa || !fb) { backgroundAlign(`Couldn't find the pitcher in clip ${!fa ? "A" : "B"}.`); return; }
       const pick = bestArmPair(fa.map((f) => (f.kp ? armShape(f.kp, throws) : null)), fb.map((f) => (f.kp ? armShape(f.kp, throws) : null)), OFFS, OFFS);
       if (pick.i < 0) { backgroundAlign("Couldn't see the pitcher's arm at release."); return; }
@@ -418,18 +456,37 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       const pitcherErr = err(A.kp!, B.kp!, P), hitterErr = withHitter ? err(hA!, hB!, H) : NaN;
       const armDiff = Math.abs(((armAngle(A.kp!, throws) - armAngle(B.kp!, throws) + 540) % 360) - 180);
 
+      if (stale()) return;
       beforeAlign.current = prev;
       alignMarks.current = { a: A.t, b: B.t };
       setXf(toXf(b, fit.s, fit.tx, fit.ty));
       setManualA(A.t); setManualB(B.t); setNudgeMs(0); setLocked(true);
-      pendingResync.current = 0; setResyncN((n) => n + 1);   // park both on the matched release frames
+      pendingResync.current = -0.6; setResyncN((n) => n + 1);   // park both just before the matched release frames, ready to play
       setAlignMsg(`Pitcher stacked (within ${Math.round(pitcherErr)} px) · arm ${Math.round(armDiff)}° apart` +
         (withHitter ? ` · hitter within ${Math.round(hitterErr)} px` : " · hitter not found") + ` · zoom ${Math.round(fit.s * 100)}%`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setAlignMsg(/security|tainted|cross-origin/i.test(msg) ? "This browser won't let the page read the video frames." : `Align failed: ${msg.slice(0, 120)}`);
-    } finally { setAligning(false); }
+    } finally { if (!stale()) setAligning(false); }
   };
+  // Start every pair in sync: once both clips can show frames and Trackman's clock has given a first guess, run Align.
+  const autoRan = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${urlA}|${urlB}`;
+    if (!urlA || !urlB || !aligned || autoRan.current === key) return;
+    const a = vA.current, b = vB.current; if (!a || !b) return;
+    let cancelled = false;
+    const go = () => {
+      if (cancelled || autoRan.current === key) return;
+      if (a.readyState < 2 || b.readyState < 2) return;
+      autoRan.current = key;
+      void autoAlign();
+    };
+    a.addEventListener("loadeddata", go); b.addEventListener("loadeddata", go);
+    const t = setTimeout(go, 300);
+    return () => { cancelled = true; clearTimeout(t); a.removeEventListener("loadeddata", go); b.removeEventListener("loadeddata", go); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlA, urlB, aligned]);
   const undoAlign = () => {
     setXf(null); setAlignMsg(null);
     const p = beforeAlign.current; beforeAlign.current = null; alignMarks.current = null;
