@@ -5,7 +5,7 @@ import PitchPicker from "./PitchPicker";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { alignFrames, toGray } from "../lib/align";
-import { armAngle, armOf, armShape, bestArmPair, boxAround, fitShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
+import { armAngle, armShape, bestArmPair, boxAround, fitShift, K, loadPose, standing, trunkScore, type Box, type Kp, type PoseModel } from "../lib/pose";
 
 interface Props {
   pairs: RealPair[];
@@ -94,17 +94,6 @@ const tIn = (v: HTMLVideoElement) => v.currentTime - t0(v);
  */
 const TRACKMAN_UTC_LAG = 0.8;
 
-/**
- * The camera clock is off from Trackman's by a different amount each game. When Align finds the real release, the
- * difference is saved per game and camera on the server (shared by everyone) and cached in this browser, so every
- * other pitch from that game loads in sync for every user.
- */
-const OFFSETS_KEY = "tunneling.clockOffsets.v1";
-function loadOffsets(): Record<string, number> {
-  try { return JSON.parse(localStorage.getItem(OFFSETS_KEY) ?? "{}") as Record<string, number>; } catch { return {}; }
-}
-function saveOffsets(o: Record<string, number>) { try { localStorage.setItem(OFFSETS_KEY, JSON.stringify(o)); } catch { /* storage off */ } }
-
 /** Release inside a clip, seconds from its start: Trackman's UTC release time against the stream's wall clock. */
 function releaseFromUtc(utc: string | undefined, startMs: number | null): number | null {
   if (!utc || startMs == null) return null;
@@ -167,18 +156,8 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const urlA = clipA ? streamUrl(clipA.video_url) : null;
   const urlB = clipB ? streamUrl(clipB.video_url) : null;
 
-  const [offsets, setOffsets] = useState<Record<string, number>>(loadOffsets);
-  useEffect(() => {
-    fetch("/api/clock-offsets").then((r) => (r.ok ? r.json() : {})).then((srv: Record<string, number>) => {
-      setOffsets((cur) => { const m = { ...cur, ...srv }; saveOffsets(m); return m; });
-    }).catch(() => { /* offline: the local copy still works */ });
-  }, []);
-  const keyA = selected ? `${selected.anchor.game}|${perspective}` : "", keyB = selected ? `${selected.next.game}|${perspective}` : "";
-  const clockA = releaseFromUtc(selected?.anchor.utc, startA), clockB = releaseFromUtc(selected?.next.utc, startB);
-  const guessA = clockA != null ? clockA + (offsets[keyA] ?? 0) : null;
-  const guessB = clockB != null ? clockB + (offsets[keyB] ?? 0) : null;
-  const releaseA = manualA ?? guessA;
-  const releaseB = manualB ?? guessB;
+  const releaseA = manualA ?? releaseFromUtc(selected?.anchor.utc, startA);
+  const releaseB = manualB ?? releaseFromUtc(selected?.next.utc, startB);
   const aligned = releaseA != null && releaseB != null;
 
   const onError = useCallback((m: string) => setStatus(m), []);
@@ -191,7 +170,6 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
 
   // B follows A so both sit at the same time relative to their own release (plus the nudge).
   const playedAt = useRef(0);   // when play() was last called; drift seeks are held off right after it
-  const lastKick = useRef(0);   // last hard seek / restart of B while playing
   const sync = useCallback((tolerance = 0.02) => {
     const a = vA.current, b = vB.current; if (!a || !b || !locked) return;
     const rel = tIn(a) - (releaseA ?? 0);
@@ -230,19 +208,11 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       onFlightTime(drive ? Math.max(0, rel) : null);
       // While playing, keep B locked to A by steering its playback rate (no seeks, so nothing stutters or
       // aborts). Only a big drift, e.g. after a stall, gets a hard seek.
-      const now = performance.now();
-      if (b && !a.paused && locked) {
+      if (b && !a.paused && !b.paused && locked) {
         const want = t0(b) + Math.max(0, (releaseB ?? 0) + rel + nudgeMs / 1000);
-        const end = Number.isFinite(b.duration) ? b.duration - 0.05 : Infinity;
-        if (b.paused) {
-          // A is playing but B stopped (a refused play(), or a stall): put B on A's frame and start it again, once a second at most.
-          if (want < end && now - lastKick.current > 1000) { lastKick.current = now; b.currentTime = Math.min(want, end); b.play().catch(() => {}); }
-        } else if (!b.seeking) {
-          const drift = b.currentTime - want;            // + = B is ahead
-          // Big drift (after a stall): one hard seek, then leave it alone while it lands. Seeking every frame never lets B draw.
-          if (Math.abs(drift) > 0.4 && now - playedAt.current > 600 && now - lastKick.current > 1000) { lastKick.current = now; b.currentTime = want; }
-          else b.playbackRate = rate * Math.max(0.5, Math.min(1.5, 1 - drift * 2.5));
-        }
+        const drift = b.currentTime - want;            // + = B is ahead
+        if (Math.abs(drift) > 0.4 && performance.now() - playedAt.current > 600) b.currentTime = want;
+        else b.playbackRate = rate * Math.max(0.5, Math.min(1.5, 1 - drift * 2.5));
       } else if (b && b.playbackRate !== rate) b.playbackRate = rate;
       raf = requestAnimationFrame(tick);
     };
@@ -290,16 +260,11 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   };
   const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
   const scrubA = (t: number) => { const a = vA.current; if (!a) return; pauseBoth(); a.currentTime = t0(a) + t; sync(); };
-  // Locked: either scrubber moves both. Unlocked: each moves its own clip; locking again keeps the new offset.
+  // Scrubbing B while locked re-aligns it: wherever B is parked now is taken as the frame that matches A's current frame.
   const scrubB = (t: number) => {
     const a = vA.current, b = vB.current; if (!b) return; pauseBoth();
-    if (locked && a) { a.currentTime = t0(a) + Math.max(0, (releaseA ?? 0) + (t - (releaseB ?? 0) - nudgeMs / 1000)); sync(); return; }
     b.currentTime = t0(b) + t;
-  };
-  const setLock = (on: boolean) => {
-    const a = vA.current, b = vB.current;
-    if (on && a && b && releaseA != null) { setNudgeMs(0); setManualB(tIn(b) - (tIn(a) - releaseA)); }
-    setLocked(on);
+    if (locked && a && releaseA != null) { setNudgeMs(0); setManualB(t - (tIn(a) - releaseA)); }
   };
   // Resync: drop any hand marks, nudge and drift, re-lock B to A, and park both at the same moment
   // relative to their own (UTC-derived) releases. The seek waits for the release values to settle.
@@ -383,11 +348,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     return best;
   };
 
-  const alignRun = useRef(0);
-  useEffect(() => { alignRun.current++; }, [urlA, urlB]);
   const autoAlign = async () => {
-    const run = ++alignRun.current;
-    const stale = () => run !== alignRun.current;
     const a = vA.current, b = vB.current;
     if (!a || !b || a.readyState < 2 || b.readyState < 2) { setAlignMsg("Clips still loading."); return; }
     pauseBoth(); setAligning(true);
@@ -399,36 +360,6 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       try { m = await loadPose(setAlignMsg); } catch { backgroundAlign("Body tracking didn't load."); return; }
       setAlignMsg("Finding the pitcher…");
       const FPS = 30, OFFS = m.device === "webgpu" ? [-3, -2, -1, 0, 1, 2, 3] : [-1, 0, 1];
-      // Trackman's clock only puts release within about a second (the camera clocks differ by game), so find it in
-      // the video: step through a window around the clock's guess and take the frame where the throwing hand moves
-      // fastest relative to the body. Then match the two arms frame by frame around those.
-      const findRelease = async (v: HTMLVideoElement, guess: number, label: string) => {
-        const STEP = 3 / FPS, from = Math.max(0, guess - 0.5), to = guess + 1.3;
-        let near: Box | undefined;
-        const pts: { t: number; x: number; y: number }[] = [];
-        for (let t = from, i = 0; t <= to + 1e-9; t += STEP, i++) {
-          if (stale()) return null;
-          setAlignMsg(`Finding release in clip ${label}… ${Math.round(((t - from) / (to - from)) * 100)}%`);
-          await seekClip(v, t);
-          const f = frameOf(v);
-          let kp: Kp[] | null = near ? await m.estimate(f, near) : await findPitcher(m, f);
-          if (kp && trunkScore(kp) < 0.5) kp = null;
-          if (!kp) continue;
-          near = boxAround(kp, 0.45) ?? near;
-          const arm = armOf(throws), w = kp[arm.wri];
-          if (w.s < 0.2) continue;
-          const hx = (kp[K.lHip].x + kp[K.rHip].x) / 2, hy = (kp[K.lHip].y + kp[K.rHip].y) / 2;
-          const sx = (kp[K.lSho].x + kp[K.rSho].x) / 2, sy = (kp[K.lSho].y + kp[K.rSho].y) / 2;
-          const torso = Math.hypot(sx - hx, sy - hy) || 1;
-          pts.push({ t, x: (w.x - hx) / torso, y: (w.y - hy) / torso });
-        }
-        let best = -1, bestT = guess;
-        for (let i = 1; i < pts.length; i++) {
-          const sp = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) / (pts[i].t - pts[i - 1].t);
-          if (sp > best) { best = sp; bestT = (pts[i].t + pts[i - 1].t) / 2; }
-        }
-        return best > 0 ? bestT : null;
-      };
       const scan = async (v: HTMLVideoElement, rel: number) => {
         await seekClip(v, rel);
         const base = await findPitcher(m, frameOf(v));
@@ -436,19 +367,13 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
         const near = boxAround(base, 0.45)!;
         const frames: { t: number; kp: Kp[] | null }[] = [];
         for (const k of OFFS) {
-          if (stale()) return null;
           const t = rel + k / FPS;
           await seekClip(v, t);
           frames.push({ t, kp: await findPitcher(m, frameOf(v), near) });
         }
         return frames;
       };
-      const relA = (await findRelease(a, guessA ?? releaseA, "A")) ?? releaseA;
-      const relB = (await findRelease(b, guessB ?? releaseB, "B")) ?? releaseB;
-      if (stale()) return;
-      setAlignMsg("Matching the arms…");
-      const fa = await scan(a, relA), fb = await scan(b, relB);
-      if (stale()) return;
+      const fa = await scan(a, releaseA), fb = await scan(b, releaseB);
       if (!fa || !fb) { backgroundAlign(`Couldn't find the pitcher in clip ${!fa ? "A" : "B"}.`); return; }
       const pick = bestArmPair(fa.map((f) => (f.kp ? armShape(f.kp, throws) : null)), fb.map((f) => (f.kp ? armShape(f.kp, throws) : null)), OFFS, OFFS);
       if (pick.i < 0) { backgroundAlign("Couldn't see the pitcher's arm at release."); return; }
@@ -479,26 +404,17 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       const pitcherErr = err(A.kp!, B.kp!, P), hitterErr = withHitter ? err(hA!, hB!, H) : NaN;
       const armDiff = Math.abs(((armAngle(A.kp!, throws) - armAngle(B.kp!, throws) + 540) % 360) - 180);
 
-      if (stale()) return;
-      const learned = { ...offsets };
-      if (clockA != null) learned[keyA] = A.t - clockA;
-      if (clockB != null) learned[keyB] = B.t - clockB;
-      setOffsets(learned); saveOffsets(learned);
-      const mine: Record<string, number> = {};
-      if (clockA != null) mine[keyA] = learned[keyA];
-      if (clockB != null) mine[keyB] = learned[keyB];
-      fetch("/api/clock-offsets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ offsets: mine }) }).catch(() => {});
       beforeAlign.current = prev;
       alignMarks.current = { a: A.t, b: B.t };
       setXf(toXf(b, fit.s, fit.tx, fit.ty));
       setManualA(A.t); setManualB(B.t); setNudgeMs(0); setLocked(true);
-      pendingResync.current = -0.6; setResyncN((n) => n + 1);   // park both just before the matched release frames, ready to play
+      pendingResync.current = 0; setResyncN((n) => n + 1);   // park both on the matched release frames
       setAlignMsg(`Pitcher stacked (within ${Math.round(pitcherErr)} px) · arm ${Math.round(armDiff)}° apart` +
         (withHitter ? ` · hitter within ${Math.round(hitterErr)} px` : " · hitter not found") + ` · zoom ${Math.round(fit.s * 100)}%`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setAlignMsg(/security|tainted|cross-origin/i.test(msg) ? "This browser won't let the page read the video frames." : `Align failed: ${msg.slice(0, 120)}`);
-    } finally { if (!stale()) setAligning(false); }
+    } finally { setAligning(false); }
   };
   const undoAlign = () => {
     setXf(null); setAlignMsg(null);
@@ -553,15 +469,15 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       {selected && selected.anchor.id !== selected.next.id && urlA && urlB && (
         <>
           <div className="scrub-row">
-            <button type="button" className="play" onClick={toggle} disabled={aligning} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
-            <button type="button" className="ghost" onClick={() => step(-33)} disabled={aligning} aria-label="Back one frame">−1f</button>
-            <button type="button" className="ghost" onClick={() => step(33)} disabled={aligning} aria-label="Forward one frame">+1f</button>
+            <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
+            <button type="button" className="ghost" onClick={() => step(-33)} aria-label="Back one frame">−1f</button>
+            <button type="button" className="ghost" onClick={() => step(33)} aria-label="Forward one frame">+1f</button>
             <span className="clock" title="Time relative to the first pitch's release">{fmt(pos)}</span>
             <select className="speed" aria-label="Video speed" value={rate} onChange={(e) => setRate(Number(e.target.value))}>
               {VIDEO_SPEEDS.map((r) => <option key={r} value={r}>{r}×</option>)}
             </select>
-            <label className="hud-check" title="Locked: both clips move together. Unlock to slide one clip by itself; lock again to keep that offset."><input type="checkbox" checked={locked} disabled={aligning} onChange={(e) => setLock(e.target.checked)} />Locked</label>
-            <button type="button" className="ghost" onClick={resync} disabled={aligning} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
+            <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
+            <button type="button" className="ghost" onClick={resync} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
             <button type="button" className="ghost" onClick={autoAlign} disabled={aligning}
               title="Stack the pitcher (and the hitter where possible) and re-sync on the frames where the throwing arms match. First use downloads the body-tracking model.">{aligning ? "Aligning…" : "Align"}</button>
             {(xf || beforeAlign.current) && <button type="button" className="ghost" onClick={undoAlign}>Undo align</button>}
@@ -574,7 +490,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
             <div className="scrub-row clip-scrub" key={bar.key}>
               <span className="clip-label"><i style={{ background: pitchColorOnDark(bar.type) }} />{bar.type}</span>
               <div className="scrub-wrap">
-                <input type="range" className="scrub" disabled={aligning} min={0} max={bar.dur} step={0.001} value={Math.min(bar.dur, Math.max(0, bar.pos))}
+                <input type="range" className="scrub" min={0} max={bar.dur} step={0.001} value={Math.min(bar.dur, Math.max(0, bar.pos))}
                   onChange={(e) => bar.onScrub(Number(e.target.value))} aria-label={`${bar.type} clip time`} />
                 {bar.rel != null && <i className="release-tick" style={{ left: `${(bar.rel / bar.dur) * 100}%` }} aria-hidden="true" title="Release" />}
               </div>
@@ -583,7 +499,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
           ))}
           <div className="overlay-controls">
             <label className="mini"><span>Blend</span><input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Blend between the two clips" /></label>
-            <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" disabled={aligning} min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
+            <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
             {perspectives.length > 1 && (
               <select aria-label="Camera" value={perspective} onChange={(e) => setPerspective(e.target.value)}>
                 {perspectives.map((p) => <option key={p} value={p}>{p}</option>)}
