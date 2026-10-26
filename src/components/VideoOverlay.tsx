@@ -170,6 +170,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
 
   // B follows A so both sit at the same time relative to their own release (plus the nudge).
   const playedAt = useRef(0);   // when play() was last called; drift seeks are held off right after it
+  const lastKick = useRef(0);   // last hard seek / restart of B while playing
   const sync = useCallback((tolerance = 0.02) => {
     const a = vA.current, b = vB.current; if (!a || !b || !locked) return;
     const rel = tIn(a) - (releaseA ?? 0);
@@ -208,11 +209,19 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       onFlightTime(drive ? Math.max(0, rel) : null);
       // While playing, keep B locked to A by steering its playback rate (no seeks, so nothing stutters or
       // aborts). Only a big drift, e.g. after a stall, gets a hard seek.
-      if (b && !a.paused && !b.paused && locked) {
+      const now = performance.now();
+      if (b && !a.paused && locked) {
         const want = t0(b) + Math.max(0, (releaseB ?? 0) + rel + nudgeMs / 1000);
-        const drift = b.currentTime - want;            // + = B is ahead
-        if (Math.abs(drift) > 0.4 && performance.now() - playedAt.current > 600) b.currentTime = want;
-        else b.playbackRate = rate * Math.max(0.5, Math.min(1.5, 1 - drift * 2.5));
+        const end = Number.isFinite(b.duration) ? b.duration - 0.05 : Infinity;
+        if (b.paused) {
+          // A is playing but B stopped (a refused play(), or a stall): put B on A's frame and start it again, once a second at most.
+          if (want < end && now - lastKick.current > 1000) { lastKick.current = now; b.currentTime = Math.min(want, end); b.play().catch(() => {}); }
+        } else if (!b.seeking) {
+          const drift = b.currentTime - want;            // + = B is ahead
+          // Big drift (after a stall): one hard seek, then leave it alone while it lands. Seeking every frame never lets B draw.
+          if (Math.abs(drift) > 0.4 && now - playedAt.current > 600 && now - lastKick.current > 1000) { lastKick.current = now; b.currentTime = want; }
+          else b.playbackRate = rate * Math.max(0.5, Math.min(1.5, 1 - drift * 2.5));
+        }
       } else if (b && b.playbackRate !== rate) b.playbackRate = rate;
       raf = requestAnimationFrame(tick);
     };
@@ -260,11 +269,16 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   };
   const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
   const scrubA = (t: number) => { const a = vA.current; if (!a) return; pauseBoth(); a.currentTime = t0(a) + t; sync(); };
-  // Scrubbing B while locked re-aligns it: wherever B is parked now is taken as the frame that matches A's current frame.
+  // Locked: either scrubber moves both. Unlocked: each moves its own clip; locking again keeps the new offset.
   const scrubB = (t: number) => {
     const a = vA.current, b = vB.current; if (!b) return; pauseBoth();
+    if (locked && a) { a.currentTime = t0(a) + Math.max(0, (releaseA ?? 0) + (t - (releaseB ?? 0) - nudgeMs / 1000)); sync(); return; }
     b.currentTime = t0(b) + t;
-    if (locked && a && releaseA != null) { setNudgeMs(0); setManualB(t - (tIn(a) - releaseA)); }
+  };
+  const setLock = (on: boolean) => {
+    const a = vA.current, b = vB.current;
+    if (on && a && b && releaseA != null) { setNudgeMs(0); setManualB(tIn(b) - (tIn(a) - releaseA)); }
+    setLocked(on);
   };
   // Resync: drop any hand marks, nudge and drift, re-lock B to A, and park both at the same moment
   // relative to their own (UTC-derived) releases. The seek waits for the release values to settle.
@@ -469,15 +483,15 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       {selected && selected.anchor.id !== selected.next.id && urlA && urlB && (
         <>
           <div className="scrub-row">
-            <button type="button" className="play" onClick={toggle} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
-            <button type="button" className="ghost" onClick={() => step(-33)} aria-label="Back one frame">−1f</button>
-            <button type="button" className="ghost" onClick={() => step(33)} aria-label="Forward one frame">+1f</button>
+            <button type="button" className="play" onClick={toggle} disabled={aligning} aria-label={playing ? "Pause" : "Play both"}>{playing ? "❚❚" : "▶"}</button>
+            <button type="button" className="ghost" onClick={() => step(-33)} disabled={aligning} aria-label="Back one frame">−1f</button>
+            <button type="button" className="ghost" onClick={() => step(33)} disabled={aligning} aria-label="Forward one frame">+1f</button>
             <span className="clock" title="Time relative to the first pitch's release">{fmt(pos)}</span>
             <select className="speed" aria-label="Video speed" value={rate} onChange={(e) => setRate(Number(e.target.value))}>
               {VIDEO_SPEEDS.map((r) => <option key={r} value={r}>{r}×</option>)}
             </select>
-            <label className="hud-check" title="Scrubbing the first clip moves both. Scrubbing the second re-aligns it."><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />Locked</label>
-            <button type="button" className="ghost" onClick={resync} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
+            <label className="hud-check" title="Locked: both clips move together. Unlock to slide one clip by itself; lock again to keep that offset."><input type="checkbox" checked={locked} disabled={aligning} onChange={(e) => setLock(e.target.checked)} />Locked</label>
+            <button type="button" className="ghost" onClick={resync} disabled={aligning} title="Put both clips back on the same release-aligned frame (clears marks and nudge)">Resync</button>
             <button type="button" className="ghost" onClick={autoAlign} disabled={aligning}
               title="Stack the pitcher (and the hitter where possible) and re-sync on the frames where the throwing arms match. First use downloads the body-tracking model.">{aligning ? "Aligning…" : "Align"}</button>
             {(xf || beforeAlign.current) && <button type="button" className="ghost" onClick={undoAlign}>Undo align</button>}
@@ -490,7 +504,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
             <div className="scrub-row clip-scrub" key={bar.key}>
               <span className="clip-label"><i style={{ background: pitchColorOnDark(bar.type) }} />{bar.type}</span>
               <div className="scrub-wrap">
-                <input type="range" className="scrub" min={0} max={bar.dur} step={0.001} value={Math.min(bar.dur, Math.max(0, bar.pos))}
+                <input type="range" className="scrub" disabled={aligning} min={0} max={bar.dur} step={0.001} value={Math.min(bar.dur, Math.max(0, bar.pos))}
                   onChange={(e) => bar.onScrub(Number(e.target.value))} aria-label={`${bar.type} clip time`} />
                 {bar.rel != null && <i className="release-tick" style={{ left: `${(bar.rel / bar.dur) * 100}%` }} aria-hidden="true" title="Release" />}
               </div>
@@ -499,7 +513,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
           ))}
           <div className="overlay-controls">
             <label className="mini"><span>Blend</span><input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Blend between the two clips" /></label>
-            <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
+            <label className="mini"><span>Nudge {nudgeMs >= 0 ? "+" : ""}{nudgeMs} ms</span><input type="range" disabled={aligning} min={-500} max={500} step={10} value={nudgeMs} onChange={(e) => setNudgeMs(Number(e.target.value))} aria-label="Fine time adjustment of the second clip" /></label>
             {perspectives.length > 1 && (
               <select aria-label="Camera" value={perspective} onChange={(e) => setPerspective(e.target.value)}>
                 {perspectives.map((p) => <option key={p} value={p}>{p}</option>)}
