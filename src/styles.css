@@ -403,7 +403,7 @@ button.link:hover { text-decoration: underline; }
   .hud-cams { max-width: 70%; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .picker-filters { grid-template-columns: 1fr 1fr; }
-  .picker-body { grid-template-columns: 120px minmax(0, 1fr); }
+
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
@@ -549,3 +549,8 @@ button.primary.wide { width: 100%; }
 .tvn .hint { margin: 10px 12px 0; }
 
 .align-msg { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-2); }
+
+@media (max-width: 700px) {
+  .picker-body { grid-template-columns: 1fr; }
+  .picker-zone { max-width: 180px; margin: 0 auto; width: 100%; }
+}

@@ -41,7 +41,7 @@ function ZoneMap({ counts, on, toggle, a, b }: { counts: Map<Zone, number>; on: 
   const shade = (z: Zone) => (on.has(z) ? "var(--steel-soft)" : `rgba(180, 193, 214, ${(0.04 + 0.26 * ((counts.get(z) ?? 0) / max)).toFixed(3)})`);
   const cell = (z: Zone, shape: ReactNode, lx: number, ly: number) => (
     <g key={z} className={`zm-zone${on.has(z) ? " is-on" : ""}`} role="button" tabIndex={0} aria-pressed={on.has(z)}
-      aria-label={`Zone ${z}, ${ZONE_NAME[z]}: ${counts.get(z) ?? 0} pitches`} onClick={() => toggle(z)}
+      aria-label={`Zone ${z}, ${ZONE_NAME[z]}: ${counts.get(z) ?? 0} pitch${counts.get(z) === 1 ? "" : "es"}`} onClick={() => toggle(z)}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(z); } }}>
       <title>{`Zone ${z}: ${ZONE_NAME[z]}`}</title>
       {shape}
