@@ -12,12 +12,17 @@ interface Props {
 }
 
 const MIN_EVENTS = 15;   // his number shows only when the stat itself rests on at least this many events
+// Decision stats on the second pitch: did the hitter read it right? (zone = 17 in wide, 1.5-3.5 ft tall)
+const zoneTakes = (takes: number, ooz: number, chases: number) => takes - (ooz - chases);   // takes on in-zone pitches
 const COLS = [
-  { key: "chase", label: "Chase", better: "high" as const, his: (o: Outcomes) => o.chasePct, hisN: (o: Outcomes) => o.outOfZone, ref: (s: BinCounts) => r(s.chases, s.outOfZone) },
-  { key: "swing", label: "Swing", better: null, his: (o: Outcomes) => (o.pitches ? o.swings / o.pitches : null), hisN: (o: Outcomes) => o.pitches, ref: (s: BinCounts) => r(s.swings, s.n) },
-  { key: "whiff", label: "Whiff", better: "high" as const, his: (o: Outcomes) => o.whiffPct, hisN: (o: Outcomes) => o.swings, ref: (s: BinCounts) => r(s.whiffs, s.swings) },
-  { key: "cs", label: "Called strike", better: "high" as const, his: (o: Outcomes) => o.calledStrikePct, hisN: (o: Outcomes) => o.takes, ref: (s: BinCounts) => r(s.calledStrikes, s.takes) },
-  { key: "hard", label: "Hard hit", better: "low" as const, his: (o: Outcomes) => o.hardHitPct, hisN: (o: Outcomes) => o.evN, ref: (s: BinCounts) => r(s.hard, s.evN) },
+  { key: "chase", label: "Chase", better: "high" as const, title: "Swings at pitches outside the zone ÷ pitches outside the zone",
+    his: (o: Outcomes) => r(o.chases, o.outOfZone), hisN: (o: Outcomes) => o.outOfZone, ref: (s: BinCounts) => r(s.chases, s.outOfZone) },
+  { key: "ztake", label: "Zone take", better: "high" as const, title: "Takes on pitches inside the zone (frozen) ÷ pitches inside the zone",
+    his: (o: Outcomes) => r(zoneTakes(o.takes, o.outOfZone, o.chases), o.pitches - o.outOfZone), hisN: (o: Outcomes) => o.pitches - o.outOfZone,
+    ref: (s: BinCounts) => r(zoneTakes(s.takes ?? 0, s.outOfZone ?? 0, s.chases ?? 0), (s.n ?? 0) - (s.outOfZone ?? 0)) },
+  { key: "wrong", label: "Wrong decision", better: "high" as const, title: "Chases plus zone takes ÷ all pitches: how often the hitter's read was wrong",
+    his: (o: Outcomes) => r(o.chases + zoneTakes(o.takes, o.outOfZone, o.chases), o.pitches), hisN: (o: Outcomes) => o.pitches,
+    ref: (s: BinCounts) => r((s.chases ?? 0) + zoneTakes(s.takes ?? 0, s.outOfZone ?? 0, s.chases ?? 0), s.n) },
 ];
 function r(a: number | undefined, b: number | undefined) { return b ? (a ?? 0) / b : null; }
 const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)}%`);
@@ -107,7 +112,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
             };
             return (
               <div key={col.key} className="tvn-row">
-                <span className="tvn-label">{col.label}</span>
+                <span className="tvn-label" title={col.title}>{col.label}</span>
                 <span className={`tvn-v${here === "t" ? " is-here" : ""}`}>{pct(a)}{his(hisT)}</span>
                 <span className={`tvn-v${here === "n" ? " is-here" : ""}`}>{pct(b)}{his(hisN)}</span>
                 <span className={`tvn-diff${tone}`}>{d == null ? "—" : `${d > 0 ? "+" : ""}${d}`}</span>
@@ -117,7 +122,7 @@ export default function SepReference({ rows, anchorType, tunnelType, sep }: Prop
           <p className="hint">{poolName}: {g.tunneled.n.toLocaleString()} pairs per group · his: {his?.length ?? 0} pairs{showHis ? "" : " (too few to show)"}</p>
         </div>
       )}
-      <details className="howto"><summary>How to read this</summary><p className="hint">Tunneled = Elite or Good for this combo (tighter at 23.8 ft than 60% of {poolName} pairs). Not tunneled = Below avg or Bad. Back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart, second pitch within 6 in of the zone. Chase = swings at pitches out of the zone. Count and hitter aren't controlled; the model will.</p></details>
+      <details className="howto"><summary>How to read this</summary><p className="hint">Tunneled = Elite or Good for this combo (tighter at 23.8 ft than 60% of {poolName} pairs). Not tunneled = Below avg or Bad. Back-to-back pairs that finished at least {ref?.minPlateIn ?? 6} in apart, second pitch within 6 in of the zone. All on the second pitch, raw: Chase = swings at pitches outside the zone; Zone take = takes on pitches inside the zone; Wrong decision = chases plus zone takes over all pitches. Zone = 17 in wide, 1.5–3.5 ft. Count, hitter and exact location aren't controlled.</p></details>
     </section>
   );
 }
