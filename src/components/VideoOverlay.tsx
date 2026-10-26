@@ -482,9 +482,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       autoRan.current = key;
       void autoAlign();
     };
-    a.addEventListener("loadeddata", go); b.addEventListener("loadeddata", go);
-    const t = setTimeout(go, 300);
-    return () => { cancelled = true; clearTimeout(t); a.removeEventListener("loadeddata", go); b.removeEventListener("loadeddata", go); };
+    // Poll: the clips may already be loaded, or mid-seek (not ready) when this runs.
+    const iv = setInterval(go, 250);
+    const stop = setTimeout(() => clearInterval(iv), 30000);
+    return () => { cancelled = true; clearInterval(iv); clearTimeout(stop); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlA, urlB, aligned]);
   const undoAlign = () => {
