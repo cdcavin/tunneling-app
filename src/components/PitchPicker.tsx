@@ -33,6 +33,20 @@ const ZONE_NAME: Record<number, string> = {
   6: "middle, first-base side", 7: "down, third-base side", 8: "down, middle", 9: "down, first-base side",
   11: "out of zone, up / third-base side", 12: "out of zone, up / first-base side", 13: "out of zone, down / third-base side", 14: "out of zone, down / first-base side",
 };
+/** What happened on the pitch, from Trackman's PitchCall (and PlayResult for balls in play). */
+const OUTCOMES = ["Ball", "Called strike", "Whiff", "Foul", "In play: out", "In play: hit", "In play: other", "HBP"] as const;
+type Outcome = (typeof OUTCOMES)[number] | "Other";
+export function outcomeOf(r: PitchRow): Outcome {
+  const c = r.call;
+  if (c === "BallCalled" || c === "BallinDirt" || c === "BallIntentional") return "Ball";
+  if (c === "StrikeCalled") return "Called strike";
+  if (c === "StrikeSwinging") return "Whiff";
+  if (c.startsWith("FoulBall")) return "Foul";
+  if (c === "HitByPitch") return "HBP";
+  if (c === "InPlay") return r.result === "Out" ? "In play: out" : r.result && ["Single", "Double", "Triple", "HomeRun"].includes(r.result) ? "In play: hit" : "In play: other";
+  return "Other";
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** Clickable 13-zone map; each zone shows how many pitches in the current filter landed there. A and B are dotted on it. */
@@ -72,6 +86,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
   const [open, setOpen] = useState(false);
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [zones, setZones] = useState<Set<Zone>>(new Set());
+  const [outs, setOuts] = useState<Set<Outcome>>(new Set());
   const flip = <T,>(set: Set<T>, v: T) => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n; };
 
   const games = useMemo(() => outings(rows), [rows]);
@@ -96,12 +111,18 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [base]);
   const ofType = useMemo(() => (types.size ? base.filter((r) => types.has(r.type)) : base), [base, types]);
+  const outCounts = useMemo(() => {
+    const m = new Map<Outcome, number>();
+    for (const r of ofType) { const o = outcomeOf(r); m.set(o, (m.get(o) ?? 0) + 1); }
+    return OUTCOMES.filter((o) => m.get(o)).map((o) => [o, m.get(o)!] as const);
+  }, [ofType]);
+  const ofOut = useMemo(() => (outs.size ? ofType.filter((r) => outs.has(outcomeOf(r))) : ofType), [ofType, outs]);
   const zoneCounts = useMemo(() => {
     const m = new Map<Zone, number>();
-    for (const r of ofType) { const z = zoneOf(r.side, r.height); m.set(z, (m.get(z) ?? 0) + 1); }
+    for (const r of ofOut) { const z = zoneOf(r.side, r.height); m.set(z, (m.get(z) ?? 0) + 1); }
     return m;
-  }, [ofType]);
-  const matched = useMemo(() => (zones.size ? ofType.filter((r) => zones.has(zoneOf(r.side, r.height))) : ofType), [ofType, zones]);
+  }, [ofOut]);
+  const matched = useMemo(() => (zones.size ? ofOut.filter((r) => zones.has(zoneOf(r.side, r.height))) : ofOut), [ofOut, zones]);
   const list = useMemo(() => {
     const l = matched;
     return [...l].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0) || (a.inning ?? 0) - (b.inning ?? 0) || (a.pa ?? 0) - (b.pa ?? 0) || (a.pitchNo ?? 0) - (b.pitchNo ?? 0)).slice(0, 80);
@@ -145,7 +166,14 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
                 <i style={{ background: pitchColorOnDark(t) }} />{t} <span>{n}</span>
               </button>
             ))}
-            {(types.size > 0 || zones.size > 0) && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); }}>Clear type and zone</button>}
+          </div>
+          <div className="picker-types" role="group" aria-label="Outcome">
+            {outCounts.map(([o, n]) => (
+              <button key={o} type="button" className={`type-chip out${outs.has(o) ? " is-on" : ""}`} aria-pressed={outs.has(o)} onClick={() => setOuts((s) => flip(s, o))}>
+                {o} <span>{n}</span>
+              </button>
+            ))}
+            {(types.size > 0 || zones.size > 0 || outs.size > 0) && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); setOuts(new Set()); }}>Clear type, outcome and zone</button>}
           </div>
           <div className="picker-body">
           <div className="picker-zone">
@@ -161,7 +189,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
             {list.map((r) => (
               <div key={r.id} role="listitem" className={`pick-row${A?.id === r.id ? " is-a" : ""}${B?.id === r.id && !isPlaceholder ? " is-b" : ""}`}>
                 <span className="pick-when">{r.date} · {r.half === "Bottom" ? "B" : "T"}{r.inning ?? "?"} · PA {r.pa ?? "?"} · #{r.pitchNo ?? "?"}</span>
-                <span className="pick-what"><i style={{ background: pitchColorOnDark(r.type) }} />{r.type} {r.velo.toFixed(0)}{r.count ? ` · ${r.count}` : ""} · {r.call}{r.batter ? ` · ${r.batter}` : ""}</span>
+                <span className="pick-what"><i style={{ background: pitchColorOnDark(r.type) }} />{r.type} {r.velo.toFixed(0)}{r.count ? ` · ${r.count}` : ""} · {outcomeOf(r) === "In play: hit" ? r.result : outcomeOf(r) === "Other" ? r.call : outcomeOf(r)}{r.ev != null ? ` ${r.ev.toFixed(0)} EV` : ""}{r.batter ? ` · ${r.batter}` : ""}</span>
                 <span className="pick-btns">
                   <button type="button" onClick={() => { setSlot("A"); onSelect(B && !isPlaceholder ? { anchor: r, next: B } : { anchor: r, next: r }); setSlot("B"); }} aria-label={`Use as A: ${short(r)}`}>A</button>
                   <button type="button" onClick={() => { onSelect(A ? { anchor: A, next: r } : { anchor: r, next: r }); if (A) setOpen(false); }} aria-label={`Use as B: ${short(r)}`}>B</button>
