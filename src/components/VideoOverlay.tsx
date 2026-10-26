@@ -170,6 +170,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
 
   // B follows A so both sit at the same time relative to their own release (plus the nudge).
   const playedAt = useRef(0);   // when play() was last called; drift seeks are held off right after it
+  const lastKick = useRef(0);   // last hard seek / restart of B while playing
   const sync = useCallback((tolerance = 0.02) => {
     const a = vA.current, b = vB.current; if (!a || !b || !locked) return;
     const rel = tIn(a) - (releaseA ?? 0);
@@ -208,11 +209,19 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       onFlightTime(drive ? Math.max(0, rel) : null);
       // While playing, keep B locked to A by steering its playback rate (no seeks, so nothing stutters or
       // aborts). Only a big drift, e.g. after a stall, gets a hard seek.
-      if (b && !a.paused && !b.paused && locked) {
+      const now = performance.now();
+      if (b && !a.paused && locked) {
         const want = t0(b) + Math.max(0, (releaseB ?? 0) + rel + nudgeMs / 1000);
-        const drift = b.currentTime - want;            // + = B is ahead
-        if (Math.abs(drift) > 0.4 && performance.now() - playedAt.current > 600) b.currentTime = want;
-        else b.playbackRate = rate * Math.max(0.5, Math.min(1.5, 1 - drift * 2.5));
+        const end = Number.isFinite(b.duration) ? b.duration - 0.05 : Infinity;
+        if (b.paused) {
+          // A is playing but B stopped (a refused play() or a stall): put B on A's frame and start it again, once a second at most.
+          if (want < end && now - lastKick.current > 1000 && now - playedAt.current > 600) { lastKick.current = now; b.currentTime = Math.min(want, end); b.play().catch(() => {}); }
+        } else if (!b.seeking) {
+          const drift = b.currentTime - want;            // + = B is ahead
+          // Big drift: one hard seek, then let it land. Seeking on every frame (Safari seeks are slow) never lets B draw.
+          if (Math.abs(drift) > 0.4 && now - playedAt.current > 600 && now - lastKick.current > 1000) { lastKick.current = now; b.currentTime = want; }
+          else b.playbackRate = rate * Math.max(0.5, Math.min(1.5, 1 - drift * 2.5));
+        }
       } else if (b && b.playbackRate !== rate) b.playbackRate = rate;
       raf = requestAnimationFrame(tick);
     };
