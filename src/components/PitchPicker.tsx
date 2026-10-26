@@ -87,6 +87,8 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [zones, setZones] = useState<Set<Zone>>(new Set());
   const [outs, setOuts] = useState<Set<Outcome>>(new Set());
+  /** Picking A clears every filter so the search for B starts fresh. */
+  const resetFilters = () => { setTypes(new Set()); setOuts(new Set()); setZones(new Set()); setGame(""); setInning(""); setAb(""); setQuery(""); };
   const flip = <T,>(set: Set<T>, v: T) => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n; };
 
   const games = useMemo(() => outings(rows), [rows]);
@@ -191,7 +193,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
                 <span className="pick-when">{r.date} · {r.half === "Bottom" ? "B" : "T"}{r.inning ?? "?"} · PA {r.pa ?? "?"} · #{r.pitchNo ?? "?"}</span>
                 <span className="pick-what"><i style={{ background: pitchColorOnDark(r.type) }} />{r.type} {r.velo.toFixed(0)}{r.count ? ` · ${r.count}` : ""} · {outcomeOf(r) === "In play: hit" ? r.result : outcomeOf(r) === "Other" ? r.call : outcomeOf(r)}{r.ev != null ? ` ${r.ev.toFixed(0)} EV` : ""}{r.batter ? ` · ${r.batter}` : ""}</span>
                 <span className="pick-btns">
-                  <button type="button" onClick={() => { setSlot("A"); onSelect(B && !isPlaceholder ? { anchor: r, next: B } : { anchor: r, next: r }); setSlot("B"); }} aria-label={`Use as A: ${short(r)}`}>A</button>
+                  <button type="button" onClick={() => { onSelect(B && !isPlaceholder ? { anchor: r, next: B } : { anchor: r, next: r }); setSlot("B"); resetFilters(); }} aria-label={`Use as A: ${short(r)}`}>A</button>
                   <button type="button" onClick={() => { onSelect(A ? { anchor: A, next: r } : { anchor: r, next: r }); if (A) setOpen(false); }} aria-label={`Use as B: ${short(r)}`}>B</button>
                 </span>
               </div>
