@@ -80,6 +80,28 @@ function useHls(ref: React.RefObject<HTMLVideoElement | null>, url: string | nul
   }, [ref, url, onError, onStart]);
 }
 
+/**
+ * A hidden copy of a clip for Align and Resync to scrub through. The visible players are never seeked by the
+ * scans (dozens of seeks left Safari's native player stuck), only moved once to the frames found.
+ */
+async function scratchClip(url: string): Promise<{ v: HTMLVideoElement; destroy: () => void }> {
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto"; v.crossOrigin = "anonymous";
+  Object.assign(v.style, { position: "fixed", left: "-9999px", top: "0", width: "320px", height: "180px", opacity: "0", pointerEvents: "none" });
+  document.body.appendChild(v);
+  let hls: Hls | null = null;
+  if (IS_SAFARI) v.src = url;
+  else { hls = new Hls({ enableWorker: true }); hls.loadSource(url); hls.attachMedia(v); }
+  const destroy = () => { hls?.destroy(); v.removeAttribute("src"); v.load(); v.remove(); };
+  await new Promise<void>((res, rej) => {
+    if (v.readyState >= 2) return res();
+    const ok = () => { v.removeEventListener("loadeddata", ok); res(); };
+    v.addEventListener("loadeddata", ok);
+    setTimeout(() => { v.removeEventListener("loadeddata", ok); if (v.readyState >= 2) res(); else rej(new Error("clip didn't load")); }, 20000);
+  });
+  return { v, destroy };
+}
+
 const pick = (clips: AwreClip[], want: string) =>
   clips.find((c) => c.perspective === want) ?? clips.find((c) => /home ?plate|center ?field/i.test(c.perspective)) ?? clips[0] ?? null;
 
@@ -374,7 +396,12 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     const keep = Number.isFinite(pos) ? pos : -0.6;
     pauseBoth(); setSyncing(true);
     const fallback = (why: string) => { setAlignMsg(`${why} Synced on Trackman's clock.`); alignMarks.current = null; quickResync(); };
+    let scratch: { v: HTMLVideoElement; destroy: () => void }[] = [];
     try {
+      setAlignMsg("Syncing: loading clips…");
+      try { scratch = await Promise.all([scratchClip(urlA!), scratchClip(urlB!)]); } catch { fallback("Couldn't load the clips for scanning."); return; }
+      if (stale()) return;
+      const a = scratch[0].v, b = scratch[1].v;   // scan the hidden copies, not the players
       setAlignMsg("Syncing: loading body tracking…");
       let m: PoseModel;
       try { m = await loadPose((msg) => setAlignMsg(`Syncing: ${msg}`)); } catch { fallback("Body tracking didn't load."); return; }
@@ -422,14 +449,14 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       const tA = pick.i >= 0 ? fa[pick.i].t : ra.t, tB = pick.j >= 0 ? fb[pick.j].t : rb.t;
       alignMarks.current = { a: tA, b: tB };
       setManualA(tA); setManualB(tB); setNudgeMs(0); setLocked(true);
-      if (b) b.playbackRate = rate;
+      if (vB.current) vB.current.playbackRate = rate;
       pendingResync.current = keep; setResyncN((n) => n + 1);
       const off = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(2)} s`;
       setAlignMsg(`Synced on release · Trackman's clock was off ${off(tA - clockA)} in clip A, ${off(tB - clockB)} in clip B`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       fallback(/security|tainted|cross-origin/i.test(msg) ? "This browser won't let the page read the video frames." : `Sync failed (${msg.slice(0, 80)}).`);
-    } finally { if (!stale()) setSyncing(false); }
+    } finally { scratch.forEach((c) => c.destroy()); if (!stale()) setSyncing(false); }
   };
 
   const autoAlign = async () => {
@@ -437,7 +464,13 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     if (!a || !b || a.readyState < 2 || b.readyState < 2) { setAlignMsg("Clips still loading."); return; }
     pauseBoth(); setAligning(true);
     const prev = { manualA, manualB, nudgeMs };
+    const run = syncRun.current, stale = () => run !== syncRun.current;   // bumped when the pair changes
+    let scratch: { v: HTMLVideoElement; destroy: () => void }[] = [];
     try {
+      setAlignMsg("Loading clips…");
+      try { scratch = await Promise.all([scratchClip(urlA!), scratchClip(urlB!)]); } catch { backgroundAlign("Couldn't load the clips for scanning."); return; }
+      if (stale()) return;
+      const a = scratch[0].v, b = scratch[1].v;   // scan the hidden copies, not the players
       if (releaseA == null || releaseB == null) { backgroundAlign("Release not found, so the pitcher can't be matched."); return; }
       setAlignMsg("Loading body tracking…");
       let m: PoseModel;
@@ -498,7 +531,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setAlignMsg(/security|tainted|cross-origin/i.test(msg) ? "This browser won't let the page read the video frames." : `Align failed: ${msg.slice(0, 120)}`);
-    } finally { setAligning(false); }
+    } finally { scratch.forEach((c) => c.destroy()); if (!stale()) setAligning(false); }
   };
   const undoAlign = () => {
     setXf(null); setAlignMsg(null);
