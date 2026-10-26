@@ -10,6 +10,9 @@ const ROWS = [...HEIGHTS].reverse();
 const STEP = 0.25;
 const LEFT = SIDES[SIDES.length - 1] + STEP / 2, TOP = HEIGHTS[HEIGHTS.length - 1] + STEP / 2;
 const W = STEP * SIDES.length, H = STEP * HEIGHTS.length;
+/** The grid cell a free location falls in (arsenal mode places pitches at their real average, between cells). */
+const nearest = (vals: number[], v: number) => vals.reduce((b, x) => (Math.abs(x - v) < Math.abs(b - v) ? x : b), vals[0]);
+const snap = (l: Loc): Loc => ({ side: nearest(SIDES, l.side), height: nearest(HEIGHTS, l.height) });
 const xPct = (side: number) => ((LEFT - side) / W) * 100;
 const yPct = (h: number) => ((TOP - h) / H) * 100;
 
@@ -32,7 +35,7 @@ interface Props {
 }
 
 export default function ZonePicker({ label, markers, active, onSelect, heat, best }: Props) {
-  const selected = markers[active]?.loc ?? { side: 0, height: 2.5 };
+  const selected = snap(markers[active]?.loc ?? { side: 0, height: 2.5 });
   const lookup = new Map<string, Cell>();
   heat?.cells.forEach((c) => lookup.set(`${c.side.toFixed(2)}|${c.height.toFixed(2)}`, c));
   let lo = Infinity, hi = -Infinity;
@@ -53,7 +56,7 @@ export default function ZonePicker({ label, markers, active, onSelect, heat, bes
           const v = cell && heat ? heat.value(cell) : null;
           const i = v != null ? bin(v) : -1;
           const isSel = sameLoc(loc, selected);
-          const here = markers.filter((m) => sameLoc(m.loc, loc));
+          const here = markers.filter((m) => sameLoc(snap(m.loc), loc));
           const isBest = !!best && sameLoc(loc, best);
           const desc = `${s > 0 ? `${(s * 12).toFixed(0)} in toward third` : s < 0 ? `${(-s * 12).toFixed(0)} in toward first` : "middle"}, ${(h * 12).toFixed(0)} in high`;
           return (
