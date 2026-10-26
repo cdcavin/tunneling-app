@@ -55,6 +55,28 @@ async function awre(env: Env, pathname: string): Promise<Response> {
   return new Response(body, { headers: JSON_HEADERS });
 }
 
+/**
+ * Camera-clock corrections, shared by everyone: seconds to add to Trackman's release time for one game and camera
+ * ("<GameID>|<camera>"). The video overlay's Align measures them; every user's next load of that game uses them.
+ *   GET  /api/clock-offsets            -> { "<game>|<camera>": seconds, ... }
+ *   POST /api/clock-offsets  { offsets: { key: seconds } }   (merged in)
+ */
+const OFFSETS_KV = "clockOffsets";
+async function clockOffsets(env: Env, request: Request): Promise<Response> {
+  const cur = (await env.DATA.get(OFFSETS_KV, "json") as Record<string, number> | null) ?? {};
+  if (request.method === "GET") return new Response(JSON.stringify(cur), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-cache" } });
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  let body: { offsets?: Record<string, unknown> };
+  try { body = await request.json(); } catch { return json({ error: "Bad JSON." }, 400); }
+  let n = 0;
+  for (const [k, v] of Object.entries(body.offsets ?? {})) {
+    if (k.length > 120 || !/^[\w.-]+\|[\w .-]+$/.test(k) || typeof v !== "number" || !Number.isFinite(v) || Math.abs(v) > 5) continue;
+    cur[k] = Math.round(v * 1000) / 1000; n++;
+  }
+  if (n) await env.DATA.put(OFFSETS_KV, JSON.stringify(cur));
+  return json({ saved: n });
+}
+
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "private, max-age=300" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
@@ -163,6 +185,7 @@ export default {
       return p ? json(p) : json({ error: `No pitcher ${id}.` }, 404);
     }
 
+    if (pathname === "/api/clock-offsets") return clockOffsets(env, request);
     if (pathname === "/api/awre/stream") return stream(env, request);
     if (pathname.startsWith("/api/awre/")) return awre(env, pathname);
     if (pathname.startsWith("/api/")) return json({ error: "Not found." }, 404);

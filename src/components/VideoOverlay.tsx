@@ -96,7 +96,8 @@ const TRACKMAN_UTC_LAG = 0.8;
 
 /**
  * The camera clock is off from Trackman's by a different amount each game. When Align finds the real release, the
- * difference is saved per game and camera, so every other pitch from that game loads in sync. Kept in this browser.
+ * difference is saved per game and camera on the server (shared by everyone) and cached in this browser, so every
+ * other pitch from that game loads in sync for every user.
  */
 const OFFSETS_KEY = "tunneling.clockOffsets.v1";
 function loadOffsets(): Record<string, number> {
@@ -167,6 +168,11 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const urlB = clipB ? streamUrl(clipB.video_url) : null;
 
   const [offsets, setOffsets] = useState<Record<string, number>>(loadOffsets);
+  useEffect(() => {
+    fetch("/api/clock-offsets").then((r) => (r.ok ? r.json() : {})).then((srv: Record<string, number>) => {
+      setOffsets((cur) => { const m = { ...cur, ...srv }; saveOffsets(m); return m; });
+    }).catch(() => { /* offline: the local copy still works */ });
+  }, []);
   const keyA = selected ? `${selected.anchor.game}|${perspective}` : "", keyB = selected ? `${selected.next.game}|${perspective}` : "";
   const clockA = releaseFromUtc(selected?.anchor.utc, startA), clockB = releaseFromUtc(selected?.next.utc, startB);
   const guessA = clockA != null ? clockA + (offsets[keyA] ?? 0) : null;
@@ -478,6 +484,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       if (clockA != null) learned[keyA] = A.t - clockA;
       if (clockB != null) learned[keyB] = B.t - clockB;
       setOffsets(learned); saveOffsets(learned);
+      const mine: Record<string, number> = {};
+      if (clockA != null) mine[keyA] = learned[keyA];
+      if (clockB != null) mine[keyB] = learned[keyB];
+      fetch("/api/clock-offsets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ offsets: mine }) }).catch(() => {});
       beforeAlign.current = prev;
       alignMarks.current = { a: A.t, b: B.t };
       setXf(toXf(b, fit.s, fit.tx, fit.ty));
