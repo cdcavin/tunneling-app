@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { anglesOf, type Angles, type Coeffs } from "../lib/physics";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
@@ -38,7 +38,7 @@ function kde(xs: number[], grid: number[]): number[] {
 /** Share of the two curves that overlaps (0 = fully separate, 100% = identical). */
 const overlap = (a: number[], b: number[], step: number) => a.reduce((s, v, i) => s + Math.min(v, b[i]), 0) * step;
 
-function Panel({ title, label, series, marks }: {
+const Panel = memo(function Panel({ title, label, series, marks }: {
   title: string; label: string;
   series: { name: string; color: string; xs: number[] }[];
   marks: { color: string; x: number; dash: string; label: string }[];
@@ -80,7 +80,7 @@ function Panel({ title, label, series, marks }: {
       </svg>
     </figure>
   );
-}
+});
 
 /**
  * Release angles (VRA/HRA) and approach angles (VAA/HAA) as density curves, in the style of Resnick's
@@ -90,7 +90,8 @@ export default function AngleCharts({ rows, types, shown }: Props) {
   const [ta, tb] = types;
   const [mode, setMode] = useState<"pair" | "rest">("pair");
   const withAngles = useMemo(() => rows.map((r) => ({ type: r.type, a: anglesOf(r.coeffs) })).filter((r): r is { type: string; a: Angles } => !!r.a), [rows]);
-  const A = shown[0] ? anglesOf(shown[0]) : null, B = shown[1] ? anglesOf(shown[1]) : null;
+  const A = useMemo(() => (shown[0] ? anglesOf(shown[0]) : null), [shown[0]]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const B = useMemo(() => (shown[1] ? anglesOf(shown[1]) : null), [shown[1]]);   // eslint-disable-line react-hooks/exhaustive-deps
   const same = ta === tb;
   const seriesFor = (k: Key) => mode === "pair"
     ? [
@@ -105,7 +106,12 @@ export default function AngleCharts({ rows, types, shown }: Props) {
     ...(A ? [{ color: pitchColorOnDark(ta), x: show(A, k), dash: "6 3", label: "A" }] : []),
     ...(B ? [{ color: pitchColorOnDark(tb), x: show(B, k), dash: "2 3", label: "B" }] : []),
   ];
-  const legend = seriesFor("vra");
+  // Built once per pitch selection, so the curves aren't recomputed on every frame while video or 3D plays.
+  const panelSeries = useMemo(() => Object.fromEntries(PANELS.map((p) => [p.k, seriesFor(p.k)])) as Record<Key, ReturnType<typeof seriesFor>>,
+    [withAngles, ta, tb, mode]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const panelMarks = useMemo(() => Object.fromEntries(PANELS.map((p) => [p.k, marks(p.k)])) as Record<Key, ReturnType<typeof marks>>,
+    [A, B, ta, tb]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const legend = panelSeries.vra;
   const f = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}°`;
   const gap = (k1: Key, k2: Key) => (A && B ? Math.hypot(show(A, k1) - show(B, k1), show(A, k2) - show(B, k2)) : null);
   const gr = gap("vra", "hra"), ga = gap("vaa", "haa");
@@ -124,7 +130,7 @@ export default function AngleCharts({ rows, types, shown }: Props) {
         <span className="muted">lines: pitch <b>A</b> (long dash) and <b>B</b> (short dash), the two in the 3D view and video</span>
       </div>
       <div className="kde-grid">
-        {PANELS.map((p) => <Panel key={p.k} title={p.title} label={p.label} series={seriesFor(p.k)} marks={marks(p.k)} />)}
+        {PANELS.map((p) => <Panel key={p.k} title={p.title} label={p.label} series={panelSeries[p.k]} marks={panelMarks[p.k]} />)}
       </div>
       {A && B && (
         <table className="angle-table">

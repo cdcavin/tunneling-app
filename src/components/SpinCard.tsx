@@ -122,7 +122,6 @@ export default function SpinCard({ a, b }: { a: Side; b: Side }) {
         </div>
         <BallSide s={b} p={pb} />
       </div>
-      <p className="hint">Arrow: which way the ball spins. Tick on the clock: tilt, the direction the spin pushes the ball (12:00 = backspin). Dot: where the spin axis comes through the ball; bigger = more gyro (bullet spin). Similarity: 100 = same spin axis, 0 = 45° or more apart.</p>
     </section>
   );
 }
