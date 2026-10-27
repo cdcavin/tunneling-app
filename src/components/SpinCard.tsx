@@ -122,32 +122,61 @@ function BallSide({ s, p, typical }: { s: Side; p: SpinProfile | null; typical: 
   );
 }
 
+/** Simple weather icons: sun, sun behind cloud, cloud, rain, snow, fog, storm. */
+function WxIcon({ desc }: { desc: string }) {
+  const sun = <g stroke="#f2c14e" strokeWidth="1.6" strokeLinecap="round"><circle cx="9" cy="9" r="3.6" fill="#f2c14e" stroke="none" />{[0, 45, 90, 135, 180, 225, 270, 315].map((d) => <line key={d} x1={9 + 5.4 * Math.cos((d * Math.PI) / 180)} y1={9 + 5.4 * Math.sin((d * Math.PI) / 180)} x2={9 + 7 * Math.cos((d * Math.PI) / 180)} y2={9 + 7 * Math.sin((d * Math.PI) / 180)} />)}</g>;
+  const cloud = (dy = 0) => <path d={`M7 ${18 + dy}h10a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6-1.2A3.6 3.6 0 0 0 7 ${18 + dy}z`} fill="#b4c1d6" />;
+  const drops = (c: string) => <g stroke={c} strokeWidth="1.6" strokeLinecap="round"><line x1="9" y1="20.5" x2="8" y2="23" /><line x1="13" y1="20.5" x2="12" y2="23" /><line x1="17" y1="20.5" x2="16" y2="23" /></g>;
+  const d = desc.toLowerCase();
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      {d === "clear" && <g transform="translate(3 3)">{sun}</g>}
+      {d === "partly cloudy" && <>{sun}{cloud(2)}</>}
+      {d === "overcast" && cloud(-1)}
+      {(d === "rain" || d === "drizzle" || d === "showers") && <>{cloud(-3)}{drops("#5b8def")}</>}
+      {(d === "snow" || d === "snow showers") && <>{cloud(-3)}{drops("#eef2f8")}</>}
+      {d === "fog" && <g stroke="#b4c1d6" strokeWidth="1.8" strokeLinecap="round"><line x1="4" y1="9" x2="20" y2="9" /><line x1="4" y1="13" x2="20" y2="13" /><line x1="4" y1="17" x2="20" y2="17" /></g>}
+      {d === "thunderstorm" && <>{cloud(-3)}<path d="M13 17l-3 4h3l-2 3" fill="none" stroke="#f2c14e" strokeWidth="1.6" strokeLinejoin="round" /></>}
+    </svg>
+  );
+}
+
+/** Small box for one picked pitch: date, time, sky, temperature, humidity, wind, air density. */
+function WxBox({ label, row, home, w }: { label: string; row: PitchRow; home: boolean; w: Weather | null }) {
+  const iso = row.utc ? row.utc.trim().replace(" ", "T") : ""; const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
+  const time = Number.isNaN(ms) ? "" : new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+  const date = new Date(`${row.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return (
+    <div className="wx-card">
+      <div className="wx-top"><b>{label}</b><span>{date}{time && ` · ${time}`}</span></div>
+      {!home ? <div className="wx-note">Away game: standard air used</div>
+        : !w ? <div className="wx-note">Loading weather…</div>
+        : (
+          <>
+            <div className="wx-sky"><WxIcon desc={w.desc} /><span className="wx-temp">{Math.round(w.tempF)}°F</span><span className="wx-desc">{w.desc}</span></div>
+            <div className="wx-grid">
+              <span>Humidity</span><b>{Math.round(w.rh)}%</b>
+              <span>Wind</span><b>{Math.round(w.windMph)} mph {compass(w.windFromDeg)}</b>
+              <span>Air density</span><b>{w.airDensity.toFixed(4)} lb/ft³</b>
+            </div>
+          </>
+        )}
+    </div>
+  );
+}
+
 /** Spin profile of the two pitches in the 3D view and video, with how alike their spin axes are. */
 export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (r: PitchRow) => boolean }) {
-  // Weather for every home game hour among the pitches involved (cached per hour on the server and here).
-  const hours = useMemo(() => [...a.typeRows, ...b.typeRows, ...(a.row ? [a.row] : []), ...(b.row ? [b.row] : [])]
-    .filter(isHome).map((r) => hourOf(r.utc)).filter((h): h is string => !!h), [a.typeRows, b.typeRows, a.row, b.row, isHome]);
+  // Weather only for the two real pitches picked (home games); averaged pitches and away games use standard air.
+  const hours = useMemo(() => [a.row, b.row].filter((r): r is PitchRow => !!r && isHome(r)).map((r) => hourOf(r.utc)).filter((h): h is string => !!h),
+    [a.row, b.row, isHome]);
   const wx = useWeather(hours);
-  const airOf = (r: PitchRow) => (isHome(r) ? wx[hourOf(r.utc) ?? ""]?.airDensity : undefined) ?? STANDARD_AIR;
-  const typical = (s: Side) => median(s.typeRows.map((r) => (r.coeffs ? spinProfile(r.coeffs, r.spin, airOf(r))?.eff : null)).filter((e): e is number => e != null));
-  // A real pitch uses its own game's air; an average uses the median air over his home games of that type.
-  const sideAir = (s: Side) => (s.row ? airOf(s.row) : median(s.typeRows.filter(isHome).map(airOf)) ?? STANDARD_AIR);
-  const pa = a.coeffs ? spinProfile(a.coeffs, a.spin, sideAir(a)) : null, pb = b.coeffs ? spinProfile(b.coeffs, b.spin, sideAir(b)) : null;
-  const ta = useMemo(() => typical(a), [a.typeRows, wx]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const tb = useMemo(() => typical(b), [b.typeRows, wx]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const wxLine = (s: Side) => {
-    if (s.row) {
-      if (!isHome(s.row)) return { label: s.label, text: `${s.row.date} · away game, standard air` };
-      const w = wx[hourOf(s.row.utc) ?? ""];
-      return w ? { label: s.label, text: `${s.row.date} · ${w.desc} · ${Math.round(w.tempF)}°F · wind ${Math.round(w.windMph)} mph from ${compass(w.windFromDeg)} · ${Math.round(w.rh)}% humidity`, rho: w.airDensity }
-        : { label: s.label, text: `${s.row.date} · loading weather…` };
-    }
-    const ws = [...new Set(s.typeRows.filter(isHome).map((r) => hourOf(r.utc)))].map((h) => wx[h ?? ""]).filter((w): w is Weather => !!w);
-    if (!ws.length) return { label: s.label, text: "average pitch · standard air" };
-    const t = ws.map((w) => w.tempF);
-    return { label: s.label, text: `average over ${ws.length} home game hours · ${Math.round(Math.min(...t))}–${Math.round(Math.max(...t))}°F`, rho: median(ws.map((w) => w.airDensity)) ?? undefined };
-  };
-  const lines = [wxLine(a), wxLine(b)];
+  const wxOf = (s: Side) => (s.row && isHome(s.row) ? wx[hourOf(s.row.utc) ?? ""] ?? null : null);
+  const air = (s: Side) => wxOf(s)?.airDensity ?? STANDARD_AIR;
+  const pa = a.coeffs ? spinProfile(a.coeffs, a.spin, air(a)) : null, pb = b.coeffs ? spinProfile(b.coeffs, b.spin, air(b)) : null;
+  const typical = (s: Side) => median(s.typeRows.map((r) => (r.coeffs ? spinProfile(r.coeffs, r.spin)?.eff : null)).filter((e): e is number => e != null));
+  const ta = useMemo(() => typical(a), [a.typeRows]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const tb = useMemo(() => typical(b), [b.typeRows]);   // eslint-disable-line react-hooks/exhaustive-deps
   const sim = pa && pb ? spinSimilarity(pa, pb) : null;
   const C = 2 * Math.PI * 50;
   const tone = sim == null ? "var(--muted)" : sim.score >= 70 ? "var(--good)" : sim.score >= 40 ? "var(--wvu-gold)" : "#e05c5c";
@@ -158,11 +187,6 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
           <div className="sec-title">Spin profile</div>
           <div className="sepref-sub">Pitcher's view · tilt from movement (Trackman's method) · efficiency and gyro estimated</div>
         </div>
-      </div>
-      <div className="wx-box" aria-label="Conditions used for the spin estimate">
-        {lines.map((l) => (
-          <div key={l.label} className="wx-line"><b>{l.label}</b><span>{l.text}</span>{l.rho != null && <span className="wx-rho">air {l.rho.toFixed(4)} lb/ft³</span>}</div>
-        ))}
       </div>
       <div className="spin-row">
         <BallSide s={a} p={pa} typical={ta} />
@@ -183,6 +207,11 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
           )}
         </div>
         <BallSide s={b} p={pb} typical={tb} />
+        {(a.row || b.row) && (
+          <div className="wx-col" aria-label="Game conditions used for the spin estimate">
+            {[a, b].map((s) => s.row && <WxBox key={s.label} label={s.label} row={s.row} home={isHome(s.row)} w={wxOf(s)} />)}
+          </div>
+        )}
       </div>
     </section>
   );

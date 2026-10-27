@@ -628,8 +628,19 @@ button.primary.wide { width: 100%; }
 .spin-gaps dd { margin: 0; color: var(--ink); font-family: var(--font-cond); text-align: left; font-variant-numeric: tabular-nums; }
 .spincard .hint { text-align: center; max-width: 760px; margin: 8px auto 0; }
 @media (max-width: 700px) { .spin-row { grid-template-columns: 1fr; } }
-.wx-box { display: grid; gap: 3px; max-width: 760px; margin: 0 auto 6px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); font-size: 12px; color: var(--ink-2); }
-.wx-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.wx-line b { font-family: var(--font-cond); color: var(--ink); }
-.wx-rho { margin-left: auto; color: var(--muted); font-family: var(--font-cond); font-variant-numeric: tabular-nums; }
+.spin-row:has(.wx-col) { grid-template-columns: minmax(0, 1fr) 170px minmax(0, 1fr) 190px; max-width: 960px; }
+.wx-col { display: grid; gap: 8px; align-self: center; }
+.wx-card { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); font-size: 11.5px; color: var(--ink-2); }
+.wx-top { display: flex; gap: 6px; align-items: baseline; margin-bottom: 4px; }
+.wx-top b { font-family: var(--font-cond); color: var(--ink); }
+.wx-top span { color: var(--muted); }
+.wx-sky { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.wx-temp { font: 600 16px var(--font-cond); color: var(--ink); }
+.wx-desc { color: var(--muted); }
+.wx-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; }
+.wx-grid span { color: var(--muted); }
+.wx-grid b { font: 500 12px var(--font-cond); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.wx-note { color: var(--muted); }
 .spin-typical { margin-top: 4px; font-size: 11px; color: var(--muted); }
+@media (max-width: 900px) { .spin-row:has(.wx-col) { grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1fr); } .wx-col { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .spin-row:has(.wx-col) { grid-template-columns: 1fr; } .wx-col { grid-template-columns: 1fr; } }
