@@ -353,11 +353,11 @@ export default function App() {
               </section>
             </>
           )}
-          <section>
-            <div className="sec-title">Pitches in use</div>
-            {pitcher && <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={setFilters} />}
-            <p className="hint">Every pitch type below is the average of the selected pitches.</p>
-          </section>
+          {pitcher && (
+            <section className="dfilter-sec">
+              <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={setFilters} />
+            </section>
+          )}
 
           <div className="mode-switch" role="radiogroup" aria-label="Mode">
             <button type="button" role="radio" aria-checked={!arsenalMode} className={!arsenalMode ? "is-on" : ""} onClick={() => setArsenalMode(false)}>Pair</button>

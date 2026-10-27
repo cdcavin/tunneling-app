@@ -555,3 +555,14 @@ button.primary.wide { width: 100%; }
   .picker-body { grid-template-columns: 1fr; }
   .picker-zone { max-width: 180px; margin: 0 auto; width: 100%; }
 }
+
+/* Data filter: one slim bar with a funnel, like the pitcher search */
+.dfilter-sec { padding-top: 8px !important; padding-bottom: 8px !important; }
+.dfilter { display: grid; gap: 6px; }
+.dfilter-bar { display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 3px 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
+.dfilter-sum { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dfilter-sum b { color: var(--ink); font-family: var(--font-cond); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dfilter-pop { display: grid; gap: 6px; }
+.dfilter-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.dfilter-pop select { width: 100%; padding: 5px 7px; font-size: 12px; min-width: 0; }
+.type-chip.is-off { opacity: 0.4; text-decoration: line-through; }
