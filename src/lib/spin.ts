@@ -7,12 +7,20 @@ import { PLATE_X, timeAtDist, type Coeffs } from "./physics";
  * drag part along the flight), seen from the pitcher: 12:00 = straight up (backspin), 3:00 = the pitcher's right
  * (third-base side). Same convention as Trackman's SpinAxis (180° = 12:00), which Trackman also infers from movement.
  *
- * Efficiency: how much spin it takes to make that push (Nathan's lift model, C_L = S / (0.4 + 2.32 S), S = r·ω / v),
- * divided by the measured spin rate. Gyro = acos(efficiency). An estimate: seam effects and air density move it.
+ * Efficiency (Nathan, "Determining the 3D spin axis from Statcast data", fit revised May 2020):
+ *   C_L = a_M / (K v²), with K = ½ρA/m from the air density at that game;
+ *   C_L = A (1 − e^(−B·S)), A = 0.336, B = 6.041, S = r·ω_T / v  →  ω_T = v / (r·B) · ln(A / (A − C_L));
+ *   efficiency = ω_T / total spin, gyro = acos(efficiency).
+ * Nathan puts a single pitch at about ±20% on ω_T (trajectory noise), and movement not caused by spin (seam-shifted
+ * wake) is counted as spin, so sinkers and changeups read high. Averages over many pitches are much steadier.
  */
 const G = 32.174;                 // ft/s²
-const K = 0.005314;               // ½ρA/m per ft (ρ 0.074 lb/ft³, r 0.121 ft, m 0.3203 lb)
-const R_BALL = 0.121;             // ft
+const R_BALL = 0.1210;            // ft (9.125 in circumference)
+const AREA = Math.PI * R_BALL * R_BALL, MASS = 0.3203;   // ft², lb (5.125 oz)
+const CL_A = 0.336, CL_B = 6.041;
+/** Standard air when a game's weather isn't known: 70°F, sea level, 50% humidity (Nathan's reference). */
+export const STANDARD_AIR = 0.0745;   // lb/ft³
+export const kFromDensity = (rhoLbFt3: number) => (0.5 * rhoLbFt3 * AREA) / MASS;
 
 export interface SpinProfile {
   axisDeg: number;     // Trackman SpinAxis convention, 0..360 (180 = 12:00)
@@ -22,7 +30,8 @@ export interface SpinProfile {
   gyroDeg: number | null;
 }
 
-export function spinProfile(c: Coeffs, spinRpm: number | null): SpinProfile | null {
+export function spinProfile(c: Coeffs, spinRpm: number | null, airDensity = STANDARD_AIR): SpinProfile | null {
+  const K = kFromDensity(airDensity);
   const tp = timeAtDist(c, PLATE_X);
   if (tp == null) return null;
   const tm = tp / 2;
@@ -41,8 +50,8 @@ export function spinProfile(c: Coeffs, spinRpm: number | null): SpinProfile | nu
   let eff: number | null = null, gyroDeg: number | null = null;
   if (spinRpm && spinRpm > 0) {
     const cl = Math.hypot(m[0], m[1], m[2]) / (K * vv * vv);
-    const S = cl < 0.42 ? (0.4 * cl) / (1 - 2.32 * cl) : 1;
-    const rpmT = ((S * vv) / R_BALL) * (60 / (2 * Math.PI));
+    const wT = cl >= CL_A ? Infinity : (vv / (R_BALL * CL_B)) * Math.log(CL_A / (CL_A - cl));   // rad/s
+    const rpmT = (wT * 60) / (2 * Math.PI);
     eff = Math.max(0, Math.min(1, rpmT / spinRpm));
     gyroDeg = (Math.acos(eff) * 180) / Math.PI;
   }

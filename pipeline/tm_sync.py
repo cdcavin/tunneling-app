@@ -407,9 +407,10 @@ def spincheck(f: FTP):
     tm_axis = pd.to_numeric(df["SpinAxis"], errors="coerce").to_numpy()
     diff = (axis - tm_axis + 180) % 360 - 180
     ok = ~np.isnan(diff)
-    cl = np.sqrt((m ** 2).sum(0)) / (0.005314 * vv ** 2)
-    S = np.where(cl < 0.42, 0.4 * cl / (1 - 2.32 * cl), 1)
-    rpmT = S * vv / 0.121 * 60 / (2 * np.pi)
+    K = 0.5 * 0.0745 * np.pi * 0.1210 ** 2 / 0.3203          # standard air (src/lib/spin.ts STANDARD_AIR)
+    cl = np.sqrt((m ** 2).sum(0)) / (K * vv ** 2)
+    wT = np.where(cl < 0.336, vv / (0.1210 * 6.041) * np.log(0.336 / np.clip(0.336 - cl, 1e-9, None)), np.inf)
+    rpmT = wT * 60 / (2 * np.pi)
     eff = np.clip(rpmT / pd.to_numeric(df["SpinRate"], errors="coerce").to_numpy(), 0, 1)
     print(f"::notice title=spincheck tilt vs Trackman SpinAxis (n={ok.sum()})::median abs diff {np.nanmedian(np.abs(diff)):.1f} deg, 90th pct {np.nanpercentile(np.abs(diff), 90):.1f}, 99th {np.nanpercentile(np.abs(diff), 99):.1f}; mean signed {np.nanmean(diff):.1f}")
     pt = df.get("TaggedPitchType", pd.Series(["?"] * len(df))).astype(str)
@@ -417,7 +418,7 @@ def spincheck(f: FTP):
     for t in pt.value_counts().index[:8]:
         sel = (pt == t).to_numpy() & ~np.isnan(eff)
         if sel.sum() >= 10:
-            parts.append(f"{t} n={sel.sum()} eff med {np.nanmedian(eff[sel]):.0%} [p10 {np.nanpercentile(eff[sel], 10):.0%}, p90 {np.nanpercentile(eff[sel], 90):.0%}] axis med {np.nanmedian(axis[sel]):.0f} vs TM {np.nanmedian(tm_axis[sel]):.0f}")
+            parts.append(f"{t} n={sel.sum()} eff med {np.nanmedian(eff[sel]):.0%} (capped at 100%: {np.mean(eff[sel] >= 0.999):.0%}) [p10 {np.nanpercentile(eff[sel], 10):.0%}, p90 {np.nanpercentile(eff[sel], 90):.0%}] axis med {np.nanmedian(axis[sel]):.0f} vs TM {np.nanmedian(tm_axis[sel]):.0f}")
     print("::notice title=spincheck efficiency by pitch type::" + " | ".join(parts))
 
 

@@ -55,6 +55,44 @@ async function awre(env: Env, pathname: string): Promise<Response> {
   return new Response(body, { headers: JSON_HEADERS });
 }
 
+/**
+ * Weather at WVU's ballpark for one hour, from Open-Meteo (free, no key): the archive for dates older than a week,
+ * the forecast API (which also serves the last few days) otherwise. Cached in KV by hour.
+ *   GET /api/weather?t=<ISO UTC time>  ->  { tempF, rh, pressureHpa, windMph, windFromDeg, code, desc, airDensity (lb/ft³) }
+ * Air density uses station pressure (already at the park's elevation), temperature and humidity.
+ */
+const PARK = { lat: 39.648, lon: -79.993 };   // Morgantown, WV (Monongalia County Ballpark area)
+const WX_DESC = (c: number) => c === 0 ? "Clear" : c <= 2 ? "Partly cloudy" : c === 3 ? "Overcast" : c <= 48 ? "Fog" : c <= 57 ? "Drizzle"
+  : c <= 67 ? "Rain" : c <= 77 ? "Snow" : c <= 82 ? "Showers" : c <= 86 ? "Snow showers" : "Thunderstorm";
+async function weather(env: Env, request: Request): Promise<Response> {
+  const t = new URL(request.url).searchParams.get("t") ?? "";
+  const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : t.replace(" ", "T") + "Z");
+  if (Number.isNaN(ms)) return json({ error: "Bad time." }, 400);
+  const hour = new Date(Math.round(ms / 3600000) * 3600000).toISOString().slice(0, 13);   // nearest hour, UTC
+  const key = `wx:v1:${hour}`;
+  const hit = await env.DATA.get(key, "text");
+  if (hit) return new Response(hit, { headers: JSON_HEADERS });
+  const day = hour.slice(0, 10);
+  const recent = Date.now() - ms < 7 * 86400000;
+  const base = recent ? "https://api.open-meteo.com/v1/forecast" : "https://archive-api.open-meteo.com/v1/archive";
+  const q = `latitude=${PARK.lat}&longitude=${PARK.lon}&start_date=${day}&end_date=${day}&timezone=GMT&temperature_unit=fahrenheit&wind_speed_unit=mph`
+    + "&hourly=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code";
+  const r = await fetch(`${base}?${q}`);
+  if (!r.ok) return json({ error: `Weather lookup failed (HTTP ${r.status}).` }, 502);
+  const d = (await r.json()) as { hourly?: Record<string, (number | string | null)[]> };
+  const h = d.hourly; const i = h?.time?.findIndex((x) => String(x).slice(0, 13) === hour) ?? -1;
+  if (!h || i < 0 || h.temperature_2m[i] == null) return json({ error: "No weather for that hour." }, 404);
+  const tempF = Number(h.temperature_2m[i]), rh = Number(h.relative_humidity_2m[i]), p = Number(h.surface_pressure[i]);
+  const tc = ((tempF - 32) * 5) / 9, tk = tc + 273.15;
+  const pv = (rh / 100) * 6.1078 * Math.pow(10, (7.5 * tc) / (tc + 237.3));        // hPa
+  const rho = ((p - pv) * 100) / (287.058 * tk) + (pv * 100) / (461.495 * tk);      // kg/m³
+  const code = Number(h.weather_code[i]);
+  const body = JSON.stringify({ hour, tempF, rh, pressureHpa: p, windMph: Number(h.wind_speed_10m[i]), windFromDeg: Number(h.wind_direction_10m[i]),
+    code, desc: WX_DESC(code), airDensity: rho * 0.0624280 });
+  await env.DATA.put(key, body, recent ? { expirationTtl: 3 * 86400 } : {});        // recent hours get refreshed once the archive has them
+  return new Response(body, { headers: JSON_HEADERS });
+}
+
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "private, max-age=300" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
@@ -163,6 +201,7 @@ export default {
       return p ? json(p) : json({ error: `No pitcher ${id}.` }, 404);
     }
 
+    if (pathname === "/api/weather") return weather(env, request);
     if (pathname === "/api/awre/stream") return stream(env, request);
     if (pathname.startsWith("/api/awre/")) return awre(env, pathname);
     if (pathname.startsWith("/api/")) return json({ error: "Not found." }, 404);
