@@ -605,3 +605,26 @@ button.primary.wide { width: 100%; }
 /* 3D camera: one drop-down in the corner (the button row ran under the legend) */
 .hud-cams { flex-wrap: nowrap; max-width: none; padding: 0; background: none; backdrop-filter: none; }
 .hud-cams select { padding: 5px 26px 5px 9px; font-size: 12px; background-color: var(--glass); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 6px; }
+
+/* Spin profile card (above the tunneled-vs-not table, same frame) */
+.spincard { background: var(--panel); padding: 18px 20px 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
+.spin-row { display: grid; grid-template-columns: minmax(0, 1fr) 170px minmax(0, 1fr); align-items: center; gap: 8px; max-width: 760px; margin: 0 auto; }
+.spin-ball { display: flex; flex-direction: column; align-items: center; }
+.spin-name { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); }
+.spin-name i { width: 8px; height: 8px; border-radius: 50%; }
+.spin-name b { color: var(--ink); font-family: var(--font-cond); }
+.spin-canvas { width: 180px; height: 180px; }
+.spin-empty { display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.spin-clock { font: 600 28px/1 var(--font-cond); color: var(--ink); font-variant-numeric: tabular-nums; }
+.spin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; margin-top: 8px; text-align: center; }
+.spin-stats b { display: block; font: 600 15px var(--font-cond); color: var(--ink); font-variant-numeric: tabular-nums; }
+.spin-stats span { font-size: 11px; color: var(--muted); }
+.spin-mid { text-align: center; }
+.spin-score { font: 600 32px var(--font-cond); fill: var(--ink); }
+.spin-of { font-size: 11px; fill: var(--muted); }
+.spin-mid-label { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+.spin-gaps { display: grid; grid-template-columns: auto auto; gap: 3px 12px; justify-content: center; margin: 10px 0 0; font-size: 12px; }
+.spin-gaps dt { color: var(--muted); text-align: right; }
+.spin-gaps dd { margin: 0; color: var(--ink); font-family: var(--font-cond); text-align: left; font-variant-numeric: tabular-nums; }
+.spincard .hint { text-align: center; max-width: 760px; margin: 8px auto 0; }
+@media (max-width: 700px) { .spin-row { grid-template-columns: 1fr; } }

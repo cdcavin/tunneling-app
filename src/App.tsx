@@ -9,6 +9,7 @@ import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
 import VideoOverlay from "./components/VideoOverlay";
 import AngleCharts from "./components/AngleCharts";
+import SpinCard from "./components/SpinCard";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
 import PitcherFinder from "./components/PitcherFinder";
@@ -456,6 +457,11 @@ export default function App() {
             </div>
           </div>
 
+          {last && next && (
+            <SpinCard
+              a={{ label: "A", type: last.type, coeffs: lastAimed, spin: actual ? actual.anchor.spin : last.spin }}
+              b={{ label: "B", type: next.type, coeffs: nextAimed, spin: actual ? actual.next.spin : next.spin }} />
+          )}
           <SepReference rows={rows} anchorType={last?.type ?? null} tunnelType={next?.type ?? null} sep={geo ? geo.decisionSep : null} />
 
           <div className="metrics" aria-live="polite">
