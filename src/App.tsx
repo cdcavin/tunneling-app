@@ -471,9 +471,7 @@ export default function App() {
             <Metric label="Apart at 23.8 ft" value={geo ? geo.decisionSep.toFixed(1) : "—"} unit="in" accent
               note={(() => { const g = geo && last && next ? gradeFor(last.type, next.type, geo.decisionSep) : null; return g ? `${g.label} · tighter than ${g.tighter}% of P4` : undefined; })()} />
             <Metric label="Apart at plate" value={geo ? geo.plateSep.toFixed(1) : "—"} unit="in" />
-            <Metric label="Late separation" value={geo ? geo.lateSep.toFixed(1) : "—"} unit="in" />
             <Metric label="Velo gap" value={last && next ? signed(next.velo + delta.velo - last.velo) : "—"} unit="mph" />
-            <Metric label="Extra flight" value={geo ? signed(geo.flightTimeDiffMs, 0) : "—"} unit="ms" />
           </div>
 
           <div className="cards">
