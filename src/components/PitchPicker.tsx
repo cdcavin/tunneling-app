@@ -190,8 +190,10 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
           <div className="picker-list" role="list">
             {list.map((r) => (
               <div key={r.id} role="listitem" className={`pick-row${A?.id === r.id ? " is-a" : ""}${B?.id === r.id && !isPlaceholder ? " is-b" : ""}`}>
-                <span className="pick-when">{r.date} · {r.half === "Bottom" ? "B" : "T"}{r.inning ?? "?"} · PA {r.pa ?? "?"} · #{r.pitchNo ?? "?"}</span>
-                <span className="pick-what"><i style={{ background: pitchColorOnDark(r.type) }} />{r.type} {r.velo.toFixed(0)}{r.count ? ` · ${r.count}` : ""} · {outcomeOf(r) === "In play: hit" ? r.result : outcomeOf(r) === "Other" ? r.call : outcomeOf(r)}{r.ev != null ? ` ${r.ev.toFixed(0)} EV` : ""}{r.batter ? ` · ${r.batter}` : ""}</span>
+                <span className="pick-main">
+                  <span className="pick-what"><i style={{ background: pitchColorOnDark(r.type) }} />{r.type} <b>{r.velo.toFixed(1)}</b><span className="pick-out">{outcomeOf(r) === "In play: hit" ? r.result : outcomeOf(r) === "Other" ? r.call : outcomeOf(r)}{r.ev != null ? ` · ${r.ev.toFixed(0)} EV` : ""}</span></span>
+                  <span className="pick-when">{`${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}`} · {r.half === "Bottom" ? "B" : "T"}{r.inning ?? "?"} · PA {r.pa ?? "?"} · #{r.pitchNo ?? "?"}{r.count ? ` · ${r.count}` : ""}{r.batter ? ` · ${r.batter}` : ""}</span>
+                </span>
                 <span className="pick-btns">
                   <button type="button" onClick={() => { onSelect(B && !isPlaceholder ? { anchor: r, next: B } : { anchor: r, next: r }); setSlot("B"); resetFilters(); }} aria-label={`Use as A: ${short(r)}`}>A</button>
                   <button type="button" onClick={() => { onSelect(A ? { anchor: A, next: r } : { anchor: r, next: r }); if (A) setOpen(false); }} aria-label={`Use as B: ${short(r)}`}>B</button>

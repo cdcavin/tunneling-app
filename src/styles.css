@@ -566,3 +566,11 @@ button.primary.wide { width: 100%; }
 .dfilter-row { display: flex; flex-wrap: wrap; gap: 4px; }
 .dfilter-pop select { width: 100%; padding: 5px 7px; font-size: 12px; min-width: 0; }
 .type-chip.is-off { opacity: 0.4; text-decoration: line-through; }
+
+/* Pitch rows: type and velo always visible on top, the when/who line below */
+.pick-row { grid-template-columns: minmax(0, 1fr) auto; }
+.pick-main { display: grid; min-width: 0; gap: 1px; }
+.pick-main .pick-what { white-space: nowrap; }
+.pick-what b { font-family: var(--font-cond); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pick-out { margin-left: 6px; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.pick-main .pick-when { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
