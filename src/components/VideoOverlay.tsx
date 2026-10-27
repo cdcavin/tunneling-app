@@ -102,8 +102,11 @@ async function scratchClip(url: string): Promise<{ v: HTMLVideoElement; destroy:
   return { v, destroy };
 }
 
-const pick = (clips: AwreClip[], want: string) =>
-  clips.find((c) => c.perspective === want) ?? clips.find((c) => /home ?plate|center ?field/i.test(c.perspective)) ?? clips[0] ?? null;
+/** The clip from exactly this camera, or nothing: A and B must never come from different cameras. */
+const pick = (clips: AwreClip[], want: string) => clips.find((c) => c.perspective === want) ?? null;
+/** Cameras both clips have, center field first. "All" is skipped: it's a copy of whichever camera AWRE marks main. */
+const CAM_ORDER = [/center ?field/i, /home ?plate/i, /right handed pitcher/i, /left handed pitcher/i, /right handed hitter/i, /left handed hitter/i];
+const camRank = (n: string) => { const i = CAM_ORDER.findIndex((re) => re.test(n)); return i < 0 ? 99 : i; };
 
 /** Where a clip's timeline starts. Clips cut from a continuous recording don't start at 0. */
 const t0 = (v: HTMLVideoElement) => (v.seekable.length ? v.seekable.start(0) : 0);
@@ -168,8 +171,11 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       setStatus(missing.length
         ? `No AWRE video for pitch ${missing.join(" and ")} (${missing.length === 1 ? "it" : "they"} may not have been filmed or synced). Pick another.`
         : err ?? null);
-      const names = a.clips.map((c) => c.perspective).filter((p) => b.clips.some((c) => c.perspective === p));
-      setPerspective((cur) => (names.includes(cur) ? cur : names.find((n) => /center ?field/i.test(n)) ?? names.find((n) => /home ?plate/i.test(n)) ?? names[0] ?? ""));
+      const names = a.clips.map((c) => c.perspective).filter((p) => p !== "All" && b.clips.some((c) => c.perspective === p)).sort((x, y) => camRank(x) - camRank(y));
+      // Every new pair starts on center field (or the next best camera both clips have); a camera picked for the last pair doesn't carry over.
+      setPerspective(names[0] ?? "");
+      if (!missing.length && !names.length) setStatus("These two pitches have no camera in common, so they can't be stacked. Pick another.");
+      else if (!missing.length && !/center ?field/i.test(names[0] ?? "")) setStatus(`No center-field video for ${a.clips.some((c) => /center ?field/i.test(c.perspective)) ? "pitch B" : "pitch A"}; showing ${names[0]} for both.`);
     });
     return () => { cancelled = true; };
   }, [selected, pitcherTeam]);
@@ -541,7 +547,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const markA = () => { const a = vA.current; if (a) setManualA(tIn(a)); };
   const markB = () => { const b = vB.current; if (b) setManualB(tIn(b)); };
 
-  const perspectives = clipsA.map((c) => c.perspective).filter((p) => clipsB.some((c) => c.perspective === p));
+  const perspectives = clipsA.map((c) => c.perspective).filter((p) => p !== "All" && clipsB.some((c) => c.perspective === p)).sort((x, y) => camRank(x) - camRank(y));
   const busy = aligning || syncing;
   const fmt = (s: number) => `${s >= 0 ? "+" : "−"}${Math.abs(s * 1000).toFixed(0)} ms`;
 
