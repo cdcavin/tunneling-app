@@ -601,3 +601,7 @@ button.primary.wide { width: 100%; }
 @media (max-width: 1200px) { .cards { grid-template-columns: 1fr; } }
 .kde-mark { font: 700 9px var(--font-cond); }
 .kde-legend b { color: var(--ink); }
+
+/* 3D camera: one drop-down in the corner (the button row ran under the legend) */
+.hud-cams { flex-wrap: nowrap; max-width: none; padding: 0; background: none; backdrop-filter: none; }
+.hud-cams select { padding: 5px 26px 5px 9px; font-size: 12px; background-color: var(--glass); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 6px; }

@@ -407,12 +407,10 @@ export default function App() {
               <div className="stage-canvas">
               <Scene3D last={sceneLast} next={sceneNext} extra={extraTracks} aim={aim} aimColor={next ? pitchColorOnDark(next.type) : "#ffffff"} camera={camera}
                 heat={heat} selected={placing === 0 ? curLastLoc : curNextLoc} anchorLoc={curLastLoc} anchorColor={last ? pitchColorOnDark(last.type) : "#9aa7ba"} best={bestTight} onPick={place} flightTime={playing || videoClock == null ? clock : videoClock} />
-              <div className="hud hud-cams" role="radiogroup" aria-label="Camera">
-                {(Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((k) => (
-                  <button key={k} type="button" role="radio" aria-checked={k === camera} className={k === camera ? "is-on" : ""} onClick={() => setCamera(k)}>
-                    {CAMERA_PRESETS[k].label}
-                  </button>
-                ))}
+              <div className="hud hud-cams">
+                <select aria-label="Camera" value={camera} onChange={(e) => setCamera(e.target.value as CameraPreset)}>
+                  {(Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((k) => <option key={k} value={k}>{CAMERA_PRESETS[k].label} view</option>)}
+                </select>
               </div>
               <div className="hud hud-toggles">
                 <label className="hud-check"><input type="checkbox" checked={showHeat3D} onChange={(e) => setShowHeat3D(e.target.checked)} />Heat on plate</label>
