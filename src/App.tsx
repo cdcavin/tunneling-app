@@ -471,6 +471,11 @@ export default function App() {
           </div>
 
           <div className="cards">
+            {last && next && (
+              <section className="card card-wide">
+                <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />
+              </section>
+            )}
             <section className="card">
               <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
             </section>
@@ -499,11 +504,6 @@ export default function App() {
                 </div>
               )}
             </section>
-            {last && next && (
-              <section className="card card-wide">
-                <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />
-              </section>
-            )}
           </div>
         </main>
       </div>
