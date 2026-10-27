@@ -16,9 +16,9 @@ import PitcherFinder from "./components/PitcherFinder";
 import SepReference from "./components/SepReference";
 import { comboKey, gradeOf, useReference } from "./lib/reference";
 import { realLoc } from "./lib/arsenal";
-import { realPairs, type RealPair } from "./lib/pairs";
+import { atWvuPark, realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
-import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher } from "./lib/types";
+import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher, type PitchRow } from "./lib/types";
 
 const FASTBALLS = ["Four-Seam", "Fastball", "Sinker"];
 const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}`;
@@ -123,6 +123,7 @@ export default function App() {
 
   const rows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
   const arsenal = useMemo(() => buildArsenal(rows), [rows]);
+  const isHomeRow = useCallback((r: PitchRow) => atWvuPark(r, pitcher?.team), [pitcher?.team]);
 
   // The finder's Year choice ("" = any). Calendar year: "2026" covers the 2026 spring and Fall 2026.
   const [finderYear, setFinderYear] = useState("");
@@ -160,6 +161,8 @@ export default function App() {
   // If a filter removes the selected type, fall back to what's left.
   const last = arsenal.find((p) => p.type === lastType) ?? arsenal[0] ?? null;
   const next = arsenal.find((p) => p.type === nextType) ?? arsenal.find((p) => p.type !== last?.type) ?? arsenal[0] ?? null;
+  const lastTypeRows = useMemo(() => rows.filter((r) => r.type === last?.type), [rows, last?.type]);
+  const nextTypeRows = useMemo(() => rows.filter((r) => r.type === next?.type), [rows, next?.type]);
   const shaped = useMemo(() => (next ? perturb(next.coeffs, delta) : null), [next, delta]);
 
   // In arsenal mode every pitch has its own spot (real average unless moved); the anchor and the active pitch read from there.
@@ -458,9 +461,9 @@ export default function App() {
           </div>
 
           {last && next && (
-            <SpinCard
-              a={{ label: "A", type: last.type, coeffs: lastAimed, spin: actual ? actual.anchor.spin : last.spin }}
-              b={{ label: "B", type: next.type, coeffs: nextAimed, spin: actual ? actual.next.spin : next.spin }} />
+            <SpinCard isHome={isHomeRow}
+              a={{ label: "A", type: last.type, coeffs: lastAimed, spin: actual ? actual.anchor.spin : last.spin, row: actual ? actual.anchor : null, typeRows: lastTypeRows }}
+              b={{ label: "B", type: next.type, coeffs: nextAimed, spin: actual ? actual.next.spin : next.spin, row: actual ? actual.next : null, typeRows: nextTypeRows }} />
           )}
           <SepReference rows={rows} anchorType={last?.type ?? null} tunnelType={next?.type ?? null} sep={geo ? geo.decisionSep : null} />
 
