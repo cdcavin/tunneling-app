@@ -422,7 +422,8 @@ def spincheck(f: FTP):
     print("::notice title=spincheck efficiency by pitch type::" + " | ".join(parts))
 
 
-if MODE == "spintest":
+if MODE in ("spintest", "spintest-plate"):
+    os.environ["HOLD_PLATE"] = "1" if MODE == "spintest-plate" else "0"
     sys.path.insert(0, os.path.dirname(__file__)); import sync
     sync.spin_test(); sys.exit(0)
 

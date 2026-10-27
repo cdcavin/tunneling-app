@@ -502,6 +502,9 @@ def spin_pairs(pitches, pid):
     return P.assign(pitcher=pid, **{c: full.loc[P.index, c].to_numpy() for c in full.columns})
 
 
+HOLD_PLATE = os.environ.get("HOLD_PLATE") == "1"
+
+
 def spin_test():
     s3 = r2()
     idx = get_json(s3, "index.json.gz")
@@ -519,6 +522,7 @@ def spin_test():
     combos = P.combo.value_counts(); P = P[P.combo.isin(combos[combos >= 400].index)]
     # strata: same pitch combo and same tunnel (sep at 23.8 ft in that combo's quintiles); spin groups: thirds of axis gap within each combo
     P["tun"] = P.groupby("combo").sep23.transform(lambda s: pd.qcut(s, 5, labels=False, duplicates="drop"))
+    P["plt"] = P.groupby("combo").sepP.transform(lambda s: pd.qcut(s, 5, labels=False, duplicates="drop"))
     P["spg"] = P.groupby("combo").apart.transform(lambda s: pd.qcut(s, 3, labels=False, duplicates="drop"))
     rho = P.groupby("combo").apply(lambda g: g[["apart", "sep23"]].corr(method="spearman").iloc[0, 1])
     print(f"::notice title=spintest data::{len(P)} competitive P4 back-to-back pairs, {P.pitcher.nunique()} pitchers, {P.combo.nunique()} combos; "
@@ -530,7 +534,7 @@ def spin_test():
         out = {}
         for name, num, den in (("chase", "chase", "ooz"), ("whiff/swing", "whiff", "swing"), ("swing", "swing", None)):
             diffs, w = [], []
-            for _, g in D.groupby(["combo", "tun"]):
+            for _, g in D.groupby(["combo", "tun"] + (["plt"] if HOLD_PLATE else [])):
                 lo, hi = g[g.spg == 0], g[g.spg == 2]
                 if den:
                     a, b = lo[den].sum(), hi[den].sum()
@@ -558,7 +562,7 @@ def spin_test():
         parts.append(f"{k}: {est[k] * 100:+.1f} pts [95% CI {lo * 100:+.1f} to {hi * 100:+.1f}]")
     lo, hi = np.nanpercentile(B["ev"], [2.5, 97.5])
     parts.append(f"avg EV: {est['ev']:+.1f} mph [95% CI {lo:+.1f} to {hi:+.1f}]")
-    print("::notice title=spintest matched spin minus different spin, same combo and same tunnel::" + " | ".join(parts))
+    print("::notice title=spintest matched spin minus different spin, same combo and same tunnel{' and same plate separation' if HOLD_PLATE else ''}::" + " | ".join(parts))
     rows = []
     for combo in combos.index[:6]:
         if combo not in set(P.combo): continue
