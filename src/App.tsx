@@ -474,8 +474,6 @@ export default function App() {
             <Metric label="Late separation" value={geo ? geo.lateSep.toFixed(1) : "—"} unit="in" />
             <Metric label="Velo gap" value={last && next ? signed(next.velo + delta.velo - last.velo) : "—"} unit="mph" />
             <Metric label="Extra flight" value={geo ? signed(geo.flightTimeDiffMs, 0) : "—"} unit="ms" />
-            <Metric label="xWhiff" value="—" note="model pending" />
-            <Metric label="xWeakCon" value="—" note="model pending" />
           </div>
 
           <div className="cards">
