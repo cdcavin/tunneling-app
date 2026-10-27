@@ -384,6 +384,46 @@ def spincols(f: FTP):
         print(f"::notice title=spin columns {label} ({x[1][:8]})::" + " | ".join(parts))
 
 
+def spincheck(f: FTP):
+    """Tilt and efficiency computed from the trajectory fit (same math as src/lib/spin.ts) vs Trackman's SpinAxis."""
+    import pandas as pd, numpy as np
+    files = walk_v3(f)
+    csvs = sorted([x for x in files if x[1].lower().endswith(".csv") and not SKIP.search(x[1]) and WVU_NAME.search(x[1])], key=lambda x: x[1])
+    df = pd.concat([pd.read_csv(io.BytesIO(f.read(x[0])), low_memory=False) for x in csvs[-4:]], ignore_index=True)
+    T = lambda k: pd.to_numeric(df[f"PitchTrajectory{k}"], errors="coerce").to_numpy()
+    Xc0, Xc1, Xc2, Yc1, Yc2, Zc1, Zc2 = (T(k) for k in ("Xc0", "Xc1", "Xc2", "Yc1", "Yc2", "Zc1", "Zc2"))
+    d = 17 / 12
+    disc = Xc1 ** 2 - 4 * Xc2 * (Xc0 - d)
+    r = np.sqrt(np.where(disc > 0, disc, np.nan))
+    t1, t2 = (-Xc1 - r) / (2 * Xc2), (-Xc1 + r) / (2 * Xc2)
+    tp = np.where((np.minimum(t1, t2) >= 0), np.minimum(t1, t2), np.maximum(t1, t2))
+    tm = tp / 2
+    v = np.stack([Xc1 + 2 * Xc2 * tm, Yc1 + 2 * Yc2 * tm, Zc1 + 2 * Zc2 * tm])
+    a = np.stack([2 * Xc2, 2 * Yc2 + 32.174, 2 * Zc2])
+    vv = np.sqrt((v ** 2).sum(0)); along = (a * v).sum(0) / vv ** 2
+    m = a - along * v
+    tilt = np.arctan2(-m[2], m[1])
+    axis = (180 + np.degrees(tilt)) % 360
+    tm_axis = pd.to_numeric(df["SpinAxis"], errors="coerce").to_numpy()
+    diff = (axis - tm_axis + 180) % 360 - 180
+    ok = ~np.isnan(diff)
+    cl = np.sqrt((m ** 2).sum(0)) / (0.005314 * vv ** 2)
+    S = np.where(cl < 0.42, 0.4 * cl / (1 - 2.32 * cl), 1)
+    rpmT = S * vv / 0.121 * 60 / (2 * np.pi)
+    eff = np.clip(rpmT / pd.to_numeric(df["SpinRate"], errors="coerce").to_numpy(), 0, 1)
+    print(f"::notice title=spincheck tilt vs Trackman SpinAxis (n={ok.sum()})::median abs diff {np.nanmedian(np.abs(diff)):.1f} deg, 90th pct {np.nanpercentile(np.abs(diff), 90):.1f}, 99th {np.nanpercentile(np.abs(diff), 99):.1f}; mean signed {np.nanmean(diff):.1f}")
+    pt = df.get("TaggedPitchType", pd.Series(["?"] * len(df))).astype(str)
+    parts = []
+    for t in pt.value_counts().index[:8]:
+        sel = (pt == t).to_numpy() & ~np.isnan(eff)
+        if sel.sum() >= 10:
+            parts.append(f"{t} n={sel.sum()} eff med {np.nanmedian(eff[sel]):.0%} [p10 {np.nanpercentile(eff[sel], 10):.0%}, p90 {np.nanpercentile(eff[sel], 90):.0%}] axis med {np.nanmedian(axis[sel]):.0f} vs TM {np.nanmedian(tm_axis[sel]):.0f}")
+    print("::notice title=spincheck efficiency by pitch type::" + " | ".join(parts))
+
+
+if MODE == "spincheck":
+    spincheck(FTP(quiet=True)); sys.exit(0)
+
 if MODE == "spincols":
     spincols(FTP(quiet=True)); sys.exit(0)
 
