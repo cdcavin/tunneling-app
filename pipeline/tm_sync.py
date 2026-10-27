@@ -365,6 +365,28 @@ def dry(f: FTP):
     print(f"  pitches in FTP files but not in the app (would be added): {len(new)} by season {new.seasonLabel.value_counts().sort_index().to_dict()}")
 
 
+def spincols(f: FTP):
+    """Which spin / axis / tilt / efficiency columns the files carry, as GitHub annotations (readable through the API)."""
+    import pandas as pd
+    files = walk_v3(f)
+    csvs = [x for x in files if x[1].lower().endswith(".csv") and not SKIP.search(x[1])]
+    wvu = sorted([x for x in csvs if WVU_NAME.search(x[1])], key=lambda x: x[1])
+    d1 = sorted([x for x in csvs if not WVU_NAME.search(x[1]) and x[1].startswith("2026")], key=lambda x: x[1])
+    pat = re.compile(r"spin|axis|tilt|gyro|eff|bauer", re.I)
+    for label, x in (("WVU newest", wvu[-1] if wvu else None), ("D1 2026", d1[len(d1) // 2] if d1 else None)):
+        if not x: continue
+        df = pd.read_csv(io.BytesIO(f.read(x[0])), low_memory=False)
+        cols = [c for c in df.columns if pat.search(c) and c not in NAME_COLS]
+        parts = []
+        for c in cols:
+            v = pd.to_numeric(df[c], errors="coerce")
+            parts.append(f"{c} {v.notna().mean():.0%} [{v.min():.1f}..{v.max():.1f}]" if v.notna().any() else f"{c} 0%")
+        print(f"::notice title=spin columns {label} ({x[1][:8]})::" + " | ".join(parts))
+
+
+if MODE == "spincols":
+    spincols(FTP(quiet=True)); sys.exit(0)
+
 if MODE == "models":
     import runpy
     runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fetch_models.py"), run_name="__main__")
