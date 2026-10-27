@@ -80,7 +80,7 @@ export default function App() {
   const [pair, setPair] = useState<RealPair | null>(null);        // a real back-to-back pair he threw
   const [showActual, setShowActual] = useState(true);              // draw the real pair instead of the aimed averages
   const [heatMetric, setHeatMetric] = useState<HeatMetric>("decision");
-  const [maxDecision, setMaxDecision] = useState(4);
+  const maxDecision = 4;   // "tight, then far": stays within 4 in at 23.8 ft (fixed; the slider was removed)
   const [delta, setDelta] = useState<ShapeDelta>(NO_DELTA);
   const [suggestions, setSuggestions] = useState<{ current: Suggestion; best: Suggestion[] } | null>(null);
   const [showAim, setShowAim] = useState(false);
@@ -333,10 +333,6 @@ export default function App() {
                 Lock tight, then far
               </button>
             </div>
-            <label className="slider">
-              <span>“Tight, then far” stays within <b>{maxDecision} in</b> at 23.8 ft</span>
-              <input type="range" min={1} max={10} step={0.5} value={maxDecision} onChange={(e) => setMaxDecision(Number(e.target.value))} aria-label="Tight-then-far limit at 23.8 ft, inches" />
-            </label>
           </section>
           )}
           {pitcher && arsenalMode && (
