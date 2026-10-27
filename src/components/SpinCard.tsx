@@ -185,7 +185,6 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
       <div className="sepref-head">
         <div>
           <div className="sec-title">Spin profile</div>
-          <div className="sepref-sub">Pitcher's view · tilt from movement (Trackman's method) · efficiency and gyro estimated</div>
         </div>
       </div>
       <div className="spin-row">
