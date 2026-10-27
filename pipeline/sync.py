@@ -459,3 +459,109 @@ def run(open_ftp, upload=False):
     put_json(s3, "sync/state.json.gz", {"seen": {x[0]: [x[2], x[3]] for x in csvs}, "games": done_games, "teamNames": team_names,
                                         "lastRun": dt.datetime.now(dt.timezone.utc).isoformat()})
     print(f"\nuploaded {len(out_docs)} pitcher files, reference, index, state")
+
+
+# ---------- spin test: do spin-matched pairs do better at the same tunnel? ----------
+def _spin_axes(rs):
+    """Unit spin axis per pitch (pitcher's view), same math as src/lib/spin.ts with standard air. NaN when unknown."""
+    C = {k: np.array([float(p["coeffs"].get(k, np.nan)) for p in rs]) for k in ["Xc0", "Xc1", "Xc2", "Yc1", "Yc2", "Zc1", "Zc2"]}
+    spin = np.array([float(p["spin"]) if p.get("spin") else np.nan for p in rs])
+    a, b, k = C["Xc2"], C["Xc1"], C["Xc0"] - PLATE_X
+    with np.errstate(invalid="ignore", divide="ignore"):
+        disc = np.sqrt(np.clip(b * b - 4 * a * k, 0, None)); t1, t2 = (-b - disc) / (2 * a), (-b + disc) / (2 * a)
+        lo, hi = np.minimum(t1, t2), np.maximum(t1, t2); tp = np.where(lo >= -1e-9, np.maximum(lo, 0), np.maximum(hi, 0)); tm = tp / 2
+        v = np.stack([C["Xc1"] + 2 * C["Xc2"] * tm, C["Yc1"] + 2 * C["Yc2"] * tm, C["Zc1"] + 2 * C["Zc2"] * tm])
+        acc = np.stack([2 * C["Xc2"], 2 * C["Yc2"] + 32.174, 2 * C["Zc2"]])
+        vv = np.sqrt((v ** 2).sum(0)); m = acc - ((acc * v).sum(0) / vv ** 2) * v
+        tilt = np.arctan2(-m[2], m[1])
+        K = 0.5 * 0.0745 * np.pi * 0.1210 ** 2 / 0.3203
+        cl = np.sqrt((m ** 2).sum(0)) / (K * vv ** 2)
+        wT = np.where(cl < 0.336, vv / (0.1210 * 6.041) * np.log(0.336 / np.clip(0.336 - cl, 1e-9, None)), np.inf)
+        eff = np.clip(wT * 60 / (2 * np.pi) / spin, 0, 1)
+        g = np.arccos(eff)
+    return np.stack([-np.cos(tilt) * np.cos(g), np.sin(tilt) * np.cos(g), np.sin(g)]), np.degrees(tilt)
+
+
+def spin_pairs(pitches, pid):
+    rs = [p for p in pitches if p.get("coeffs") and p.get("spin") and None not in (p.get("game"), p.get("inning"), p.get("half"), p.get("pa"), p.get("pitchNo"))]
+    if len(rs) < 2: return None
+    rs.sort(key=lambda p: (str(p["game"]), p["inning"], str(p["half"]), p["pa"], p["pitchNo"]))
+    P = pairs_of(rs)
+    if P is None or not len(P): return None
+    # pairs_of keeps row order of consecutive pairs; rebuild the index pairs the same way to line up the spin.
+    key = [(str(p["game"]), p["inning"], str(p["half"]), p["pa"]) for p in rs]
+    pn = np.array([p["pitchNo"] for p in rs])
+    ok = np.array([key[i] == key[i + 1] for i in range(len(rs) - 1)]) & (np.diff(pn) == 1)
+    i = np.nonzero(ok)[0]; j = i + 1
+    ax, tilt = _spin_axes(rs)
+    dot = np.clip((ax[:, i] * ax[:, j]).sum(0), -1, 1)
+    full = pd.DataFrame({"apart": np.degrees(np.arccos(dot)),
+                         "tiltgap": np.abs((tilt[j] - tilt[i] + 180) % 360 - 180),
+                         "dvelo": [abs(float(rs[b].get("velo") or np.nan) - float(rs[a].get("velo") or np.nan)) for a, b in zip(i, j)]})
+    # pairs_of filtered rows (finite sep, plate sep >= 6); recompute the same mask to align
+    return P.assign(pitcher=pid, **{c: full.loc[P.index, c].to_numpy() for c in full.columns})
+
+
+def spin_test():
+    s3 = r2()
+    idx = get_json(s3, "index.json.gz")
+    readers = Readers(lambda quiet=False: None)
+    p4 = [p for p in idx["pitchers"] if p.get("conf") in P4]
+    frames = readers.map(lambda p: spin_pairs(get_json(s3, f"pitchers/{p['id']}.json.gz")["pitches"], p["id"]), p4, r2=True)
+    P = pd.concat([f for f in frames if f is not None and len(f)], ignore_index=True)
+    P = P[np.isfinite(P.apart)]
+    c = COMPETITIVE
+    P = P[(P.side.abs() <= c["side"]) & P.height.between(c["low"], c["high"])]
+    swing = P.call.eq("strikeswinging") | P.call.str.startswith("foulball") | P.call.eq("inplay")
+    ooz = ~((P.side.abs() <= 0.83) & P.height.between(1.5, 3.5))
+    P = P.assign(swing=swing, whiff=P.call.eq("strikeswinging"), ooz=ooz, chase=ooz & swing, ztake=~ooz & ~swing,
+                 ev=np.where(P.call.eq("inplay"), P.ev, np.nan))
+    combos = P.combo.value_counts(); P = P[P.combo.isin(combos[combos >= 400].index)]
+    # strata: same pitch combo and same tunnel (sep at 23.8 ft in that combo's quintiles); spin groups: thirds of axis gap within each combo
+    P["tun"] = P.groupby("combo").sep23.transform(lambda s: pd.qcut(s, 5, labels=False, duplicates="drop"))
+    P["spg"] = P.groupby("combo").apart.transform(lambda s: pd.qcut(s, 3, labels=False, duplicates="drop"))
+    rho = P.groupby("combo").apply(lambda g: g[["apart", "sep23"]].corr(method="spearman").iloc[0, 1])
+    print(f"::notice title=spintest data::{len(P)} competitive P4 back-to-back pairs, {P.pitcher.nunique()} pitchers, {P.combo.nunique()} combos; "
+          f"axis gap median {P.apart.median():.0f} deg (p25 {P.apart.quantile(.25):.0f}, p75 {P.apart.quantile(.75):.0f}); "
+          f"corr(axis gap, sep at 23.8) by combo: median {rho.median():.2f} [range {rho.min():.2f}..{rho.max():.2f}]")
+
+    def effect(D):
+        """Matched (low third) minus different (high third) spin, within combo x tunnel strata, weighted by pairs."""
+        out = {}
+        for name, num, den in (("chase", "chase", "ooz"), ("whiff/swing", "whiff", "swing"), ("swing", "swing", None)):
+            diffs, w = [], []
+            for _, g in D.groupby(["combo", "tun"]):
+                lo, hi = g[g.spg == 0], g[g.spg == 2]
+                if den:
+                    a, b = lo[den].sum(), hi[den].sum()
+                    if a < 20 or b < 20: continue
+                    diffs.append(lo[num].sum() / a - hi[num].sum() / b); w.append(min(a, b))
+                else:
+                    if len(lo) < 20 or len(hi) < 20: continue
+                    diffs.append(lo[num].mean() - hi[num].mean()); w.append(min(len(lo), len(hi)))
+            out[name] = float(np.average(diffs, weights=w)) if w else np.nan
+        zl, zh = D[(D.spg == 0) & ~D.ooz], D[(D.spg == 2) & ~D.ooz]
+        out["ev"] = float(np.nanmean(zl.ev) - np.nanmean(zh.ev)) if len(zl) and len(zh) else np.nan
+        return out
+
+    est = effect(P)
+    rng = np.random.default_rng(7)
+    pids = P.pitcher.unique(); groups = {k: g for k, g in P.groupby("pitcher")}
+    boots = []
+    for _ in range(200):
+        pick = rng.choice(pids, len(pids), replace=True)
+        boots.append(effect(pd.concat([groups[x] for x in pick], ignore_index=True)))
+    B = pd.DataFrame(boots)
+    parts = []
+    for k in ["chase", "whiff/swing", "swing"]:
+        lo, hi = np.nanpercentile(B[k], [2.5, 97.5])
+        parts.append(f"{k}: {est[k] * 100:+.1f} pts [95% CI {lo * 100:+.1f} to {hi * 100:+.1f}]")
+    lo, hi = np.nanpercentile(B["ev"], [2.5, 97.5])
+    parts.append(f"avg EV: {est['ev']:+.1f} mph [95% CI {lo:+.1f} to {hi:+.1f}]")
+    print("::notice title=spintest matched spin minus different spin, same combo and same tunnel::" + " | ".join(parts))
+    rows = []
+    for combo in combos.index[:6]:
+        if combo not in set(P.combo): continue
+        e = effect(P[P.combo == combo])
+        rows.append(f"{combo} (n={int((P.combo == combo).sum())}): chase {e['chase'] * 100:+.1f}, whiff/swing {e['whiff/swing'] * 100:+.1f}")
+    print("::notice title=spintest by combo (matched minus different)::" + " | ".join(rows))
