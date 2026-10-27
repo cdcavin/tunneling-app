@@ -599,3 +599,5 @@ button.primary.wide { width: 100%; }
 .angle-table .gap-row td { color: var(--ink); border-top: 1px solid var(--line); text-align: center; }
 .angle-table .gap-row td:first-child { text-align: left; }
 @media (max-width: 1200px) { .cards { grid-template-columns: 1fr; } }
+.kde-mark { font: 700 9px var(--font-cond); }
+.kde-legend b { color: var(--ink); }
