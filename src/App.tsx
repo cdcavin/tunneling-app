@@ -475,9 +475,6 @@ export default function App() {
             <section className="card">
               <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
             </section>
-            <section className="card">
-              {last && next && <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />}
-            </section>
             <section className="card sandbox">
               <div className="sec-title">Change suggestions{next && `: ${next.type}`}</div>
               <p className="hint" style={{ marginTop: 0 }}>Small changes to the {next?.type.toLowerCase() ?? "tunnel pitch"}'s shape (vert, horz, velo) that would tunnel better off the anchor.</p>
@@ -503,6 +500,11 @@ export default function App() {
                 </div>
               )}
             </section>
+            {last && next && (
+              <section className="card card-wide">
+                <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />
+              </section>
+            )}
           </div>
         </main>
       </div>

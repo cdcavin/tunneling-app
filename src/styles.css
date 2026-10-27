@@ -192,7 +192,7 @@ button.link:hover { text-decoration: underline; }
 .metric-note { margin-top: 2px; font-size: 11px; color: var(--muted); }
 
 /* Cards */
-.cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 1px; background: var(--line); flex-shrink: 0; }
+.cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: var(--line); flex-shrink: 0; }
 .card { background: var(--panel); padding: 14px; min-width: 0; }
 .video-empty {
   flex: 1; display: grid; place-items: center; align-content: center; gap: 8px; padding: 20px; text-align: center;
@@ -575,17 +575,26 @@ button.primary.wide { width: 100%; }
 .pick-out { margin-left: 6px; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
 .pick-main .pick-when { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
 
-/* Release / approach angle charts */
-.angle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.angle-panel { margin: 0; }
-.angle-panel figcaption { font-size: 11.5px; color: var(--ink-2); margin-bottom: 2px; }
-.angle-panel svg { width: 100%; height: auto; display: block; }
-.angle-panel .axis line { stroke: var(--line); stroke-width: 0.6; }
-.angle-panel .axis text, .angle-panel text.axis { fill: var(--muted); font-size: 8px; }
-.angle-table { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
-.angle-table th { text-align: right; color: var(--muted); font-weight: 500; padding: 2px 4px; }
-.angle-table td { text-align: right; padding: 2px 4px; color: var(--ink-2); font-family: var(--font-cond); }
+/* Release / approach angle density charts (KDE), in the style of Resnick's tunneling article */
+.card-wide { grid-column: 1 / -1; }
+.angles-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.angles-head .segmented { margin-bottom: 0; }
+.kde-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ink-2); margin: 6px 0; }
+.kde-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.kde-legend small, .kde-legend .muted { color: var(--muted); }
+.kde-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
+.kde-panel { margin: 0; }
+.kde-panel figcaption { display: flex; justify-content: center; gap: 8px; font-size: 12px; color: var(--ink); }
+.kde-ov { color: var(--muted); font-size: 11px; font-family: var(--font-cond); }
+.kde-panel svg { width: 100%; height: auto; display: block; }
+.kde-frame { fill: none; stroke: var(--line); }
+.kde-panel .axis line { stroke: var(--muted); stroke-width: 0.8; }
+.kde-panel .axis text, .kde-panel text.axis { fill: var(--muted); font-size: 9px; }
+.angle-table { width: 100%; max-width: 640px; margin-top: 8px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.angle-table th { text-align: right; color: var(--muted); font-weight: 500; padding: 2px 6px; }
+.angle-table td { text-align: right; padding: 2px 6px; color: var(--ink-2); font-family: var(--font-cond); }
 .angle-table td:first-child { text-align: left; font-family: var(--font); white-space: nowrap; }
+.angle-table td small { color: var(--muted); }
 .angle-table td i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
 .angle-table .gap-row td { color: var(--ink); border-top: 1px solid var(--line); text-align: center; }
 .angle-table .gap-row td:first-child { text-align: left; }
