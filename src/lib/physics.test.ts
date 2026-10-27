@@ -70,3 +70,18 @@ describe("shape changes", () => {
     expect((spd(faster) - spd(c)) * 0.681818).toBeCloseTo(3, 6);
   });
 });
+
+import { anglesOf } from "./physics";
+describe("anglesOf", () => {
+  it("level, straight pitch has zero angles", () => {
+    const a = anglesOf({ Xc0: 55, Xc1: -130, Xc2: 0, Yc0: 2.5, Yc1: 0, Yc2: 0, Zc0: 0, Zc1: 0, Zc2: 0 })!;
+    expect(Math.abs(a.vra) + Math.abs(a.hra) + Math.abs(a.vaa) + Math.abs(a.haa)).toBeLessThan(1e-9);
+  });
+  it("gravity makes the approach steeper than release; side sign follows PlateLocSide", () => {
+    // released level, falling 16 ft/s^2; drifting toward Z negative = PlateLocSide positive (3B side)
+    const a = anglesOf({ Xc0: 55, Xc1: -130, Xc2: 0, Yc0: 6, Yc1: 0, Yc2: -16, Zc0: 0, Zc1: -2, Zc2: 0 })!;
+    expect(a.vra).toBeCloseTo(0, 6);
+    expect(a.vaa).toBeLessThan(-5);
+    expect(a.hra).toBeGreaterThan(0);
+  });
+});

@@ -8,6 +8,7 @@ import { suggestShapes, type Suggestion } from "./lib/suggest";
 import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
 import VideoOverlay from "./components/VideoOverlay";
+import AngleCharts from "./components/AngleCharts";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
 import PitcherFinder from "./components/PitcherFinder";
@@ -473,6 +474,9 @@ export default function App() {
           <div className="cards">
             <section className="card">
               <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
+            </section>
+            <section className="card">
+              {last && next && <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />}
             </section>
             <section className="card sandbox">
               <div className="sec-title">Change suggestions{next && `: ${next.type}`}</div>

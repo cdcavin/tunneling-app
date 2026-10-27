@@ -169,3 +169,24 @@ export function perturb(c: Coeffs, d: ShapeDelta): Coeffs {
     Zc2: c.Zc2 - (d.hb / 12) / (t * t),         // Z carries the opposite sign of side
   };
 }
+
+export interface Angles { vra: number; hra: number; vaa: number; haa: number }
+
+/**
+ * Release and approach angles (degrees) from the trajectory fit.
+ *   VRA / VAA: up (+) or down (−) relative to level, out of the hand and crossing the front of the plate.
+ *   HRA / HAA: toward the third-base side (+) or first-base side (−), the app's PlateLocSide convention.
+ */
+export function anglesOf(c: Coeffs): Angles | null {
+  const tp = timeAtDist(c, PLATE_X);
+  if (tp == null) return null;
+  const at = (t: number) => {
+    const vx = -(c.Xc1 + 2 * c.Xc2 * t);           // speed toward the plate, ft/s (positive)
+    const vy = c.Yc1 + 2 * c.Yc2 * t;
+    const vs = -(c.Zc1 + 2 * c.Zc2 * t);           // + = toward third base
+    const deg = (r: number) => (r * 180) / Math.PI;
+    return { v: deg(Math.atan2(vy, vx)), h: deg(Math.atan2(vs, vx)) };
+  };
+  const r = at(0), p = at(tp);
+  return { vra: r.v, hra: r.h, vaa: p.v, haa: p.h };
+}

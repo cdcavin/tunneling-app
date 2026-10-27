@@ -192,7 +192,7 @@ button.link:hover { text-decoration: underline; }
 .metric-note { margin-top: 2px; font-size: 11px; color: var(--muted); }
 
 /* Cards */
-.cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: var(--line); flex-shrink: 0; }
+.cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 1px; background: var(--line); flex-shrink: 0; }
 .card { background: var(--panel); padding: 14px; min-width: 0; }
 .video-empty {
   flex: 1; display: grid; place-items: center; align-content: center; gap: 8px; padding: 20px; text-align: center;
@@ -574,3 +574,19 @@ button.primary.wide { width: 100%; }
 .pick-what b { font-family: var(--font-cond); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .pick-out { margin-left: 6px; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
 .pick-main .pick-when { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Release / approach angle charts */
+.angle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.angle-panel { margin: 0; }
+.angle-panel figcaption { font-size: 11.5px; color: var(--ink-2); margin-bottom: 2px; }
+.angle-panel svg { width: 100%; height: auto; display: block; }
+.angle-panel .axis line { stroke: var(--line); stroke-width: 0.6; }
+.angle-panel .axis text, .angle-panel text.axis { fill: var(--muted); font-size: 8px; }
+.angle-table { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.angle-table th { text-align: right; color: var(--muted); font-weight: 500; padding: 2px 4px; }
+.angle-table td { text-align: right; padding: 2px 4px; color: var(--ink-2); font-family: var(--font-cond); }
+.angle-table td:first-child { text-align: left; font-family: var(--font); white-space: nowrap; }
+.angle-table td i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+.angle-table .gap-row td { color: var(--ink); border-top: 1px solid var(--line); text-align: center; }
+.angle-table .gap-row td:first-child { text-align: left; }
+@media (max-width: 1200px) { .cards { grid-template-columns: 1fr; } }
