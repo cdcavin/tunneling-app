@@ -141,7 +141,19 @@ function WxIcon({ desc }: { desc: string }) {
   );
 }
 
-/** Small box for one picked pitch: date, time, sky, temperature, humidity, wind, air density. */
+/**
+ * Lab baseline: indoors at 70°F and 40% humidity, at the game's own air pressure (same elevation, same day).
+ * Spin-driven break scales with air density (the Magnus push is ½ρ·A·C_L·v² and C_L depends only on spin and speed),
+ * so break in the lab ≈ game break × ρ_lab / ρ_game. Gravity's drop doesn't change.
+ */
+function labDensity(pressureHpa: number) {
+  const tc = 21.1, tk = tc + 273.15, rh = 40;
+  const pv = (rh / 100) * 6.1078 * Math.pow(10, (7.5 * tc) / (tc + 237.3));
+  return (((pressureHpa - pv) * 100) / (287.058 * tk) + (pv * 100) / (461.495 * tk)) * 0.062428;
+}
+const sgn = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
+
+/** Small box for one picked pitch: date, time, sky, temperature, humidity, wind, air density, and break vs the lab. */
 function WxBox({ label, row, home, w }: { label: string; row: PitchRow; home: boolean; w: Weather | null }) {
   const iso = row.utc ? row.utc.trim().replace(" ", "T") : ""; const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
   const time = Number.isNaN(ms) ? "" : new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
@@ -159,6 +171,16 @@ function WxBox({ label, row, home, w }: { label: string; row: PitchRow; home: bo
               <span>Wind</span><b>{Math.round(w.windMph)} mph {compass(w.windFromDeg)}</b>
               <span>Air density</span><b>{w.airDensity.toFixed(4)} lb/ft³</b>
             </div>
+            {(() => {
+              const lab = labDensity(w.pressureHpa), ratio = w.airDensity / lab, f = 1 - 1 / ratio;   // share of the break that came from the extra (or missing) air
+              const dv = row.ivb * f, dh = row.hb * f;
+              return (
+                <div className="wx-lab" title="Lab: indoors, 70°F, 40% humidity, same air pressure. Break scales with air density; spin rate and tilt don't change.">
+                  <div><span>vs lab air</span><b>{ratio >= 1 ? `${((ratio - 1) * 100).toFixed(1)}% denser` : `${((1 - ratio) * 100).toFixed(1)}% thinner`}</b></div>
+                  <div><span>Weather added</span><b>{sgn(dv)} in vert · {sgn(dh)} in horz</b></div>
+                </div>
+              );
+            })()}
           </>
         )}
     </div>
