@@ -463,6 +463,12 @@ export default function App() {
           )}
           <SepReference rows={rows} anchorType={last?.type ?? null} tunnelType={next?.type ?? null} sep={geo ? geo.decisionSep : null} />
 
+          {last && next && (
+            <section className="card angles-sec">
+              <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />
+            </section>
+          )}
+
           <div className="metrics" aria-live="polite">
             <Metric label="Apart at 23.8 ft" value={geo ? geo.decisionSep.toFixed(1) : "—"} unit="in" accent
               note={(() => { const g = geo && last && next ? gradeFor(last.type, next.type, geo.decisionSep) : null; return g ? `${g.label} · tighter than ${g.tighter}% of P4` : undefined; })()} />
@@ -471,11 +477,6 @@ export default function App() {
           </div>
 
           <div className="cards">
-            {last && next && (
-              <section className="card card-wide">
-                <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />
-              </section>
-            )}
             <section className="card">
               <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
             </section>

@@ -648,3 +648,4 @@ button.primary.wide { width: 100%; }
 .wx-lab div { display: flex; justify-content: space-between; gap: 8px; }
 .wx-lab span { color: var(--muted); }
 .wx-lab b { font: 500 12px var(--font-cond); color: var(--wvu-gold); font-variant-numeric: tabular-nums; }
+.angles-sec { border-top: 1px solid var(--line); padding: 18px 20px 14px; flex-shrink: 0; }
