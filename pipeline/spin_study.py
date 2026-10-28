@@ -99,7 +99,8 @@ def rows_to_pairs(pitches, throws, pid):
     df = pd.DataFrame({
         "pitcher": pid, "combo": [f"{typ[a]}>{typ[b]}" for a, b in zip(i, j)],
         **own(j, "b_"), **own(i, "a_"),
-        "loc_side": side[j], "loc_height": height[j], "balls": balls[j], "strikes": strikes[j], "bat_right": bs[j], "throw_right": hand,
+        "loc_side": side[j], "loc_height": height[j], "a_loc_side": side[i], "a_loc_height": height[i],
+        "loc_dside": side[j] - side[i], "loc_dheight": height[j] - height[i], "balls": balls[j], "strikes": strikes[j], "bat_right": bs[j], "throw_right": hand,
         "sep23": 12 * np.hypot(sD[j] - sD[i], hD[j] - hD[i]), "sepP": 12 * np.hypot(sP[j] - sP[i], hP[j] - hP[i]),
         "rel_angle_gap": np.hypot(vra[j] - vra[i], hra[j] - hra[i]), "app_angle_gap": np.hypot(vaa[j] - vaa[i], haa[j] - haa[i]),
         "tilt_gap": tiltgap, "tilt_gap_abs": np.abs(tiltgap),
@@ -207,6 +208,63 @@ def run():
         print(f"::notice title=spin study {combo} (n={len(sub)})::" + " | ".join(lines))
     sync.put_json(s3, "studies/spin_study.json.gz", results)
     print("saved studies/spin_study.json.gz")
+
+
+# ---------- tunnel with location held: both landing spots in the baseline ----------
+LOC_BASE = BASE + ["a_loc_side", "a_loc_height", "loc_dside", "loc_dheight", "sepP"]
+LOC_TUNNEL = {"apart at 23.8 ft": ["sep23"], "release-angle gap": ["rel_angle_gap"], "approach-angle gap": ["app_angle_gap"]}
+
+
+def run_tunnel():
+    s3 = sync.r2()
+    idx = sync.get_json(s3, "index.json.gz")
+    readers = sync.Readers(lambda quiet=False: None)
+    p4 = [p for p in idx["pitchers"] if p.get("conf") in sync.P4 and set(p.get("years") or [p.get("year")]) & {2025, 2026}]
+    frames = readers.map(lambda p: rows_to_pairs(sync.get_json(s3, f"pitchers/{p['id']}.json.gz")["pitches"], p.get("throws"), p["id"]), p4, r2=True)
+    D = pd.concat([f for f in frames if f is not None and len(f)], ignore_index=True)
+    top = D.combo.value_counts().head(TOP)
+    print(f"::notice title=tunnel study data (location held)::{len(D)} back-to-back P4 pairs (2025-2026), {D.pitcher.nunique()} pitchers")
+    rng = np.random.default_rng(7)
+    pids = D.pitcher.unique(); fold_of = dict(zip(pids, rng.integers(0, 5, len(pids))))
+    ALL = [c for v in LOC_TUNNEL.values() for c in v]
+    results = {"generated": pd.Timestamp.now(tz="UTC").isoformat(), "pairs": int(len(D)), "combos": {}}
+    for combo in top.index:
+        sub = D[D.combo == combo].reset_index(drop=True)
+        res = {"n": int(len(sub)), "outcomes": {}}
+        lines = []
+        # how much of the 23.8 ft separation is left once both landing spots are known (R² of sep23 on locations)
+        from numpy.linalg import lstsq
+        A = np.column_stack([np.ones(len(sub)), sub[["loc_side", "loc_height", "a_loc_side", "a_loc_height"]].to_numpy()])
+        A = np.column_stack([A, A[:, 1:] ** 2, sub.loc_dside * sub.loc_dheight])
+        okm = np.isfinite(A).all(1) & np.isfinite(sub.sep23)
+        coef = lstsq(A[okm], sub.sep23[okm], rcond=None)[0]
+        resid = sub.sep23[okm] - A[okm] @ coef
+        r2 = 1 - resid.var() / sub.sep23[okm].var()
+        for name, (X, y) in outcomes(sub).items():
+            reg = name == "ev"
+            X = X.reset_index(drop=True); y = y.to_numpy().astype(float)
+            if len(X) < 3000: continue
+            g = X.pitcher.map(fold_of).to_numpy()
+            pct = lambda a, b: float(100 * (a.mean() - b.mean()) / a.mean())
+            l0, _ = cv(X, y, g, LOC_BASE, reg, 5)
+            l1, sh = cv(X, y, g, LOC_BASE + ALL, reg, 5, shap_feats=["sep23"])
+            pieces = {}
+            for pname, cols in LOC_TUNNEL.items():
+                lp, _ = cv(X, y, g, LOC_BASE + cols, reg, 5)
+                pieces[pname] = {"lift_pct": round(pct(l0, lp), 3), "folds_better": int((lp < l0).sum())}
+            base_rate = float(y.mean()); scale = 100 * base_rate * (1 - base_rate) if not reg else 1.0
+            q = pd.qcut(sh.x, 5, duplicates="drop")
+            t = sh.groupby(q, observed=True).agg(x_lo=("x", "min"), x_hi=("x", "max"), s=("s", "mean"))
+            shape = [{"range": [round(float(r.x_lo), 1), round(float(r.x_hi), 1)], "effect": round(float(r.s * scale), 2)} for r in t.itertuples()]
+            res["outcomes"][name] = {"n": int(len(X)), "rate": round(base_rate, 4),
+                                     "tunnel": {"lift_pct": round(pct(l0, l1), 3), "folds_better": int((l1 < l0).sum())}, "pieces": pieces, "sep23_shape": shape}
+            pc = " · ".join(f"{k} {v['lift_pct']:+.2f}% [{v['folds_better']}/5]" for k, v in pieces.items())
+            sh_txt = " ".join(f"{e['range'][0]:.0f}-{e['range'][1]:.0f}in:{e['effect']:+.1f}" for e in shape)
+            lines.append(f"{name} (n={len(X)}): tunnel {pct(l0, l1):+.2f}% [{(l1 < l0).sum()}/5] ({pc}) · 23.8 ft effect by fifths {sh_txt}{' mph' if reg else ' pts'}")
+            print(f"  {combo} {name} done", flush=True)
+        results["combos"][combo] = res
+        print(f"::notice title=tunnel study {combo} (n={len(sub)}; locations explain {r2:.0%} of 23.8 ft separation)::" + " | ".join(lines))
+    sync.put_json(s3, "studies/tunnel_location_held.json.gz", results)
 
 
 if __name__ == "__main__":
