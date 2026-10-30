@@ -106,7 +106,7 @@ interface MoveBox { h0: number; h1: number; v0: number; v1: number }
 const MV = 25;
 const rnd = (v: number) => String(Math.round(v) || 0);   // no "-0"   // plot spans ±25 in on both axes
 /** Mini movement plot (pitcher's view, like the main one). Drag a box to keep only pitches inside it; click to clear. */
-function MovePlot({ rows, box, setBox, a, b, throws }: { rows: PitchRow[]; box: MoveBox | null; setBox: (b: MoveBox | null) => void; a: PitchRow | null; b: PitchRow | null; throws?: string }) {
+function MovePlot({ rows, allowed, box, setBox, a, b, throws }: { rows: PitchRow[]; allowed: Set<string> | null; box: MoveBox | null; setBox: (b: MoveBox | null) => void; a: PitchRow | null; b: PitchRow | null; throws?: string }) {
   const ref = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ x: number; y: number; x2: number; y2: number } | null>(null);
   const pt = (e: React.PointerEvent) => {
@@ -126,11 +126,13 @@ function MovePlot({ rows, box, setBox, a, b, throws }: { rows: PitchRow[]; box: 
         onPointerUp={() => { if (!drag) return; const d = drag; setDrag(null); setBox(Math.abs(d.x2 - d.x) < 1 && Math.abs(d.y2 - d.y) < 1 ? null : { h0: Math.min(d.x, d.x2), h1: Math.max(d.x, d.x2), v0: Math.min(d.y, d.y2), v1: Math.max(d.y, d.y2) }); }}>
         {[6, 12, 18, 24].map((r) => <circle key={r} cx={0} cy={0} r={r} className="mv-ring" />)}
         <line x1={-MV} x2={MV} y1={0} y2={0} className="mv-axis" /><line y1={-MV} y2={MV} x1={0} x2={0} className="mv-axis" />
-        {rows.map((r) => <circle key={r.id} cx={clamp(r.hb, -MV + 0.6, MV - 0.6)} cy={clamp(-r.ivb, -MV + 0.6, MV - 0.6)} r={0.75} fill={pitchColorOnDark(r.type)} opacity={inBox(r) ? 0.85 : 0.15} pointerEvents="none" />)}
+        {rows.filter((r) => allowed && !allowed.has(r.id)).map((r) => <circle key={r.id} cx={clamp(r.hb, -MV + 0.6, MV - 0.6)} cy={clamp(-r.ivb, -MV + 0.6, MV - 0.6)} r={0.7} className="mv-off" pointerEvents="none" />)}
+        {rows.filter((r) => !allowed || allowed.has(r.id)).map((r) => <circle key={r.id} cx={clamp(r.hb, -MV + 0.6, MV - 0.6)} cy={clamp(-r.ivb, -MV + 0.6, MV - 0.6)} r={0.75} fill={pitchColorOnDark(r.type)} opacity={inBox(r) ? 0.85 : 0.15} pointerEvents="none" />)}
         {live && <rect x={live.h0} y={-live.v1} width={live.h1 - live.h0} height={live.v1 - live.v0} className="mv-box" pointerEvents="none" />}
         {dot(a, "var(--wvu-gold)")}{dot(b, "var(--steel)")}
       </svg>
-      <div className="zm-axis" aria-hidden="true"><span>{armRight ? "Glove" : "Arm"}</span><span>{box ? `${rnd(box.v0)} to ${rnd(box.v1)} vert · ${rnd(box.h0)} to ${rnd(box.h1)} horz` : "drag a box"}</span><span>{armRight ? "Arm" : "Glove"}</span></div>
+      <div className="zm-axis" aria-hidden="true"><span>{armRight ? "Glove" : "Arm"}</span><span>{armRight ? "Arm" : "Glove"}</span></div>
+      <div className="mv-range">{box ? `${rnd(box.v0)} to ${rnd(box.v1)} in vert · ${rnd(box.h0)} to ${rnd(box.h1)} in horz` : "Drag a box to filter · click to clear"}</div>
     </div>
   );
 }
@@ -200,13 +202,17 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
     return OUTCOMES.filter((o) => m.get(o)).map((o) => [o, m.get(o)!] as const);
   }, [ofType]);
   const ofOut = useMemo(() => (outs.size ? ofType.filter((r) => outs.has(outcomeOf(r))) : ofType), [ofType, outs]);
+  // The two plots are linked: zone counts only count pitches inside the movement box, and the movement plot greys out
+  // pitches outside the chosen zones (they can't be picked there).
+  const inBox = (r: PitchRow) => !mvBox || (r.hb >= mvBox.h0 && r.hb <= mvBox.h1 && r.ivb >= mvBox.v0 && r.ivb <= mvBox.v1);
   const zoneCounts = useMemo(() => {
     const m = new Map<Zone, number>();
-    for (const r of ofOut) { const z = zoneOf(r.side, r.height); m.set(z, (m.get(z) ?? 0) + 1); }
+    for (const r of ofOut) { if (!inBox(r)) continue; const z = zoneOf(r.side, r.height); m.set(z, (m.get(z) ?? 0) + 1); }
     return m;
-  }, [ofOut]);
+  }, [ofOut, mvBox]);   // eslint-disable-line react-hooks/exhaustive-deps
   const inZones = useMemo(() => (zones.size ? ofOut.filter((r) => zones.has(zoneOf(r.side, r.height))) : ofOut), [ofOut, zones]);
-  const matched = useMemo(() => (mvBox ? inZones.filter((r) => r.hb >= mvBox.h0 && r.hb <= mvBox.h1 && r.ivb >= mvBox.v0 && r.ivb <= mvBox.v1) : inZones), [inZones, mvBox]);
+  const matched = useMemo(() => (mvBox ? inZones.filter(inBox) : inZones), [inZones, mvBox]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const zoneIds = useMemo(() => new Set(inZones.map((r) => r.id)), [inZones]);
   const list = useMemo(() => {
     const l = matched;
     return [...l].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0) || (a.inning ?? 0) - (b.inning ?? 0) || (a.pa ?? 0) - (b.pa ?? 0) || (a.pitchNo ?? 0) - (b.pitchNo ?? 0)).slice(0, 80);
@@ -271,13 +277,21 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
           </div>
           <div className="picker-body">
           <div className="picker-zone">
-            <ZoneMap counts={zoneCounts} on={zones} toggle={(z) => setZones((s) => flip(s, z))} a={A} b={isPlaceholder ? null : B} />
-            <div className="zm-axis" aria-hidden="true"><span>3B</span><span>catcher</span><span>1B</span></div>
-            <div className="zm-quick">
-              <button type="button" onClick={() => setZones(new Set(IN_ZONES))}>In zone</button>
-              <button type="button" onClick={() => setZones(new Set(OUT_ZONES))}>Out</button>
+            <div className="picker-plots">
+              <div className="pp-col">
+                <div className="pp-title">Movement</div>
+                <MovePlot rows={ofOut} allowed={zones.size ? zoneIds : null} box={mvBox} setBox={setMvBox} a={A} b={isPlaceholder ? null : B} throws={throws} />
+              </div>
+              <div className="pp-col">
+                <div className="pp-title">Location</div>
+                <ZoneMap counts={zoneCounts} on={zones} toggle={(z) => setZones((s) => flip(s, z))} a={A} b={isPlaceholder ? null : B} />
+                <div className="zm-axis" aria-hidden="true"><span>3B</span><span>catcher</span><span>1B</span></div>
+                <div className="zm-quick">
+                  <button type="button" onClick={() => setZones(new Set(IN_ZONES))}>In zone</button>
+                  <button type="button" onClick={() => setZones(new Set(OUT_ZONES))}>Out</button>
+                </div>
+              </div>
             </div>
-            <MovePlot rows={inZones} box={mvBox} setBox={setMvBox} a={A} b={isPlaceholder ? null : B} throws={throws} />
             <p className="zm-count">{matched.length.toLocaleString()} pitch{matched.length === 1 ? "" : "es"}</p>
           </div>
           <div className="picker-list" role="list">
