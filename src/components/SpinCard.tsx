@@ -211,11 +211,12 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
         <BallSide s={a} p={pa} typical={ta} />
         <div className="spin-mid">
           {sim && (
-            <dl className="spin-gaps">
-              <dt>Tilt gap</dt><dd>{Math.round(sim.tiltMin)} min</dd>
-              <dt>Gyro gap</dt><dd>{Math.round(sim.gyroGap)}°</dd>
-              <dt>Axes apart</dt><dd>{sim.apart.toFixed(1)}°</dd>
-            </dl>
+            <div className="spin-diff">
+              <div className="spin-diff-head">A vs B</div>
+              <div className="spin-diff-tile"><b>{Math.round(sim.tiltMin)}<small> min</small></b><span>tilt gap</span></div>
+              <div className="spin-diff-tile"><b>{Math.round(sim.gyroGap)}<small>°</small></b><span>gyro gap</span></div>
+              <div className="spin-diff-tile"><b>{sim.apart.toFixed(1)}<small>°</small></b><span>axes apart</span></div>
+            </div>
           )}
         </div>
         <BallSide s={b} p={pb} typical={tb} />
