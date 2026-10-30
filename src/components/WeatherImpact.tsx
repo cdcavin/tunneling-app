@@ -137,7 +137,7 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
       {p1 && (
         <p className="wxi-sum">
           His {type.toLowerCase()} loses <b>{Math.abs(p1.vert).toFixed(2)} in</b> of {model[type].ivb >= 0 ? "ride" : "drop"} and <b>{Math.abs(p1.horz).toFixed(2)} in</b> of horizontal break for every 1% thinner air, and gets to the plate <b>{Math.abs(p1.velo).toFixed(2)} mph</b> faster.
-          {best.length >= 2 && <> In his outings, the best air was {PARKS[best[0].o.park].city} ({fmtDate(best[0].o.date)}, {sg(best[0].air * 100)}%) and the worst {PARKS[best[best.length - 1].o.park].city} ({fmtDate(best[best.length - 1].o.date)}, {sg(best[best.length - 1].air * 100)}%).</>}
+          {best.length >= 2 && <> Most break of his outings: the dense air in {PARKS[best[0].o.park].city} ({fmtDate(best[0].o.date)}, {sg(best[0].air * 100)}%) · least: {PARKS[best[best.length - 1].o.park].city} ({fmtDate(best[best.length - 1].o.date)}, {sg(best[best.length - 1].air * 100)}%).</>}
           {fit.n >= 5 && Number.isFinite(fit.v) && <> Measured across {fit.n} outings, his {model[type].ivb >= 0 ? "ride" : "drop"} moved {sg(fit.v, 2)} in per 1% denser air (physics says {sg(-p1.vert, 2)}); the rest of the day-to-day swing is him, not the weather.</>}
           {fit.n < 5 && <> Too few outings with {MIN_DAY}+ of this pitch to check the physics against his own numbers.</>}
         </p>
