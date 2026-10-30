@@ -3,6 +3,8 @@ import type { Coeffs } from "../lib/physics";
 import { axisVector, spinProfile, spinSimilarity, STANDARD_AIR, type SpinProfile } from "../lib/spin";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
+import { HOME_KEY, MORGANTOWN_AIR, PARKS, parkKey } from "../lib/parks";
+import WeatherImpact from "./WeatherImpact";
 
 interface Side {
   label: "A" | "B"; type: string; coeffs: Coeffs | null; spin: number | null;
@@ -10,33 +12,44 @@ interface Side {
   typeRows: PitchRow[];        // every selected pitch of this type, for his typical efficiency
 }
 
-export interface Weather { hour: string; tempF: number; rh: number; pressureHpa: number; windMph: number; windFromDeg: number; desc: string; airDensity: number }
+export interface Weather { hour: string; tempF: number; rh: number; pressureHpa: number; windMph: number; windFromDeg: number; desc: string; airDensity: number; elevationM: number | null; park: string }
 
 /** Nearest UTC hour of a Trackman time ("2026-10-23 18:41:07.123" or ISO). */
-const hourOf = (utc?: string) => {
+export const hourOf = (utc?: string) => {
   if (!utc) return null;
   const iso = utc.trim().replace(" ", "T"); const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
   return Number.isNaN(ms) ? null : new Date(Math.round(ms / 3600000) * 3600000).toISOString().slice(0, 13);
 };
+/** "park|hour" for a pitch whose park we have on file, else null (standard air). */
+export const wxKeyOf = (r: PitchRow) => { const k = parkKey(r.game), h = hourOf(r.utc); return k && PARKS[k] && h ? `${k}|${h}` : null; };
 const wxCache = new Map<string, Promise<Weather | null>>();
-const fetchWx = (hour: string) => {
-  if (!wxCache.has(hour)) wxCache.set(hour, fetch(`/api/weather?t=${hour}:00:00Z`).then((r) => (r.ok ? r.json() : null)).catch(() => null));
-  return wxCache.get(hour)!;
+const fetchWx = (key: string) => {
+  const [park, hour] = key.split("|");
+  if (!wxCache.has(key)) wxCache.set(key, fetch(`/api/weather?t=${hour}:00:00Z&park=${park}`).then((r) => (r.ok ? r.json() : null)).catch(() => null));
+  return wxCache.get(key)!;
 };
-/** Weather for the given hours (home games only), keyed by hour. */
-function useWeather(hours: string[]) {
+/** Weather for the given "park|hour" keys. */
+export function useWeather(keys: string[]) {
   const [wx, setWx] = useState<Record<string, Weather | null>>({});
-  const key = [...new Set(hours)].sort().join(",");
+  const key = [...new Set(keys)].sort().join(",");
   useEffect(() => {
     let alive = true;
-    const hs = key ? key.split(",") : [];
-    Promise.all(hs.map((h) => fetchWx(h).then((w) => [h, w] as const))).then((pairs) => { if (alive) setWx(Object.fromEntries(pairs)); });
+    const ks = key ? key.split(",") : [];
+    // a few at a time so a long season doesn't fire 40 requests at once
+    (async () => {
+      const out: Record<string, Weather | null> = {};
+      for (let i = 0; i < ks.length; i += 6) {
+        const got = await Promise.all(ks.slice(i, i + 6).map((k) => fetchWx(k).then((w) => [k, w] as const)));
+        got.forEach(([k, w]) => { out[k] = w; });
+        if (alive) setWx({ ...out });
+      }
+    })();
     return () => { alive = false; };
   }, [key]);
   return wx;
 }
 const median = (xs: number[]) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
-const compass = (deg: number) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+export const compass = (deg: number) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 
 // Baseball seam on the unit sphere (a + b = 1 keeps it on the sphere).
 const SEAM: [number, number, number][] = (() => {
@@ -153,15 +166,17 @@ function labDensity(pressureHpa: number) {
 }
 const sgn = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
 
-/** Small box for one picked pitch: date, time, sky, temperature, humidity, wind, air density, and break vs the lab. */
-function WxBox({ label, row, home, w }: { label: string; row: PitchRow; home: boolean; w: Weather | null }) {
+/** Small box for one picked pitch: date, time, park, sky, temperature, humidity, wind, air density, and break vs the lab (home) or Morgantown (away). */
+function WxBox({ label, row, w }: { label: string; row: PitchRow; w: Weather | null }) {
+  const pk = parkKey(row.game), park = pk ? PARKS[pk] : null, home = !!park && park === PARKS[HOME_KEY];
   const iso = row.utc ? row.utc.trim().replace(" ", "T") : ""; const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
   const time = Number.isNaN(ms) ? "" : new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
   const date = new Date(`${row.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   return (
     <div className="wx-card">
-      <div className="wx-top"><b>{label}</b><span>{date}{time && ` · ${time}`}</span></div>
-      {!home ? <div className="wx-note">Away game: standard air used</div>
+      <div className="wx-top"><b>{label}</b><span>{date}{time && ` · ${time} ET`}</span></div>
+      {park && !home && <div className="wx-park" title={park.approx ? `Location: ${park.approx}` : undefined}>{park.name} · {park.city}</div>}
+      {!park ? <div className="wx-note">Park location not on file: standard air used</div>
         : !w ? <div className="wx-note">Loading weather…</div>
         : (
           <>
@@ -169,14 +184,18 @@ function WxBox({ label, row, home, w }: { label: string; row: PitchRow; home: bo
             <div className="wx-grid">
               <span>Humidity</span><b>{Math.round(w.rh)}%</b>
               <span>Wind</span><b>{Math.round(w.windMph)} mph {compass(w.windFromDeg)}</b>
+              {!home && w.elevationM != null && <><span>Elevation</span><b>{Math.round(w.elevationM * 3.28084).toLocaleString()} ft</b></>}
               <span>Air density</span><b>{w.airDensity.toFixed(4)} lb/ft³</b>
             </div>
+            {park.roof && <div className="wx-note">Retractable roof: if it was closed, temperature and humidity were the building's, not these.</div>}
             {(() => {
-              const lab = labDensity(w.pressureHpa), ratio = w.airDensity / lab, f = 1 - 1 / ratio;   // share of the break that came from the extra (or missing) air
+              // home: vs the lab at the same pressure; away: vs Morgantown on an average day (70°F, 40%, 974 hPa)
+              const base = home ? labDensity(w.pressureHpa) : MORGANTOWN_AIR, ratio = w.airDensity / base, f = 1 - 1 / ratio;   // share of the break from the extra (or missing) air
               const dv = row.ivb * f, dh = row.hb * f;
               return (
-                <div className="wx-lab" title="Lab: indoors, 70°F, 40% humidity, same air pressure. Break scales with air density; spin rate and tilt don't change.">
-                  <div><span>vs lab air</span><b>{ratio >= 1 ? `${((ratio - 1) * 100).toFixed(1)}% denser` : `${((1 - ratio) * 100).toFixed(1)}% thinner`}</b></div>
+                <div className="wx-lab" title={home ? "Lab: indoors, 70°F, 40% humidity, same air pressure. Break scales with air density; spin rate and tilt don't change."
+                  : "Morgantown: 70°F, 40% humidity, its average game-time pressure. Break scales with air density; spin rate and tilt don't change."}>
+                  <div><span>{home ? "vs lab air" : "vs Morgantown"}</span><b>{ratio >= 1 ? `${((ratio - 1) * 100).toFixed(1)}% denser` : `${((1 - ratio) * 100).toFixed(1)}% thinner`}</b></div>
                   <div><span>Weather added</span><b>{sgn(dv)} in vert · {sgn(dh)} in horz</b></div>
                 </div>
               );
@@ -188,12 +207,12 @@ function WxBox({ label, row, home, w }: { label: string; row: PitchRow; home: bo
 }
 
 /** Spin profile of the two pitches in the 3D view and video, with how alike their spin axes are. */
-export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (r: PitchRow) => boolean }) {
-  // Weather only for the two real pitches picked (home games); averaged pitches and away games use standard air.
-  const hours = useMemo(() => [a.row, b.row].filter((r): r is PitchRow => !!r && isHome(r)).map((r) => hourOf(r.utc)).filter((h): h is string => !!h),
-    [a.row, b.row, isHome]);
-  const wx = useWeather(hours);
-  const wxOf = (s: Side) => (s.row && isHome(s.row) ? wx[hourOf(s.row.utc) ?? ""] ?? null : null);
+export default function SpinCard({ a, b, rows }: { a: Side; b: Side; rows: PitchRow[] }) {
+  // Weather only for the two real pitches picked, at the park they were thrown in; averaged pitches and parks not on file use standard air.
+  const keys = useMemo(() => [a.row, b.row].map((r) => (r ? wxKeyOf(r) : null)).filter((k): k is string => !!k), [a.row, b.row]);
+  const wx = useWeather(keys);
+  const wxOf = (s: Side) => { const k = s.row ? wxKeyOf(s.row) : null; return k ? wx[k] ?? null : null; };
+  const [showImpact, setShowImpact] = useState(false);
   const air = (s: Side) => wxOf(s)?.airDensity ?? STANDARD_AIR;
   const pa = a.coeffs ? spinProfile(a.coeffs, a.spin, air(a)) : null, pb = b.coeffs ? spinProfile(b.coeffs, b.spin, air(b)) : null;
   const typical = (s: Side) => median(s.typeRows.map((r) => (r.coeffs ? spinProfile(r.coeffs, r.spin)?.eff : null)).filter((e): e is number => e != null));
@@ -206,6 +225,9 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
         <div>
           <div className="sec-title">Spin profile</div>
         </div>
+        <button type="button" className={`ghost wxi-toggle${showImpact ? " is-on" : ""}`} onClick={() => setShowImpact((v) => !v)} aria-expanded={showImpact}>
+          Weather &amp; his stuff <span aria-hidden="true">{showImpact ? "▴" : "▾"}</span>
+        </button>
       </div>
       <div className="spin-row">
         <BallSide s={a} p={pa} typical={ta} />
@@ -222,10 +244,11 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
         <BallSide s={b} p={pb} typical={tb} />
         {(a.row || b.row) && (
           <div className="wx-col" aria-label="Game conditions used for the spin estimate">
-            {[a, b].map((s) => s.row && <WxBox key={s.label} label={s.label} row={s.row} home={isHome(s.row)} w={wxOf(s)} />)}
+            {[a, b].map((s) => s.row && <WxBox key={s.label} label={s.label} row={s.row} w={wxOf(s)} />)}
           </div>
         )}
       </div>
+      {showImpact && <WeatherImpact rows={rows} focusType={a.type} />}
     </section>
   );
 }

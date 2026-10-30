@@ -16,9 +16,9 @@ import PitcherFinder from "./components/PitcherFinder";
 import SepReference from "./components/SepReference";
 import { comboKey, gradeOf, useReference } from "./lib/reference";
 import { realLoc } from "./lib/arsenal";
-import { atWvuPark, realPairs, type RealPair } from "./lib/pairs";
+import { realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
-import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher, type PitchRow } from "./lib/types";
+import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher } from "./lib/types";
 
 const FASTBALLS = ["Four-Seam", "Fastball", "Sinker"];
 const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}`;
@@ -123,7 +123,6 @@ export default function App() {
 
   const rows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
   const arsenal = useMemo(() => buildArsenal(rows), [rows]);
-  const isHomeRow = useCallback((r: PitchRow) => atWvuPark(r, pitcher?.team), [pitcher?.team]);
 
   // The finder's Year choice ("" = any). Calendar year: "2026" covers the 2026 spring and Fall 2026.
   const [finderYear, setFinderYear] = useState("");
@@ -457,7 +456,7 @@ export default function App() {
           </div>
 
           {last && next && (
-            <SpinCard isHome={isHomeRow}
+            <SpinCard rows={rows}
               a={{ label: "A", type: last.type, coeffs: lastAimed, spin: actual ? actual.anchor.spin : last.spin, row: actual ? actual.anchor : null, typeRows: lastTypeRows }}
               b={{ label: "B", type: next.type, coeffs: nextAimed, spin: actual ? actual.next.spin : next.spin, row: actual ? actual.next : null, typeRows: nextTypeRows }} />
           )}

@@ -1,3 +1,4 @@
+import { HOME_KEY, PARKS } from "../src/lib/parks";
 // Serves the data API from R2 (gzipped JSON, KV as fallback) and everything else from the built site.
 //
 //   GET /data/index.json        list of pitchers (no pitch rows)
@@ -58,18 +59,22 @@ async function awre(env: Env, pathname: string): Promise<Response> {
 /**
  * Weather at WVU's ballpark for one hour, from Open-Meteo (free, no key): the archive for dates older than a week,
  * the forecast API (which also serves the last few days) otherwise. Cached in KV by hour.
- *   GET /api/weather?t=<ISO UTC time>  ->  { tempF, rh, pressureHpa, windMph, windFromDeg, code, desc, airDensity (lb/ft³) }
+ *   GET /api/weather?t=<ISO UTC time>[&park=<key from src/lib/parks.ts>]  ->  { tempF, rh, pressureHpa, windMph, windFromDeg, code, desc, airDensity (lb/ft³), elevationM, park }
+ * No park = Morgantown.
  * Air density uses station pressure (already at the park's elevation), temperature and humidity.
  */
-const PARK = { lat: 39.648, lon: -79.993 };   // Morgantown, WV (Monongalia County Ballpark area)
 const WX_DESC = (c: number) => c === 0 ? "Clear" : c <= 2 ? "Partly cloudy" : c === 3 ? "Overcast" : c <= 48 ? "Fog" : c <= 57 ? "Drizzle"
   : c <= 67 ? "Rain" : c <= 77 ? "Snow" : c <= 82 ? "Showers" : c <= 86 ? "Snow showers" : "Thunderstorm";
 async function weather(env: Env, request: Request): Promise<Response> {
-  const t = new URL(request.url).searchParams.get("t") ?? "";
+  const sp = new URL(request.url).searchParams;
+  const t = sp.get("t") ?? "";
+  const parkK = (sp.get("park") || HOME_KEY).toLowerCase();
+  const PARK = PARKS[parkK];
+  if (!PARK) return json({ error: "Park not on file." }, 404);
   const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : t.replace(" ", "T") + "Z");
   if (Number.isNaN(ms)) return json({ error: "Bad time." }, 400);
   const hour = new Date(Math.round(ms / 3600000) * 3600000).toISOString().slice(0, 13);   // nearest hour, UTC
-  const key = `wx:v1:${hour}`;
+  const key = `wx:v2:${parkK === "monogaliacounty" ? HOME_KEY : parkK}:${hour}`;   // v2: ballpark coordinates corrected (v1 used a point 100 m lower)
   const hit = await env.DATA.get(key, "text");
   if (hit) return new Response(hit, { headers: JSON_HEADERS });
   const day = hour.slice(0, 10);
@@ -88,7 +93,7 @@ async function weather(env: Env, request: Request): Promise<Response> {
   const rho = ((p - pv) * 100) / (287.058 * tk) + (pv * 100) / (461.495 * tk);      // kg/m³
   const code = Number(h.weather_code[i]);
   const body = JSON.stringify({ hour, tempF, rh, pressureHpa: p, windMph: Number(h.wind_speed_10m[i]), windFromDeg: Number(h.wind_direction_10m[i]),
-    code, desc: WX_DESC(code), airDensity: rho * 0.0624280 });
+    code, desc: WX_DESC(code), airDensity: rho * 0.0624280, elevationM: (d as { elevation?: number }).elevation ?? null, park: parkK });
   await env.DATA.put(key, body, recent ? { expirationTtl: 3 * 86400 } : {});        // recent hours get refreshed once the archive has them
   return new Response(body, { headers: JSON_HEADERS });
 }
