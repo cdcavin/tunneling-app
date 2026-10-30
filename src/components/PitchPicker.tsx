@@ -35,7 +35,7 @@ async function loadMeta(ids: string[], onProgress: (done: number) => void) {
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
 }
-type Runners = "any" | "empty" | "on" | "risp";
+type Runners = "any" | "on" | "risp";
 
 const abKey = (r: PitchRow) => `${r.game}|${r.inning}|${r.half}|${r.pa}`;
 const abLabel = (r: PitchRow) => `${r.half === "Bottom" ? "B" : "T"}${r.inning} · PA ${r.pa}${r.batter ? ` · ${r.batter}` : ""}`;
@@ -146,7 +146,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
     if (runners !== "any") l = l.filter((r) => {
       const m = metaCache.get(r.id); if (!m) return false;
       const on = m.on1 || m.on2 || m.on3;
-      return runners === "empty" ? !on : runners === "on" ? on : m.on2 || m.on3;
+      return runners === "on" ? on : m.on2 || m.on3;
     });
     return l;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -211,7 +211,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10l5-3v10l-5-3" /></svg>Has video
             </button>
             <span className="chip-sep" aria-hidden="true" />
-            {(([["any", "Any runners"], ["empty", "Bases empty"], ["on", "Runners on"], ["risp", "Runner in scoring position"]]) as [Runners, string][]).map(([k, label]) => (
+            {(([["any", "Any runners"], ["on", "Runners on"], ["risp", "Runner in scoring position"]]) as [Runners, string][]).map(([k, label]) => (
               <button key={k} type="button" className={`type-chip${runners === k ? " is-on" : ""}`} aria-pressed={runners === k} onClick={() => setRunners(k)}>{label}</button>
             ))}
             {progress && <span className="meta-progress">Checking AWRE… {progress.done}/{progress.total}</span>}
@@ -229,7 +229,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
                 {o} <span>{n}</span>
               </button>
             ))}
-            {(types.size > 0 || zones.size > 0 || outs.size > 0 || videoOnly || runners !== "any") && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); setOuts(new Set()); }}>Clear type, outcome and zone</button>}
+            {(types.size > 0 || zones.size > 0 || outs.size > 0 || videoOnly || runners !== "any") && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); setOuts(new Set()); setVideoOnly(false); setRunners("any"); }}>Clear filters</button>}
           </div>
           <div className="picker-body">
           <div className="picker-zone">
