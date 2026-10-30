@@ -181,7 +181,7 @@ function WxBox({ label, row, w }: { label: string; row: PitchRow; w: Weather | n
               {!home && w.elevationM != null && <><span>Elevation</span><b>{Math.round(w.elevationM * 3.28084).toLocaleString()} ft</b></>}
               <span>Air density</span><b>{w.airDensity.toFixed(4)} lb/ft³</b>
             </div>
-            {park.roof && <div className="wx-note">Retractable roof: if it was closed, temperature and humidity were the building's, not these.</div>}
+            {park.roof && <div className="wx-note">Roof may have been closed</div>}
             {(() => {
               const ratio = w.airDensity / LAB_AIR, f = 1 - 1 / ratio;   // share of the break from the extra (or missing) air
               const dv = row.ivb * f, dh = row.hb * f;

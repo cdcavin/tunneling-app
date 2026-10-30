@@ -27,7 +27,7 @@ const MIN_DAY = 3;      // pitches of a type in an outing before we show his mea
 const MIN_TYPE = 15;    // pitches of a type overall before it gets a tab
 
 export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; focusType: string }) {
-  const { outings, offFile } = useMemo(() => {
+  const { outings } = useMemo(() => {
     const g = new Map<string, PitchRow[]>();
     for (const r of rows) { if (!r.game) continue; const l = g.get(r.game) ?? []; l.push(r); g.set(r.game, l); }
     const out: Outing[] = []; let off = 0;
@@ -110,50 +110,41 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
 
   if (!types.length) return <div className="wxi"><p className="hint">Not enough pitches in this selection.</p></div>;
   const p1 = per1[type];
-  const best = [...tableRows].sort((a, b) => b.air - a.air);
   const fmtDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit", timeZone: "UTC" });
   const fmtTime = (u: string) => { const iso = u.trim().replace(" ", "T"); const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z"); return Number.isNaN(ms) ? "" : new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }); };
 
   return (
     <div className="wxi">
       <div className="wxi-head">
-        <div>
-          <b>How the air changed his stuff</b>
-          <span>Movement and velo vs the lab (indoors in Morgantown: {LAB_TEMP_F}°F, {LAB_RH}% humidity, average pressure, no wind). Fly ball vs Kendrick Family Ballpark at the same date and time. Denser air = more break, a bit more velo lost by the plate, shorter fly balls.</span>
-        </div>
+        <b title={`Movement and velo vs the lab (indoors in Morgantown, ${LAB_TEMP_F}°F, ${LAB_RH}% humidity, average pressure). Fly ball vs Kendrick at the same date and time. Break: + = more break the way the pitch already moves. Wind not included.`}>Weather vs lab</b>
         <div className="wxi-sort" role="group" aria-label="Sort outings">
-          <button type="button" className={`type-chip${sortBy === "air" ? " is-on" : ""}`} onClick={() => setSortBy("air")}>Densest air first</button>
-          <button type="button" className={`type-chip${sortBy === "date" ? " is-on" : ""}`} onClick={() => setSortBy("date")}>By date</button>
+          <button type="button" className={`type-chip${sortBy === "air" ? " is-on" : ""}`} onClick={() => setSortBy("air")}>Densest air</button>
+          <button type="button" className={`type-chip${sortBy === "date" ? " is-on" : ""}`} onClick={() => setSortBy("date")}>Date</button>
         </div>
       </div>
 
       <div className="wxi-types" role="group" aria-label="Pitch type">
-        {types.map((t) => {
-          const s = per1[t];
-          return (
-            <button key={t} type="button" className={`wxi-type${t === type ? " is-on" : ""}`} onClick={() => setType(t)} aria-pressed={t === type}>
-              <span><i style={{ background: pitchColorOnDark(t) }} />{t}</span>
-              {s && <small>1% thinner air: {sg(s.vert, 2)} vert · {sg(s.horz, 2)} horz in</small>}
-            </button>
-          );
-        })}
+        {types.map((t) => (
+          <button key={t} type="button" className={`type-chip${t === type ? " is-on" : ""}`} onClick={() => setType(t)} aria-pressed={t === type}>
+            <i style={{ background: pitchColorOnDark(t) }} />{t}
+          </button>
+        ))}
       </div>
 
       {p1 && (
-        <p className="wxi-sum">
-          His {type.toLowerCase()} loses <b>{Math.abs(p1.vert).toFixed(2)} in</b> of {model[type].ivb >= 0 ? "ride" : "drop"} and <b>{Math.abs(p1.horz).toFixed(2)} in</b> of horizontal break for every 1% thinner air, and gets to the plate <b>{Math.abs(p1.velo).toFixed(2)} mph</b> faster.
-          {best.length >= 2 && <> Most break of his outings: the dense air in {PARKS[best[0].o.park].city} ({fmtDate(best[0].o.date)}, {sg(best[0].air * 100)}%) · least: {PARKS[best[best.length - 1].o.park].city} ({fmtDate(best[best.length - 1].o.date)}, {sg(best[best.length - 1].air * 100)}%).</>}
-          {fit.n >= 5 && Number.isFinite(fit.v) && <> Measured across {fit.n} outings, his {model[type].ivb >= 0 ? "ride" : "drop"} moved {sg(fit.v, 2)} in per 1% denser air (physics says {sg(-p1.vert, 2)}); the rest of the day-to-day swing is him, not the weather.</>}
-          {fit.n < 5 && <> Too few outings with {MIN_DAY}+ of this pitch to check the physics against his own numbers.</>}
-        </p>
+        <div className="wxi-stats" title="Physics: what 1% thinner air does to his average pitch of this type. His data: how his measured break actually moved with the air across outings.">
+          <span>Per 1% thinner air</span>
+          <b>{sg(p1.vert, 2)}<small> in vert</small></b><b>{sg(p1.horz, 2)}<small> in horz</small></b><b>{sg(p1.velo, 2)}<small> mph plate</small></b>
+          {fit.n >= 5 && Number.isFinite(fit.v) && <><span>His data ({fit.n} outings)</span><b>{sg(-fit.v, 2)}<small> in vert</small></b><b>{sg(-fit.h, 2)}<small> in horz</small></b></>}
+        </div>
       )}
 
       <div className="wxi-scroll">
         <table className="wxi-table">
           <thead>
-            <tr><th rowSpan={2}>Date</th><th rowSpan={2}>Park</th><th rowSpan={2}>Conditions</th><th rowSpan={2}>Elev</th><th rowSpan={2}>Air vs<br />lab</th>
-              <th colSpan={3} className="grp">Weather did (physics)</th><th colSpan={4} className="grp">Measured vs his average</th><th rowSpan={2} title="A ball that went 400 ft at Kendrick Family Ballpark at that same date and hour: how much farther or shorter it went in this park's air (air only, no wind)">Fly ball vs<br />Kendrick then</th></tr>
-            <tr><th>Vert</th><th>Horz</th><th>Plate velo</th><th>Vert</th><th>Horz</th><th>Velo</th><th>Spin</th></tr>
+            <tr><th rowSpan={2}>Date</th><th rowSpan={2}>Park</th><th rowSpan={2}>Conditions</th><th rowSpan={2}>Elev</th><th rowSpan={2}>Air</th>
+              <th colSpan={3} className="grp">Weather effect</th><th colSpan={4} className="grp">That day vs his avg</th><th rowSpan={2} title="A ball that went 400 ft at Kendrick Family Ballpark at that same date and hour: how much farther or shorter it went in this park's air (air only, no wind)">Fly ball</th></tr>
+            <tr><th>Vert</th><th>Horz</th><th>Velo</th><th>Vert</th><th>Horz</th><th>Velo</th><th>Spin</th></tr>
           </thead>
           <tbody>
             {tableRows.map(({ o, w, air, e, meas, fly, n }) => {
@@ -161,26 +152,21 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
               return (
                 <tr key={o.game}>
                   <td>{fmtDate(o.date)}<small>{fmtTime(o.utc)}</small></td>
-                  <td title={park.approx ? `Location: ${park.approx}` : undefined}>{park.city}<small>{park.name}{park.roof ? " · roof" : ""}</small></td>
-                  <td>{Math.round(w.tempF)}°F · {Math.round(w.rh)}%<small>{Math.round(w.pressureHpa)} hPa · wind {Math.round(w.windMph)} {compass(w.windFromDeg)}</small></td>
+                  <td title={`${park.name}${park.roof ? " (retractable roof)" : ""}${park.approx ? ` · location: ${park.approx}` : ""}`}>{park.city}</td>
+                  <td title={`${Math.round(w.pressureHpa)} hPa`}>{Math.round(w.tempF)}°F · {Math.round(w.rh)}% · {Math.round(w.windMph)} {compass(w.windFromDeg)}</td>
                   <td>{w.elevationM != null ? `${Math.round(w.elevationM * 3.28084).toLocaleString()} ft` : "—"}</td>
                   <td className={air >= 0 ? "pos" : "neg"}>{sg(air * 100)}%</td>
                   <td className="num">{e ? sg(e.vert) : "—"}</td><td className="num">{e ? sg(e.horz) : "—"}</td><td className="num">{e ? sg(e.velo) : "—"}</td>
                   {meas ? <><td className="num">{sg(meas.vert)}</td><td className="num">{sg(meas.horz)}</td><td className="num">{sg(meas.velo)}</td><td className="num">{sg(meas.spin, 0)}</td></>
-                    : <td colSpan={4} className="dim">{n ? `${n} thrown` : "none thrown"}</td>}
-                  <td className="num">{PARKS[o.park] === PARKS[HOME_KEY] ? <span className="dim">home</span> : Number.isFinite(fly) ? `${sg(fly, 0)} ft` : "…"}</td>
+                    : <td colSpan={4} className="dim">{n ? `${n} thrown` : "—"}</td>}
+                  <td className="num">{PARKS[o.park] === PARKS[HOME_KEY] ? <span className="dim">—</span> : Number.isFinite(fly) ? `${sg(fly, 0)} ft` : "…"}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      <p className="hint wxi-foot">
-        {pending > 0 ? `Loading weather for ${pending} more outing${pending > 1 ? "s" : ""}… ` : ""}
-        Break in inches, + = more break the way the pitch already moves. Weather doesn't change spin rate or axis; measured spin is shown so you can see that.
-        Wind isn't in the numbers: it needs each park's field direction, which isn't on file.
-        {offFile > 0 && ` ${offFile} outing${offFile > 1 ? "s" : ""} at parks not on file left out.`}
-      </p>
+      {pending > 0 && <p className="hint wxi-foot">Loading {pending} more…</p>}
     </div>
   );
 }

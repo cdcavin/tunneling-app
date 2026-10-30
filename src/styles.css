@@ -713,3 +713,9 @@ button.primary.wide { width: 100%; }
 .mv-range { font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.3; }
 .mv-off { fill: var(--muted); opacity: 0.18; }
 @media (max-width: 700px) { .picker-body .picker-zone { max-width: 340px; } }
+.wxi-head { align-items: center; }
+.wxi-head > b { font: 600 15px var(--font-cond); color: var(--ink); cursor: help; }
+.wxi-stats { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 0 0 10px; font-size: 11.5px; color: var(--muted); }
+.wxi-stats b { font: 600 15px var(--font-cond); color: var(--wvu-gold); font-variant-numeric: tabular-nums; }
+.wxi-stats b small { font: 400 11px var(--font); color: var(--muted); }
+.wxi-stats span + b { margin-left: -6px; }
