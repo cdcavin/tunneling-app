@@ -125,7 +125,8 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
     loadMeta(homeIds, (done) => { if (alive) { setProgress(done < total ? { done, total } : null); setMetaN((n) => n + 1); } });
     return () => { alive = false; };
   }, [open, needMeta, homeIds]);
-  const resetFilters = () => { setTypes(new Set()); setOuts(new Set()); setZones(new Set()); setGame(""); setInning(""); setAb(""); setQuery(""); setVideoOnly(false); setRunners("any"); };
+  // After picking A everything resets except "Has video", so B is still a pitch with video.
+  const resetFilters = () => { setTypes(new Set()); setOuts(new Set()); setZones(new Set()); setGame(""); setInning(""); setAb(""); setQuery(""); setRunners("any"); };
   const flip = <T,>(set: Set<T>, v: T) => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n; };
 
   const games = useMemo(() => outings(rows), [rows]);
