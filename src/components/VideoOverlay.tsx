@@ -151,6 +151,34 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const [durB, setDurB] = useState(10);
   const [locked, setLocked] = useState(true);                  // B follows A
   const vA = useRef<HTMLVideoElement>(null), vB = useRef<HTMLVideoElement>(null);
+  // Full screen: the real Fullscreen API where the browser has it (desktop, iPad); a fixed full-window layer where it doesn't (iPhone).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const fsEl = () => document.fullscreenElement ?? (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement ?? null;
+  useEffect(() => {
+    const sync = () => setFull(fsEl() === rootRef.current && !!rootRef.current);
+    document.addEventListener("fullscreenchange", sync); document.addEventListener("webkitfullscreenchange", sync);
+    return () => { document.removeEventListener("fullscreenchange", sync); document.removeEventListener("webkitfullscreenchange", sync); };
+  }, []);
+  useEffect(() => {
+    if (!full || fsEl()) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setFull(false); };
+    window.addEventListener("keydown", esc); document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", esc); document.body.style.overflow = ""; };
+  }, [full]);
+  const toggleFull = async () => {
+    const el = rootRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
+    if (!el) return;
+    if (full) {
+      if (fsEl()) { const d = document as unknown as { webkitExitFullscreen?: () => void }; if (document.exitFullscreen) await document.exitFullscreen().catch(() => {}); else d.webkitExitFullscreen?.(); }
+      setFull(false); return;
+    }
+    try {
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else setFull(true);
+    } catch { setFull(true); }
+  };
 
   useEffect(() => {
     if (!selected || selected.anchor.id === selected.next.id) { setClipsA([]); setClipsB([]); setStatus(selected ? "Now pick pitch B." : null); return; }
@@ -553,10 +581,15 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const fmt = (s: number) => `${s >= 0 ? "+" : "−"}${Math.abs(s * 1000).toFixed(0)} ms`;
 
   return (
-    <div className="overlay">
+    <div className={`overlay${full ? " is-full" : ""}`} ref={rootRef}>
       <div className="overlay-head">
         <div className="sec-title">Video overlay</div>
         <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} isHome={isHomePitch} />
+        <button type="button" className="ghost full-btn" onClick={() => void toggleFull()} aria-label={full ? "Exit full screen" : "Full screen"} title={full ? "Exit full screen (Esc)" : "Full screen"}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {full ? <path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /> : <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />}
+          </svg>
+        </button>
       </div>
 
       <div className="overlay-stage">
