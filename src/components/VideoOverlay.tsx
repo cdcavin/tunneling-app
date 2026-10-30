@@ -180,6 +180,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     return () => { cancelled = true; };
   }, [selected, pitcherTeam]);
 
+  const isHomePitch = useCallback((r: PitchRow) => atWvuPark(r, pitcherTeam), [pitcherTeam]);
   const clipA = pick(clipsA, perspective), clipB = pick(clipsB, perspective);
   const urlA = clipA ? streamUrl(clipA.video_url) : null;
   const urlB = clipB ? streamUrl(clipB.video_url) : null;
@@ -555,7 +556,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     <div className="overlay">
       <div className="overlay-head">
         <div className="sec-title">Video overlay</div>
-        <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} />
+        <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} isHome={isHomePitch} />
       </div>
 
       <div className="overlay-stage">

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { PitchRow } from "../lib/types";
 import type { RealPair } from "../lib/pairs";
 import { pitchColorOnDark } from "../lib/pitchColors";
@@ -11,7 +11,31 @@ interface Props {
   pairs: RealPair[];                // quick list of real back-to-back pairs of the chosen types
   selected: RealPair | null;
   onSelect: (p: RealPair | null) => void;
+  isHome?: (r: PitchRow) => boolean;  // pitches at WVU's park (the only ones AWRE can have video for)
 }
+
+/** AWRE facts per pitch: has video (and center field), runners on first/second/third. null = no AWRE record. */
+interface Meta { video: boolean; cf: boolean; on1: boolean; on2: boolean; on3: boolean; outs: number | null }
+const metaCache = new Map<string, Meta | null>();
+async function loadMeta(ids: string[], onProgress: (done: number) => void) {
+  const todo = ids.filter((id) => !metaCache.has(id));
+  let done = ids.length - todo.length; onProgress(done);
+  const chunks: string[][] = []; for (let i = 0; i < todo.length; i += 15) chunks.push(todo.slice(i, i + 15));
+  let next = 0;
+  const worker = async () => {
+    while (next < chunks.length) {
+      const c = chunks[next++];
+      try {
+        const r = await fetch(`/api/awre/meta?ids=${c.map(encodeURIComponent).join(",")}`);
+        const j = (await r.json()) as Record<string, Meta | null>;
+        for (const id of c) metaCache.set(id, j[id] ?? null);
+      } catch { for (const id of c) metaCache.set(id, null); }
+      done += c.length; onProgress(done);
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+type Runners = "any" | "empty" | "on" | "risp";
 
 const abKey = (r: PitchRow) => `${r.game}|${r.inning}|${r.half}|${r.pa}`;
 const abLabel = (r: PitchRow) => `${r.half === "Bottom" ? "B" : "T"}${r.inning} · PA ${r.pa}${r.batter ? ` · ${r.batter}` : ""}`;
@@ -77,7 +101,7 @@ function ZoneMap({ counts, on, toggle, a, b }: { counts: Map<Zone, number>; on: 
 }
 
 /** Pick any two pitches to overlay: by pitch type, location zone, outing, inning, at-bat (batter when known), or a text search. */
-export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) {
+export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = () => true }: Props) {
   const [game, setGame] = useState("");
   const [inning, setInning] = useState("");
   const [ab, setAb] = useState("");
@@ -88,7 +112,20 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
   const [zones, setZones] = useState<Set<Zone>>(new Set());
   const [outs, setOuts] = useState<Set<Outcome>>(new Set());
   /** Picking A clears every filter so the search for B starts fresh. */
-  const resetFilters = () => { setTypes(new Set()); setOuts(new Set()); setZones(new Set()); setGame(""); setInning(""); setAb(""); setQuery(""); };
+  const [videoOnly, setVideoOnly] = useState(false);
+  const [runners, setRunners] = useState<Runners>("any");
+  const [metaN, setMetaN] = useState(0);            // bumps as AWRE answers arrive
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const needMeta = videoOnly || runners !== "any";
+  const homeIds = useMemo(() => rows.filter(isHome).map((r) => r.id), [rows, isHome]);
+  useEffect(() => {
+    if (!open || !needMeta || !homeIds.length) return;
+    let alive = true;
+    const total = homeIds.length;
+    loadMeta(homeIds, (done) => { if (alive) { setProgress(done < total ? { done, total } : null); setMetaN((n) => n + 1); } });
+    return () => { alive = false; };
+  }, [open, needMeta, homeIds]);
+  const resetFilters = () => { setTypes(new Set()); setOuts(new Set()); setZones(new Set()); setGame(""); setInning(""); setAb(""); setQuery(""); setVideoOnly(false); setRunners("any"); };
   const flip = <T,>(set: Set<T>, v: T) => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n; };
 
   const games = useMemo(() => outings(rows), [rows]);
@@ -105,8 +142,15 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
   const base = useMemo(() => {
     let l = ab ? inInning.filter((r) => abKey(r) === ab) : inInning;
     if (q) l = l.filter((r) => `${r.date} ${r.opponent} ${r.inning} ${r.half} ${r.pa} ${r.pitchNo} ${r.type} ${r.velo.toFixed(0)} ${r.call} ${r.batter ?? ""} ${r.count ?? ""}`.toLowerCase().includes(q));
+    if (videoOnly) l = l.filter((r) => metaCache.get(r.id)?.video === true);
+    if (runners !== "any") l = l.filter((r) => {
+      const m = metaCache.get(r.id); if (!m) return false;
+      const on = m.on1 || m.on2 || m.on3;
+      return runners === "empty" ? !on : runners === "on" ? on : m.on2 || m.on3;
+    });
     return l;
-  }, [inInning, ab, q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inInning, ab, q, videoOnly, runners, metaN]);
   const typeCounts = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of base) m.set(r.type, (m.get(r.type) ?? 0) + 1);
@@ -162,6 +206,16 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
             </select>
             <input type="search" placeholder="Search: batter, pitch, call, count…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search pitches" />
           </div>
+          <div className="picker-types" role="group" aria-label="Video and runners">
+            <button type="button" className={`type-chip${videoOnly ? " is-on" : ""}`} aria-pressed={videoOnly} onClick={() => setVideoOnly((v) => !v)}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10l5-3v10l-5-3" /></svg>Has video
+            </button>
+            <span className="chip-sep" aria-hidden="true" />
+            {(([["any", "Any runners"], ["empty", "Bases empty"], ["on", "Runners on"], ["risp", "Runner in scoring position"]]) as [Runners, string][]).map(([k, label]) => (
+              <button key={k} type="button" className={`type-chip${runners === k ? " is-on" : ""}`} aria-pressed={runners === k} onClick={() => setRunners(k)}>{label}</button>
+            ))}
+            {progress && <span className="meta-progress">Checking AWRE… {progress.done}/{progress.total}</span>}
+          </div>
           <div className="picker-types" role="group" aria-label="Pitch type">
             {typeCounts.map(([t, n]) => (
               <button key={t} type="button" className={`type-chip${types.has(t) ? " is-on" : ""}`} aria-pressed={types.has(t)} onClick={() => setTypes((s) => flip(s, t))}>
@@ -175,7 +229,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
                 {o} <span>{n}</span>
               </button>
             ))}
-            {(types.size > 0 || zones.size > 0 || outs.size > 0) && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); setOuts(new Set()); }}>Clear type, outcome and zone</button>}
+            {(types.size > 0 || zones.size > 0 || outs.size > 0 || videoOnly || runners !== "any") && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); setOuts(new Set()); }}>Clear type, outcome and zone</button>}
           </div>
           <div className="picker-body">
           <div className="picker-zone">
@@ -191,7 +245,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect }: Props) 
             {list.map((r) => (
               <div key={r.id} role="listitem" className={`pick-row${A?.id === r.id ? " is-a" : ""}${B?.id === r.id && !isPlaceholder ? " is-b" : ""}`}>
                 <span className="pick-main">
-                  <span className="pick-what"><i style={{ background: pitchColorOnDark(r.type) }} />{r.type} <b>{r.velo.toFixed(1)}</b><span className="pick-out">{outcomeOf(r) === "In play: hit" ? r.result : outcomeOf(r) === "Other" ? r.call : outcomeOf(r)}{r.ev != null ? ` · ${r.ev.toFixed(0)} EV` : ""}</span></span>
+                  <span className="pick-what">{metaCache.get(r.id)?.video && <svg className="pick-cam" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-label="has video"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10l5-3v10l-5-3" /></svg>}<i style={{ background: pitchColorOnDark(r.type) }} />{r.type} <b>{r.velo.toFixed(1)}</b><span className="pick-out">{outcomeOf(r) === "In play: hit" ? r.result : outcomeOf(r) === "Other" ? r.call : outcomeOf(r)}{r.ev != null ? ` · ${r.ev.toFixed(0)} EV` : ""}</span></span>
                   <span className="pick-when">{`${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}`} · {r.half === "Bottom" ? "B" : "T"}{r.inning ?? "?"} · PA {r.pa ?? "?"} · #{r.pitchNo ?? "?"}{r.count ? ` · ${r.count}` : ""}{r.batter ? ` · ${r.batter}` : ""}</span>
                 </span>
                 <span className="pick-btns">

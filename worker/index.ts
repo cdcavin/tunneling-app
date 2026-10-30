@@ -93,6 +93,33 @@ async function weather(env: Env, request: Request): Promise<Response> {
   return new Response(body, { headers: JSON_HEADERS });
 }
 
+/**
+ * Video and base-runner facts for up to 15 pitches at once (the pitch finder's "has video" and runner filters):
+ *   GET /api/awre/meta?ids=uid1,uid2,…  ->  { uid: { video, cf, on1, on2, on3, outs } | null }
+ * null = AWRE has no record of the pitch. Reuses the per-pitch lookup (and its KV cache); the small summary is kept
+ * 30 days when there is video, 1 day when there isn't (AWRE sometimes syncs clips later).
+ */
+async function awreMeta(env: Env, request: Request): Promise<Response> {
+  const ids = (new URL(request.url).searchParams.get("ids") ?? "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 15);
+  const out: Record<string, unknown> = {};
+  await Promise.all(ids.map(async (uid) => {
+    const key = `awre:meta:${uid}`;
+    const hit = await env.DATA.get(key, "text");
+    if (hit) { out[uid] = JSON.parse(hit); return; }
+    const r = await awre(env, `/api/awre/pitch/${encodeURIComponent(uid)}`);
+    if (r.status === 503) { out[uid] = null; return; }
+    let body: { pitch?: Record<string, unknown>; clips?: { perspective?: string }[]; notFound?: boolean } = {};
+    try { body = await r.json(); } catch { /* not JSON */ }
+    if (!r.ok && !body.pitch) { if (body.notFound) await env.DATA.put(key, "null", { expirationTtl: 86400 }); out[uid] = null; return; }
+    const p = body.pitch ?? {}, clips = body.clips ?? [];
+    const meta = { video: clips.length > 0, cf: clips.some((c) => /center ?field/i.test(c.perspective ?? "")),
+      on1: p.man_on_first === true, on2: p.man_on_second === true, on3: p.man_on_third === true, outs: typeof p.outs_before === "number" ? p.outs_before : null };
+    await env.DATA.put(key, JSON.stringify(meta), { expirationTtl: meta.video ? 30 * 86400 : 86400 });
+    out[uid] = meta;
+  }));
+  return json(out);
+}
+
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "private, max-age=300" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
@@ -203,6 +230,7 @@ export default {
 
     if (pathname === "/api/weather") return weather(env, request);
     if (pathname === "/api/awre/stream") return stream(env, request);
+    if (pathname === "/api/awre/meta") return awreMeta(env, request);
     if (pathname.startsWith("/api/awre/")) return awre(env, pathname);
     if (pathname.startsWith("/api/")) return json({ error: "Not found." }, 404);
     return env.ASSETS.fetch(request);
