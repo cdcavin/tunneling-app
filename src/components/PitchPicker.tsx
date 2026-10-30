@@ -103,7 +103,8 @@ function ZoneMap({ counts, on, toggle, a, b }: { counts: Map<Zone, number>; on: 
 
 /** Movement box in inches: horizontal (HB) and vertical (IVB) break ranges. */
 interface MoveBox { h0: number; h1: number; v0: number; v1: number }
-const MV = 25;   // plot spans ±25 in on both axes
+const MV = 25;
+const rnd = (v: number) => String(Math.round(v) || 0);   // no "-0"   // plot spans ±25 in on both axes
 /** Mini movement plot (pitcher's view, like the main one). Drag a box to keep only pitches inside it; click to clear. */
 function MovePlot({ rows, box, setBox, a, b, throws }: { rows: PitchRow[]; box: MoveBox | null; setBox: (b: MoveBox | null) => void; a: PitchRow | null; b: PitchRow | null; throws?: string }) {
   const ref = useRef<SVGSVGElement>(null);
@@ -129,7 +130,7 @@ function MovePlot({ rows, box, setBox, a, b, throws }: { rows: PitchRow[]; box: 
         {live && <rect x={live.h0} y={-live.v1} width={live.h1 - live.h0} height={live.v1 - live.v0} className="mv-box" pointerEvents="none" />}
         {dot(a, "var(--wvu-gold)")}{dot(b, "var(--steel)")}
       </svg>
-      <div className="zm-axis" aria-hidden="true"><span>{armRight ? "Glove" : "Arm"}</span><span>{box ? `${box.v0.toFixed(0)}–${box.v1.toFixed(0)} vert · ${box.h0.toFixed(0)}–${box.h1.toFixed(0)} horz` : "drag a box"}</span><span>{armRight ? "Arm" : "Glove"}</span></div>
+      <div className="zm-axis" aria-hidden="true"><span>{armRight ? "Glove" : "Arm"}</span><span>{box ? `${rnd(box.v0)} to ${rnd(box.v1)} vert · ${rnd(box.h0)} to ${rnd(box.h1)} horz` : "drag a box"}</span><span>{armRight ? "Arm" : "Glove"}</span></div>
     </div>
   );
 }
