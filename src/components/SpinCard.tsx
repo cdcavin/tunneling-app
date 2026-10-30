@@ -200,8 +200,6 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
   const ta = useMemo(() => typical(a), [a.typeRows]);   // eslint-disable-line react-hooks/exhaustive-deps
   const tb = useMemo(() => typical(b), [b.typeRows]);   // eslint-disable-line react-hooks/exhaustive-deps
   const sim = pa && pb ? spinSimilarity(pa, pb) : null;
-  const C = 2 * Math.PI * 50;
-  const tone = sim == null ? "var(--muted)" : sim.score >= 70 ? "var(--good)" : sim.score >= 40 ? "var(--wvu-gold)" : "#e05c5c";
   return (
     <section className="spincard" aria-label="Spin profile of the two pitches">
       <div className="sepref-head">
@@ -212,18 +210,11 @@ export default function SpinCard({ a, b, isHome }: { a: Side; b: Side; isHome: (
       <div className="spin-row">
         <BallSide s={a} p={pa} typical={ta} />
         <div className="spin-mid">
-          <svg viewBox="0 0 120 120" width="116" height="116" aria-hidden="true">
-            <circle cx="60" cy="60" r="50" fill="none" stroke="var(--line)" strokeWidth="8" />
-            {sim && <circle cx="60" cy="60" r="50" fill="none" stroke={tone} strokeWidth="8" strokeLinecap="round" strokeDasharray={`${(C * sim.score) / 100} ${C}`} transform="rotate(-90 60 60)" />}
-            <text x="60" y="64" textAnchor="middle" className="spin-score">{sim ? sim.score : "—"}</text>
-            <text x="60" y="82" textAnchor="middle" className="spin-of">of 100</text>
-          </svg>
-          <div className="spin-mid-label">Spin similarity</div>
           {sim && (
             <dl className="spin-gaps">
-              <dt>Axes apart</dt><dd>{sim.apart.toFixed(1)}°</dd>
               <dt>Tilt gap</dt><dd>{Math.round(sim.tiltMin)} min</dd>
               <dt>Gyro gap</dt><dd>{Math.round(sim.gyroGap)}°</dd>
+              <dt>Axes apart</dt><dd>{sim.apart.toFixed(1)}°</dd>
             </dl>
           )}
         </div>
