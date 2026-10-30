@@ -3,7 +3,7 @@ import type { Coeffs } from "../lib/physics";
 import { axisVector, spinProfile, spinSimilarity, STANDARD_AIR, type SpinProfile } from "../lib/spin";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
-import { HOME_KEY, MORGANTOWN_AIR, PARKS, parkKey } from "../lib/parks";
+import { HOME_KEY, LAB_AIR, LAB_RH, LAB_TEMP_F, PARKS, parkKey } from "../lib/parks";
 import WeatherImpact from "./WeatherImpact";
 
 interface Side {
@@ -155,18 +155,12 @@ function WxIcon({ desc }: { desc: string }) {
 }
 
 /**
- * Lab baseline: indoors at 70°F and 40% humidity, at the game's own air pressure (same elevation, same day).
  * Spin-driven break scales with air density (the Magnus push is ½ρ·A·C_L·v² and C_L depends only on spin and speed),
- * so break in the lab ≈ game break × ρ_lab / ρ_game. Gravity's drop doesn't change.
+ * so break in the lab ≈ game break × ρ_lab / ρ_game. Gravity's drop doesn't change. Lab: see lib/parks.ts.
  */
-function labDensity(pressureHpa: number) {
-  const tc = 21.1, tk = tc + 273.15, rh = 40;
-  const pv = (rh / 100) * 6.1078 * Math.pow(10, (7.5 * tc) / (tc + 237.3));
-  return (((pressureHpa - pv) * 100) / (287.058 * tk) + (pv * 100) / (461.495 * tk)) * 0.062428;
-}
 const sgn = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
 
-/** Small box for one picked pitch: date, time, park, sky, temperature, humidity, wind, air density, and break vs the lab (home) or Morgantown (away). */
+/** Small box for one picked pitch: date, time, park, sky, temperature, humidity, wind, air density, and break vs the lab. */
 function WxBox({ label, row, w }: { label: string; row: PitchRow; w: Weather | null }) {
   const pk = parkKey(row.game), park = pk ? PARKS[pk] : null, home = !!park && park === PARKS[HOME_KEY];
   const iso = row.utc ? row.utc.trim().replace(" ", "T") : ""; const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z");
@@ -189,13 +183,11 @@ function WxBox({ label, row, w }: { label: string; row: PitchRow; w: Weather | n
             </div>
             {park.roof && <div className="wx-note">Retractable roof: if it was closed, temperature and humidity were the building's, not these.</div>}
             {(() => {
-              // home: vs the lab at the same pressure; away: vs Morgantown on an average day (70°F, 40%, 974 hPa)
-              const base = home ? labDensity(w.pressureHpa) : MORGANTOWN_AIR, ratio = w.airDensity / base, f = 1 - 1 / ratio;   // share of the break from the extra (or missing) air
+              const ratio = w.airDensity / LAB_AIR, f = 1 - 1 / ratio;   // share of the break from the extra (or missing) air
               const dv = row.ivb * f, dh = row.hb * f;
               return (
-                <div className="wx-lab" title={home ? "Lab: indoors, 70°F, 40% humidity, same air pressure. Break scales with air density; spin rate and tilt don't change."
-                  : "Morgantown: 70°F, 40% humidity, its average game-time pressure. Break scales with air density; spin rate and tilt don't change."}>
-                  <div><span>{home ? "vs lab air" : "vs Morgantown"}</span><b>{ratio >= 1 ? `${((ratio - 1) * 100).toFixed(1)}% denser` : `${((1 - ratio) * 100).toFixed(1)}% thinner`}</b></div>
+                <div className="wx-lab" title={`Lab: indoors in Morgantown, ${LAB_TEMP_F}°F, ${LAB_RH}% humidity, average air pressure. Break scales with air density; spin rate and tilt don't change.`}>
+                  <div><span>vs lab air</span><b>{ratio >= 1 ? `${((ratio - 1) * 100).toFixed(1)}% denser` : `${((1 - ratio) * 100).toFixed(1)}% thinner`}</b></div>
                   <div><span>Weather added</span><b>{sgn(dv)} in vert · {sgn(dh)} in horz</b></div>
                 </div>
               );

@@ -2,19 +2,19 @@ import { useMemo, useState } from "react";
 import type { Coeffs } from "../lib/physics";
 import type { PitchRow } from "../lib/types";
 import { flyBallFt, flyPitch } from "../lib/airsim";
-import { MORGANTOWN_AIR, PARKS, parkKey } from "../lib/parks";
+import { HOME_KEY, LAB_AIR, LAB_RH, LAB_TEMP_F, PARKS, parkKey } from "../lib/parks";
 import { STANDARD_AIR } from "../lib/spin";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { compass, hourOf, useWeather, type Weather } from "./SpinCard";
 
 /**
- * How the air at each of his outings changed his stuff, against Morgantown on an average day (70°F, 40% humidity,
- * 974 hPa, no wind).
+ * How the air at each of his outings changed his stuff, against the lab (lib/parks.ts: indoors in Morgantown, fixed
+ * temperature, humidity and pressure, no wind). Fly ball: against Kendrick Family Ballpark at the same date and hour.
  *   Expected = physics: his own average pitch of each type re-flown in that game's air (lib/airsim.ts).
  *   Measured = what Trackman saw that day minus his average for the type (weather + everything else: fatigue, grip,
  *   how he felt). Both are in "movement" terms: + = more break in the direction the pitch already breaks.
  */
-interface Outing { game: string; date: string; park: string; key: string; utc: string; rows: PitchRow[] }
+interface Outing { game: string; date: string; park: string; key: string; homeKey: string; utc: string; rows: PitchRow[] }
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
 const COEF_KEYS = ["Xc0", "Xc1", "Xc2", "Yc0", "Yc1", "Yc2", "Zc0", "Zc1", "Zc2"] as const;
 const avgCoeffs = (rs: PitchRow[]): Coeffs | null => {
@@ -35,12 +35,12 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
       const pk = parkKey(game); const us = rs.map((r) => r.utc).filter((u): u is string => !!u).sort();
       const utc = us[Math.floor(us.length / 2)]; const h = hourOf(utc);
       if (!pk || !PARKS[pk] || !h) { off++; continue; }
-      out.push({ game, date: rs[0].date, park: pk, key: `${pk}|${h}`, utc, rows: rs });
+      out.push({ game, date: rs[0].date, park: pk, key: `${pk}|${h}`, homeKey: `${HOME_KEY}|${h}`, utc, rows: rs });
     }
     out.sort((a, b) => a.date.localeCompare(b.date));
     return { outings: out, offFile: off };
   }, [rows]);
-  const wx = useWeather(outings.map((o) => o.key));
+  const wx = useWeather(outings.flatMap((o) => [o.key, o.homeKey]));
 
   const types = useMemo(() => {
     const n = new Map<string, number>();
@@ -67,19 +67,24 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
 
   const base = useMemo(() => {
     const b: Record<string, ReturnType<typeof flyPitch>> = {};
-    for (const [t, m] of Object.entries(model)) b[t] = flyPitch(m.c, m.rho0, MORGANTOWN_AIR);
+    for (const [t, m] of Object.entries(model)) b[t] = flyPitch(m.c, m.rho0, LAB_AIR);
     return b;
   }, [model]);
-  const fly0 = useMemo(() => flyBallFt(MORGANTOWN_AIR), []);
 
-  // Expected change vs Morgantown for a type in air rho, as movement gained (+ = more break the way it already breaks).
+  // Expected change vs the lab for a type in air rho, as movement gained (+ = more break the way it already breaks).
   const expected = (t: string, rho: number) => {
     const m = model[t], b0 = base[t]; if (!m || !b0) return null;
     const p = flyPitch(m.c, m.rho0, rho); if (!p) return null;
     return { vert: (p.ivbIn - b0.ivbIn) * Math.sign(m.ivb || 1), horz: (p.hbIn - b0.hbIn) * Math.sign(m.hb || 1), velo: p.plateMph - b0.plateMph };
   };
-  const per1 = useMemo(() => Object.fromEntries(types.map((t) => [t, expected(t, MORGANTOWN_AIR * 0.99)])), [types, model, base]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const per1 = useMemo(() => Object.fromEntries(types.map((t) => [t, expected(t, LAB_AIR * 0.99)])), [types, model, base]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fly ball: a 400-ft fly ball at Kendrick Family Ballpark at that same date and hour, hit in this park's air instead. 0 at home.
+  const flyVsHome = (o: Outing, w: Weather) => {
+    if (PARKS[o.park] === PARKS[HOME_KEY]) return 0;
+    const h = wx[o.homeKey]; if (!h) return NaN;
+    return 400 * (flyBallFt(w.airDensity) / flyBallFt(h.airDensity) - 1);
+  };
   const tableRows = useMemo(() => {
     const list = loaded.map((o) => {
       const w = wx[o.key] as Weather; const rs = o.rows.filter((r) => r.type === type); const m = model[type];
@@ -88,12 +93,12 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
         vert: (mean(rs.map((r) => r.ivb)) - m.ivb) * Math.sign(m.ivb || 1), horz: (mean(rs.map((r) => r.hb)) - m.hb) * Math.sign(m.hb || 1),
         velo: mean(rs.map((r) => r.velo)) - m.velo, spin: mean(rs.map((r) => r.spin).filter((x): x is number => x != null)) - m.spin, n: rs.length,
       } : null;
-      return { o, w, air: w.airDensity / MORGANTOWN_AIR - 1, e, meas, fly: 400 * (flyBallFt(w.airDensity) / fly0 - 1), n: rs.length };
+      return { o, w, air: w.airDensity / LAB_AIR - 1, e, meas, fly: flyVsHome(o, w), n: rs.length };
     });
     return sortBy === "air" ? list.sort((a, b) => b.air - a.air) : list;
-  }, [loaded, wx, type, model, sortBy, fly0]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loaded, wx, type, model, sortBy]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Did his measured movement follow the air? Least-squares slope of measured vert/horz on air (% vs Morgantown).
+  // Did his measured movement follow the air? Least-squares slope of measured vert/horz on air (% vs the lab).
   const fit = useMemo(() => {
     const pts = tableRows.filter((r) => r.meas).map((r) => ({ x: r.air * 100, v: r.meas!.vert, h: r.meas!.horz, e: r.e }));
     if (pts.length < 5) return { n: pts.length, v: NaN, h: NaN };
@@ -114,7 +119,7 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
       <div className="wxi-head">
         <div>
           <b>How the air changed his stuff</b>
-          <span>vs Morgantown on an average day: 70°F, 40% humidity, 974 hPa, no wind. Denser air = more break, a bit more velo lost by the plate, shorter fly balls.</span>
+          <span>Movement and velo vs the lab (indoors in Morgantown: {LAB_TEMP_F}°F, {LAB_RH}% humidity, average pressure, no wind). Fly ball vs Kendrick Family Ballpark at the same date and time. Denser air = more break, a bit more velo lost by the plate, shorter fly balls.</span>
         </div>
         <div className="wxi-sort" role="group" aria-label="Sort outings">
           <button type="button" className={`type-chip${sortBy === "air" ? " is-on" : ""}`} onClick={() => setSortBy("air")}>Densest air first</button>
@@ -146,8 +151,8 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
       <div className="wxi-scroll">
         <table className="wxi-table">
           <thead>
-            <tr><th rowSpan={2}>Date</th><th rowSpan={2}>Park</th><th rowSpan={2}>Conditions</th><th rowSpan={2}>Elev</th><th rowSpan={2}>Air vs<br />Morgantown</th>
-              <th colSpan={3} className="grp">Weather did (physics)</th><th colSpan={4} className="grp">Measured vs his average</th><th rowSpan={2} title="How much farther or shorter a 400-ft fly ball in Morgantown would have gone, from the air alone (no wind)">400-ft<br />fly ball</th></tr>
+            <tr><th rowSpan={2}>Date</th><th rowSpan={2}>Park</th><th rowSpan={2}>Conditions</th><th rowSpan={2}>Elev</th><th rowSpan={2}>Air vs<br />lab</th>
+              <th colSpan={3} className="grp">Weather did (physics)</th><th colSpan={4} className="grp">Measured vs his average</th><th rowSpan={2} title="A ball that went 400 ft at Kendrick Family Ballpark at that same date and hour: how much farther or shorter it went in this park's air (air only, no wind)">Fly ball vs<br />Kendrick then</th></tr>
             <tr><th>Vert</th><th>Horz</th><th>Plate velo</th><th>Vert</th><th>Horz</th><th>Velo</th><th>Spin</th></tr>
           </thead>
           <tbody>
@@ -163,7 +168,7 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
                   <td className="num">{e ? sg(e.vert) : "—"}</td><td className="num">{e ? sg(e.horz) : "—"}</td><td className="num">{e ? sg(e.velo) : "—"}</td>
                   {meas ? <><td className="num">{sg(meas.vert)}</td><td className="num">{sg(meas.horz)}</td><td className="num">{sg(meas.velo)}</td><td className="num">{sg(meas.spin, 0)}</td></>
                     : <td colSpan={4} className="dim">{n ? `${n} thrown` : "none thrown"}</td>}
-                  <td className="num">{sg(fly, 0)} ft</td>
+                  <td className="num">{PARKS[o.park] === PARKS[HOME_KEY] ? <span className="dim">home</span> : Number.isFinite(fly) ? `${sg(fly, 0)} ft` : "…"}</td>
                 </tr>
               );
             })}

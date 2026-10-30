@@ -52,13 +52,15 @@ export function parkKey(game: string | undefined | null): string | null {
 export const parkOf = (game: string | undefined | null): Park | null => { const k = parkKey(game); return k ? PARKS[k] ?? null : null; };
 
 /**
- * Morgantown baseline for "vs home": 70°F, 40% humidity, no wind, at Morgantown's average game-time air pressure
- * (974.1 hPa: Open-Meteo, Feb–Jun 2021–25, noon–8 pm, at the ballpark). Same as the lab baseline on an average day.
+ * The lab: every pitch's air is compared to this. Indoors in Morgantown, 70°F, 40% humidity (assumed until the lab's
+ * real settings are known), no wind, at Morgantown's average game-time air pressure (974.1 hPa: Open-Meteo,
+ * Feb–Jun 2021–25, noon–8 pm, at the ballpark), so it's the same fixed baseline for every game, home or away.
  */
+export const LAB_TEMP_F = 70, LAB_RH = 40;
 export const MORGANTOWN_HPA = 974.1;
 export function airDensityLb(tempF: number, rh: number, pressureHpa: number) {
   const tc = ((tempF - 32) * 5) / 9, tk = tc + 273.15;
   const pv = (rh / 100) * 6.1078 * Math.pow(10, (7.5 * tc) / (tc + 237.3));        // hPa (Tetens)
   return (((pressureHpa - pv) * 100) / (287.058 * tk) + (pv * 100) / (461.495 * tk)) * 0.062428;
 }
-export const MORGANTOWN_AIR = airDensityLb(70, 40, MORGANTOWN_HPA);
+export const LAB_AIR = airDensityLb(LAB_TEMP_F, LAB_RH, MORGANTOWN_HPA);
