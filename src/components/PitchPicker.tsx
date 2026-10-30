@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { PitchRow } from "../lib/types";
 import type { RealPair } from "../lib/pairs";
 import { pitchColorOnDark } from "../lib/pitchColors";
@@ -12,6 +12,7 @@ interface Props {
   selected: RealPair | null;
   onSelect: (p: RealPair | null) => void;
   isHome?: (r: PitchRow) => boolean;  // pitches at WVU's park (the only ones AWRE can have video for)
+  throws?: string;                  // "Right" | "Left", for arm/glove side on the movement plot
 }
 
 /** AWRE facts per pitch: has video (and center field), runners on first/second/third. null = no AWRE record. */
@@ -100,8 +101,42 @@ function ZoneMap({ counts, on, toggle, a, b }: { counts: Map<Zone, number>; on: 
   );
 }
 
+/** Movement box in inches: horizontal (HB) and vertical (IVB) break ranges. */
+interface MoveBox { h0: number; h1: number; v0: number; v1: number }
+const MV = 25;   // plot spans ±25 in on both axes
+/** Mini movement plot (pitcher's view, like the main one). Drag a box to keep only pitches inside it; click to clear. */
+function MovePlot({ rows, box, setBox, a, b, throws }: { rows: PitchRow[]; box: MoveBox | null; setBox: (b: MoveBox | null) => void; a: PitchRow | null; b: PitchRow | null; throws?: string }) {
+  const ref = useRef<SVGSVGElement>(null);
+  const [drag, setDrag] = useState<{ x: number; y: number; x2: number; y2: number } | null>(null);
+  const pt = (e: React.PointerEvent) => {
+    const svg = ref.current!; const m = svg.getScreenCTM(); if (!m) return { x: 0, y: 0 };
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    return { x: clamp(p.x, -MV, MV), y: clamp(-p.y, -MV, MV) };   // svg y down = −IVB
+  };
+  const live = drag ? { h0: Math.min(drag.x, drag.x2), h1: Math.max(drag.x, drag.x2), v0: Math.min(drag.y, drag.y2), v1: Math.max(drag.y, drag.y2) } : box;
+  const inBox = (r: PitchRow) => !live || (r.hb >= live.h0 && r.hb <= live.h1 && r.ivb >= live.v0 && r.ivb <= live.v1);
+  const armRight = throws !== "Left";
+  const dot = (r: PitchRow | null, color: string) => r && <circle cx={clamp(r.hb, -MV + 1, MV - 1)} cy={clamp(-r.ivb, -MV + 1, MV - 1)} r={1.6} fill={color} stroke="#0b1526" strokeWidth={0.5} pointerEvents="none" />;
+  return (
+    <div className="mv-wrap">
+      <svg ref={ref} className="mv-plot" viewBox={`${-MV} ${-MV} ${2 * MV} ${2 * MV}`} aria-label="Movement filter: drag a box around the break you want"
+        onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); const p = pt(e); setDrag({ x: p.x, y: p.y, x2: p.x, y2: p.y }); }}
+        onPointerMove={(e) => { if (drag) { const p = pt(e); setDrag({ ...drag, x2: p.x, y2: p.y }); } }}
+        onPointerUp={() => { if (!drag) return; const d = drag; setDrag(null); setBox(Math.abs(d.x2 - d.x) < 1 && Math.abs(d.y2 - d.y) < 1 ? null : { h0: Math.min(d.x, d.x2), h1: Math.max(d.x, d.x2), v0: Math.min(d.y, d.y2), v1: Math.max(d.y, d.y2) }); }}>
+        {[6, 12, 18, 24].map((r) => <circle key={r} cx={0} cy={0} r={r} className="mv-ring" />)}
+        <line x1={-MV} x2={MV} y1={0} y2={0} className="mv-axis" /><line y1={-MV} y2={MV} x1={0} x2={0} className="mv-axis" />
+        {rows.map((r) => <circle key={r.id} cx={clamp(r.hb, -MV + 0.6, MV - 0.6)} cy={clamp(-r.ivb, -MV + 0.6, MV - 0.6)} r={0.75} fill={pitchColorOnDark(r.type)} opacity={inBox(r) ? 0.85 : 0.15} pointerEvents="none" />)}
+        {live && <rect x={live.h0} y={-live.v1} width={live.h1 - live.h0} height={live.v1 - live.v0} className="mv-box" pointerEvents="none" />}
+        {dot(a, "var(--wvu-gold)")}{dot(b, "var(--steel)")}
+      </svg>
+      <div className="zm-axis" aria-hidden="true"><span>{armRight ? "Glove" : "Arm"}</span><span>{box ? `${box.v0.toFixed(0)}–${box.v1.toFixed(0)} vert · ${box.h0.toFixed(0)}–${box.h1.toFixed(0)} horz` : "drag a box"}</span><span>{armRight ? "Arm" : "Glove"}</span></div>
+    </div>
+  );
+}
+
 /** Pick any two pitches to overlay: by pitch type, location zone, outing, inning, at-bat (batter when known), or a text search. */
-export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = () => true }: Props) {
+export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = () => true, throws }: Props) {
+  const [mvBox, setMvBox] = useState<MoveBox | null>(null);
   const [game, setGame] = useState("");
   const [inning, setInning] = useState("");
   const [ab, setAb] = useState("");
@@ -126,7 +161,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
     return () => { alive = false; };
   }, [open, needMeta, homeIds]);
   // After picking A everything resets except "Has video", so B is still a pitch with video.
-  const resetFilters = () => { setTypes(new Set()); setOuts(new Set()); setZones(new Set()); setGame(""); setInning(""); setAb(""); setQuery(""); setRunners("any"); };
+  const resetFilters = () => { setTypes(new Set()); setOuts(new Set()); setZones(new Set()); setGame(""); setInning(""); setAb(""); setQuery(""); setRunners("any"); setMvBox(null); };
   const flip = <T,>(set: Set<T>, v: T) => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n; };
 
   const games = useMemo(() => outings(rows), [rows]);
@@ -169,7 +204,8 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
     for (const r of ofOut) { const z = zoneOf(r.side, r.height); m.set(z, (m.get(z) ?? 0) + 1); }
     return m;
   }, [ofOut]);
-  const matched = useMemo(() => (zones.size ? ofOut.filter((r) => zones.has(zoneOf(r.side, r.height))) : ofOut), [ofOut, zones]);
+  const inZones = useMemo(() => (zones.size ? ofOut.filter((r) => zones.has(zoneOf(r.side, r.height))) : ofOut), [ofOut, zones]);
+  const matched = useMemo(() => (mvBox ? inZones.filter((r) => r.hb >= mvBox.h0 && r.hb <= mvBox.h1 && r.ivb >= mvBox.v0 && r.ivb <= mvBox.v1) : inZones), [inZones, mvBox]);
   const list = useMemo(() => {
     const l = matched;
     return [...l].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0) || (a.inning ?? 0) - (b.inning ?? 0) || (a.pa ?? 0) - (b.pa ?? 0) || (a.pitchNo ?? 0) - (b.pitchNo ?? 0)).slice(0, 80);
@@ -230,7 +266,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
                 {o} <span>{n}</span>
               </button>
             ))}
-            {(types.size > 0 || zones.size > 0 || outs.size > 0 || videoOnly || runners !== "any") && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); setOuts(new Set()); setVideoOnly(false); setRunners("any"); }}>Clear filters</button>}
+            {(types.size > 0 || zones.size > 0 || outs.size > 0 || videoOnly || runners !== "any" || mvBox) && <button type="button" className="type-chip clear" onClick={() => { setTypes(new Set()); setZones(new Set()); setOuts(new Set()); setVideoOnly(false); setRunners("any"); setMvBox(null); }}>Clear filters</button>}
           </div>
           <div className="picker-body">
           <div className="picker-zone">
@@ -240,6 +276,7 @@ export default function PitchPicker({ rows, pairs, selected, onSelect, isHome = 
               <button type="button" onClick={() => setZones(new Set(IN_ZONES))}>In zone</button>
               <button type="button" onClick={() => setZones(new Set(OUT_ZONES))}>Out</button>
             </div>
+            <MovePlot rows={inZones} box={mvBox} setBox={setMvBox} a={A} b={isPlaceholder ? null : B} throws={throws} />
             <p className="zm-count">{matched.length.toLocaleString()} pitch{matched.length === 1 ? "" : "es"}</p>
           </div>
           <div className="picker-list" role="list">

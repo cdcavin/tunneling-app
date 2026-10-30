@@ -584,7 +584,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     <div className={`overlay${full ? " is-full" : ""}`} ref={rootRef}>
       <div className="overlay-head">
         <div className="sec-title">Video overlay</div>
-        <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} isHome={isHomePitch} />
+        <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} isHome={isHomePitch} throws={throws} />
         <button type="button" className="ghost full-btn" onClick={() => void toggleFull()} aria-label={full ? "Exit full screen" : "Full screen"} title={full ? "Exit full screen (Esc)" : "Full screen"}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {full ? <path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /> : <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />}

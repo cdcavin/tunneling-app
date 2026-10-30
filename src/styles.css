@@ -695,3 +695,9 @@ button.primary.wide { width: 100%; }
 .wxi-table td.neg { color: var(--wvu-gold); }
 .wxi-table td.dim { color: var(--faint); text-align: center; }
 .wxi-foot { text-align: left; max-width: none; margin: 8px 0 0; }
+/* Pitch finder: movement box filter */
+.mv-wrap { display: grid; gap: 2px; margin-top: 4px; }
+.mv-plot { width: 100%; aspect-ratio: 1; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-ctl); cursor: crosshair; touch-action: none; user-select: none; }
+.mv-ring { fill: none; stroke: var(--line); stroke-width: 0.25; }
+.mv-axis { stroke: var(--line); stroke-width: 0.35; }
+.mv-box { fill: rgba(242, 193, 78, 0.10); stroke: var(--wvu-gold); stroke-width: 0.5; }
