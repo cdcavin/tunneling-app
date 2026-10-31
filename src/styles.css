@@ -719,3 +719,6 @@ button.primary.wide { width: 100%; }
 .wxi-stats b { font: 600 15px var(--font-cond); color: var(--wvu-gold); font-variant-numeric: tabular-nums; }
 .wxi-stats b small { font: 400 11px var(--font); color: var(--muted); }
 .wxi-stats span + b { margin-left: -6px; }
+/* PWA: new version deployed */
+.update-bar { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 2000; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; background: var(--raised); border: 1px solid var(--wvu-gold); border-radius: var(--r-panel); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); font-size: 13px; color: var(--ink); }
+.update-go { padding: 5px 12px; border-radius: var(--r-ctl); border: 0; background: var(--wvu-gold); color: var(--wvu-navy); font-weight: 600; cursor: pointer; }
