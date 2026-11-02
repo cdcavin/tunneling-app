@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { atWvuPark, lookupClips, streamUrl, type AwreClip, type RealPair } from "../lib/pairs";
 import PitchPicker from "./PitchPicker";
+import AtBatPlayer from "./AtBatPlayer";
 import type { PitchRow } from "../lib/types";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { alignFrames, toGray } from "../lib/align";
@@ -153,6 +154,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const vA = useRef<HTMLVideoElement>(null), vB = useRef<HTMLVideoElement>(null);
   // Full screen: the real Fullscreen API where the browser has it (desktop, iPad); a fixed full-window layer where it doesn't (iPhone).
   const rootRef = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<"find" | "ab">("find");
   const [full, setFull] = useState(false);
   const fsEl = () => document.fullscreenElement ?? (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement ?? null;
   useEffect(() => {
@@ -584,13 +586,24 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
     <div className={`overlay${full ? " is-full" : ""}`} ref={rootRef}>
       <div className="overlay-head">
         <div className="sec-title">Video overlay</div>
-        <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} isHome={isHomePitch} throws={throws} />
+        <div className="overlay-pick">
+          <div className="mode-tabs" role="tablist" aria-label="How to pick pitches">
+            <button type="button" role="tab" aria-selected={mode === "find"} className={`type-chip${mode === "find" ? " is-on" : ""}`} onClick={() => setMode("find")}>Find pitches</button>
+            <button type="button" role="tab" aria-selected={mode === "ab"} className={`type-chip${mode === "ab" ? " is-on" : ""}`} onClick={() => setMode("ab")}>At-bat</button>
+          </div>
+          {/* kept mounted so its filters survive switching modes */}
+          <div style={mode === "find" ? undefined : { display: "none" }}>
+            <PitchPicker rows={rows} pairs={pairs} selected={selected} onSelect={onSelect} isHome={isHomePitch} throws={throws} />
+          </div>
+        </div>
         <button type="button" className="ghost full-btn" onClick={() => void toggleFull()} aria-label={full ? "Exit full screen" : "Full screen"} title={full ? "Exit full screen (Esc)" : "Full screen"}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {full ? <path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /> : <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />}
           </svg>
         </button>
       </div>
+
+      {mode === "ab" && <AtBatPlayer rows={rows} selected={selected} onSelect={onSelect} active={mode === "ab"} />}
 
       <div className="overlay-stage">
         {selected && selected.anchor.id !== selected.next.id && urlA && urlB ? (
