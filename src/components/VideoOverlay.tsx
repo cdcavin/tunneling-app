@@ -603,7 +603,9 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
         </button>
       </div>
 
-      {mode === "ab" && <AtBatPlayer rows={rows} selected={selected} onSelect={onSelect} active={mode === "ab"} />}
+      <div style={mode === "ab" ? undefined : { display: "none" }}>
+        <AtBatPlayer rows={rows} selected={selected} onSelect={onSelect} active={mode === "ab"} />
+      </div>
 
       <div className="overlay-stage">
         {selected && selected.anchor.id !== selected.next.id && urlA && urlB ? (
