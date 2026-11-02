@@ -45,6 +45,7 @@ async function awre(env: Env, pathname: string): Promise<Response> {
     if (r.ok && /text\/html/i.test(r.headers.get("content-type") ?? "")) continue;
     p = r; base = b;
     if (r.ok || r.status === 404) break;
+    if (r.status === 406 && /does not exist/i.test(await r.clone().text())) { p = new Response(null, { status: 404 }); break; }   // AWRE's "Pitch UID does not exist"
     if (!firstFail) firstFail = { status: r.status, text: (await r.clone().text()).slice(0, 300) };
   }
   if (firstFail && (!p || !p.ok) && p?.status !== 404) return json({ error: `AWRE pitch lookup failed (HTTP ${firstFail.status}).`, detail: firstFail.text, clips: [] }, 502);
