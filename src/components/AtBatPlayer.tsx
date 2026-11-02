@@ -62,7 +62,7 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
 
   const pairs = Math.max(0, list.length - 1);
   // mini zone, catcher's view: x = −side (third-base side on the left)
-  const X = (s: number) => 55 - s * 26, Y = (h: number) => 128 - h * 26;
+  const X = (s: number) => 60 - s * 34, Y = (h: number) => 158 - h * 34;
   return (
     <div className="ab">
       <div className="ab-pick">
@@ -77,7 +77,8 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
       </div>
 
       {list.length > 0 && (
-        <>
+        <div className="ab-body">
+          <div className="ab-main">
           <div className="ab-strip" role="list">
             {list.map((r, i) => {
               const isA = at === i, isB = at >= 0 && at + 1 === i;
@@ -101,16 +102,17 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
                 : <>Click a pitch or Next to start</>}
             </span>
             <button type="button" className="ghost" onClick={() => go(at + 1)} disabled={pairs === 0 || at >= pairs - 1} aria-label="Next pair">Next ▶</button>
-            <svg className="ab-zone" viewBox="0 0 110 130" role="img" aria-label="Where each pitch of the at-bat crossed, catcher's view">
+          </div>
+          </div>
+          <svg className="ab-zone" viewBox="0 0 120 150" role="img" aria-label="Where each pitch of the at-bat crossed, catcher's view">
               <rect x={X(ZONE.halfWidth)} y={Y(ZONE.top)} width={X(-ZONE.halfWidth) - X(ZONE.halfWidth)} height={Y(ZONE.bottom) - Y(ZONE.top)} className="ab-zone-box" />
               {list.map((r, i) => {
                 const cls = at === i ? "a" : at >= 0 && at + 1 === i ? "b" : "";
-                const cx = Math.max(8, Math.min(102, X(r.side))), cy = Math.max(8, Math.min(122, Y(r.height)));
-                return <g key={r.id} className={`ab-dot ${cls}`}><circle cx={cx} cy={cy} r={7} /><text x={cx} y={cy}>{i + 1}</text></g>;
+                const cx = Math.max(10, Math.min(110, X(r.side))), cy = Math.max(10, Math.min(140, Y(r.height)));
+                return <g key={r.id} className={`ab-dot ${cls}`}><circle cx={cx} cy={cy} r={9} /><text x={cx} y={cy}>{i + 1}</text></g>;
               })}
             </svg>
-          </div>
-        </>
+        </div>
       )}
       {!list.length && atBats.length === 0 && <p className="hint">No at-bats in this outing.</p>}
     </div>
