@@ -45,12 +45,16 @@ async function awre(env: Env, pathname: string): Promise<Response> {
   }
   if (p?.status === 404) return json({ error: "AWRE has no record of this pitch.", notFound: true, clips: [] }, 404);
   if (!p || !p.ok) return json({ error: `AWRE pitch lookup failed (HTTP ${p?.status}).`, detail: (await p?.text())?.slice(0, 300) }, 502);
-  const pitch = (await p.json()) as { pitch?: { pitch_id?: number } };
+  const ptxt = await p.text();
+  let pitch: { pitch?: { pitch_id?: number } };
+  try { pitch = JSON.parse(ptxt); } catch { return json({ error: "AWRE sent back something that isn't pitch data.", detail: ptxt.slice(0, 300), notFound: true, clips: [] }, 404); }
   const pitchId = pitch.pitch?.pitch_id;
   if (!pitchId) return json({ error: "AWRE has no video record for this pitch.", pitch }, 404);
   const a = await fetch(`${base}/team/${team}/clip/ph_${pitchId}/angles`, { headers });
   if (!a.ok) return json({ error: `AWRE clip lookup failed (HTTP ${a.status}).`, detail: (await a.text()).slice(0, 300) }, 502);
-  const angles = (await a.json()) as { clips?: unknown[] };
+  const atxt = await a.text();
+  let angles: { clips?: unknown[] };
+  try { angles = JSON.parse(atxt); } catch { return json({ error: "AWRE sent back something that isn't clip data.", detail: atxt.slice(0, 300), clips: [] }, 502); }
   const body = JSON.stringify({ pitch: pitch.pitch, clips: angles.clips ?? [] });
   await env.DATA.put(cacheKey, body, { expirationTtl: 86400 });
   return new Response(body, { headers: JSON_HEADERS });
