@@ -38,11 +38,16 @@ async function awre(env: Env, pathname: string): Promise<Response> {
   const headers = { Authorization: `Api-Key ${env.AWRE_API_KEY}` };
   const bases = env.AWRE_BASE ? [env.AWRE_BASE] : [AWRE_BASE, AWRE_BASE.replace("https://api.", "https://www.")];
   let p: Response | null = null, base = bases[0];
+  let firstFail: { status: number; text: string } | null = null;
   for (const b of bases) {
-    p = await fetch(`${b}/team/${team}/pitchuid/${encodeURIComponent(uid)}`, { headers });
-    base = b;
-    if (p.ok || p.status === 404) break;
+    const r = await fetch(`${b}/team/${team}/pitchuid/${encodeURIComponent(uid)}`, { headers });
+    // the www host answers unknown API paths with its web page (HTML, 200): that's not an answer
+    if (r.ok && /text\/html/i.test(r.headers.get("content-type") ?? "")) continue;
+    p = r; base = b;
+    if (r.ok || r.status === 404) break;
+    if (!firstFail) firstFail = { status: r.status, text: (await r.clone().text()).slice(0, 300) };
   }
+  if (firstFail && (!p || !p.ok) && p?.status !== 404) return json({ error: `AWRE pitch lookup failed (HTTP ${firstFail.status}).`, detail: firstFail.text, clips: [] }, 502);
   if (p?.status === 404) return json({ error: "AWRE has no record of this pitch.", notFound: true, clips: [] }, 404);
   if (!p || !p.ok) return json({ error: `AWRE pitch lookup failed (HTTP ${p?.status}).`, detail: (await p?.text())?.slice(0, 300) }, 502);
   const ptxt = await p.text();
