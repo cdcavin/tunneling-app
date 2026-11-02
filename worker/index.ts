@@ -62,7 +62,7 @@ async function awre(env: Env, pathname: string): Promise<Response> {
   let angles: { clips?: unknown[] };
   try { angles = JSON.parse(atxt); } catch { return json({ error: "AWRE sent back something that isn't clip data.", detail: atxt.slice(0, 300), clips: [] }, 502); }
   const body = JSON.stringify({ pitch: pitch.pitch, clips: angles.clips ?? [] });
-  await env.DATA.put(cacheKey, body, { expirationTtl: 86400 });
+  await kvPut(env, cacheKey, body, { expirationTtl: 86400 });
   return new Response(body, { headers: JSON_HEADERS });
 }
 
@@ -104,7 +104,7 @@ async function weather(env: Env, request: Request): Promise<Response> {
   const code = Number(h.weather_code[i]);
   const body = JSON.stringify({ hour, tempF, rh, pressureHpa: p, windMph: Number(h.wind_speed_10m[i]), windFromDeg: Number(h.wind_direction_10m[i]),
     code, desc: WX_DESC(code), airDensity: rho * 0.0624280, elevationM: (d as { elevation?: number }).elevation ?? null, park: parkK });
-  await env.DATA.put(key, body, recent ? { expirationTtl: 3 * 86400 } : {});        // recent hours get refreshed once the archive has them
+  await kvPut(env, key, body, recent ? { expirationTtl: 3 * 86400 } : {});        // recent hours get refreshed once the archive has them
   return new Response(body, { headers: JSON_HEADERS });
 }
 
@@ -125,17 +125,21 @@ async function awreMeta(env: Env, request: Request): Promise<Response> {
     if (r.status === 503) { out[uid] = null; return; }
     let body: { pitch?: Record<string, unknown>; clips?: { perspective?: string }[]; notFound?: boolean } = {};
     try { body = await r.json(); } catch { /* not JSON */ }
-    if (!r.ok && !body.pitch) { if (body.notFound) await env.DATA.put(key, "null", { expirationTtl: 86400 }); out[uid] = null; return; }
+    if (!r.ok && !body.pitch) { if (body.notFound) await kvPut(env, key, "null", { expirationTtl: 86400 }); out[uid] = null; return; }
     const p = body.pitch ?? {}, clips = body.clips ?? [];
     const meta = { video: clips.length > 0, cf: clips.some((c) => /center ?field/i.test(c.perspective ?? "")),
       on1: p.man_on_first === true, on2: p.man_on_second === true, on3: p.man_on_third === true, outs: typeof p.outs_before === "number" ? p.outs_before : null };
-    await env.DATA.put(key, JSON.stringify(meta), { expirationTtl: meta.video ? 30 * 86400 : 86400 });
+    await kvPut(env, key, JSON.stringify(meta), { expirationTtl: meta.video ? 30 * 86400 : 86400 });
     out[uid] = meta;
   }));
   return json(out);
 }
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "private, max-age=300" };
+/** Cache write that never breaks a request: past the KV free tier's daily write limit, puts throw; skip caching instead. */
+async function kvPut(env: Env, key: string, value: string, opts?: KVNamespacePutOptions) {
+  try { await env.DATA.put(key, value, opts); } catch { /* over the daily write limit: serve without caching */ }
+}
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
 async function sample(env: Env, request: Request) {
