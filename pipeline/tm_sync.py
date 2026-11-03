@@ -437,6 +437,29 @@ if MODE in ("spintest", "spintest-plate"):
     sys.path.insert(0, os.path.dirname(__file__)); import sync
     sync.spin_test(); sys.exit(0)
 
+if MODE == "datefind":
+    import pandas as pd
+    f = FTP(quiet=True)
+    days = os.environ.get("DAYS", "2026/09/24,2026/09/25,2026/09/26,2026/09/27,2026/09/28").split(",")
+    for day in days:
+        base = f"/v3/{day}/CSV"
+        try: items = f.ls_attr(base)
+        except Exception as e:
+            print(f"{day}: no folder ({e})"); continue
+        csvs = [(n, sz) for n, isdir, sz, mt in items if not isdir and n.lower().endswith(".csv") and not SKIP.search(n)]
+        print(f"{day}: {len(csvs)} pitch CSVs")
+        for n, sz in csvs:
+            try:
+                df = pd.read_csv(io.BytesIO(f.read(f"{base}/{n}")), low_memory=False, usecols=lambda c: c in ("PitcherTeam", "BatterTeam", "Stadium", "Date"))
+            except Exception as e:
+                print(f"   {n}: unreadable ({e})"); continue
+            wv = df["PitcherTeam"].astype(str).str.contains("WES_|West Virginia", regex=True).sum() if "PitcherTeam" in df else -1
+            st = df["Stadium"].astype(str).iloc[0] if "Stadium" in df and len(df) else "-"
+            dt = df["Date"].astype(str).iloc[0] if "Date" in df and len(df) else "-"
+            if wv or WVU_NAME.search(n):
+                print(f"   {n}: {len(df)} rows, WVU-pitcher rows {wv}, stadium {st}, date {dt}")
+    sys.exit(0)
+
 if MODE == "spincheck":
     spincheck(FTP(quiet=True)); sys.exit(0)
 
