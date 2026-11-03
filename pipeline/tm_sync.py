@@ -437,6 +437,12 @@ if MODE in ("spintest", "spintest-plate"):
     sys.path.insert(0, os.path.dirname(__file__)); import sync
     sync.spin_test(); sys.exit(0)
 
+if MODE in ("calls", "calls-dry"):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import calls_match
+    calls_match.run(upload=(MODE == "calls"))
+    sys.exit(0)
+
 if MODE == "datefind":
     import pandas as pd
     f = FTP(quiet=True)

@@ -230,6 +230,11 @@ export default {
       } });
     }
 
+    if (pathname === "/data/calls.json") {
+      const r2 = await fromR2("calls.json.gz");
+      return r2 ?? json({ calls: {} });
+    }
+
     if (pathname === "/data/reference.json") {
       const r2 = await fromR2("reference.json.gz");
       return r2 ?? json({ error: "No reference built yet." }, 404);
