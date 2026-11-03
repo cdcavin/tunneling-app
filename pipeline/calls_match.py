@@ -90,33 +90,44 @@ def run(upload=True):
     for r in chart_rows: groups[(r["date"], r["p"])].append(r)
     for v in groups.values(): v.sort(key=lambda r: (int(r["page"] or 0), int(r["n"] or 0)))
 
-    out, report, unmatched_dates = {}, [], defaultdict(int)
+    tm_dates = {d for d, _ in tm}
+    def sheet_to_tm(date):
+        """Same day if Trackman has anything that day; otherwise the nearest day (±1) that has data."""
+        if date in tm_dates: return date
+        for k in (-1, 1):
+            d = (dt.date.fromisoformat(date) + dt.timedelta(days=k)).isoformat()
+            if d in tm_dates: return d
+        return None
+
+    out, report, unmatched, rejected, used = {}, [], defaultdict(list), [], set()
     for (date, code), chart in sorted(groups.items()):
-        # the sheet date can be a day off from Trackman's: take the same day if he pitched then, else the nearer one
-        cands = [d for d in (date, (dt.date.fromisoformat(date) - dt.timedelta(days=1)).isoformat(),
-                             (dt.date.fromisoformat(date) + dt.timedelta(days=1)).isoformat()) if tm.get((d, code))]
-        if not cands:
-            unmatched_dates[date] += len(chart); continue
-        best = None
-        for d in cands:
-            pairs = align(chart, tm[(d, code)])
-            ok = sum(1 for i, j in pairs if chart[i]["type"] == tm[(d, code)][j]["t"])
-            if best is None or ok > best[0]: best = (ok, d, pairs)
-        _, d, pairs = best
-        seq = tm[(d, code)]
+        d = sheet_to_tm(date)
+        seq = tm.get((d, code)) if d else None
+        if not seq:
+            unmatched[date].append((code, len(chart))); continue
+        pairs = align(chart, seq)
+        rows = []
         for i, j in pairs:
             c, t = chart[i], seq[j]
             cr = chart_result(c["result"])
-            out[t["id"]] = {"call": c["call"], "loc": c["loc"], "type": c["type"], "result": c["result"],
-                            "chart": f'{c["page"]}-{c["n"]}', "date": c["date"],
-                            "typeOk": c["type"] == t["t"], "resultOk": (not cr) or cr == t["c"]}
-        report.append((date, d, code, len(chart), len(seq), len(pairs),
-                       sum(out[seq[j]["id"]]["typeOk"] for _, j in pairs), sum(out[seq[j]["id"]]["resultOk"] for _, j in pairs)))
+            rows.append((t["id"], {"call": c["call"], "loc": c["loc"], "type": c["type"], "result": c["result"],
+                                   "chart": f'{c["page"]}-{c["n"]}', "date": c["date"],
+                                   "typeOk": c["type"] == t["t"], "resultOk": (not cr) or cr == t["c"]}))
+        rok = sum(v["resultOk"] for _, v in rows)
+        if not rows or rok / len(rows) < 0.75:
+            rejected.append((date, d, code, len(chart), len(seq), len(rows), rok)); continue
+        out.update(rows); used.add((d, code))
+        report.append((date, d, code, len(chart), len(seq), len(rows), sum(v["typeOk"] for _, v in rows), rok))
 
+    for date, items in sorted(unmatched.items()):
+        d = sheet_to_tm(date)
+        left = sorted(((c, len(v)) for (dd, c), v in tm.items() if dd == d and (dd, c) not in used), key=lambda x: -x[1])
+        print(f"unmatched on sheet {date}: chart pitchers {items}; unused Trackman pitchers that day ({d}): {left}")
+    for r in rejected:
+        print(f"rejected (results agree under 75%): sheet {r[0]} -> TM {r[1]} pitcher {r[2]}: chart {r[3]}, TM {r[4]}, aligned {r[5]}, result ok {r[6]}")
     tot_c = sum(r[3] for r in report); tot_m = sum(r[5] for r in report)
     print(f"\nmatched {tot_m} of {tot_c} charted pitches that have a Trackman session "
           f"(type agrees on {sum(r[6] for r in report)}, result agrees on {sum(r[7] for r in report)})")
-    if unmatched_dates: print("charted pitches with no Trackman session for that pitcher (±1 day):", dict(unmatched_dates))
     shifted = sorted({(r[0], r[1]) for r in report if r[0] != r[1]})
     if shifted: print("sheet date -> Trackman date used:", shifted)
     weak = [r for r in report if r[5] and (r[6] / r[5] < 0.8 or r[7] / r[5] < 0.8)]
