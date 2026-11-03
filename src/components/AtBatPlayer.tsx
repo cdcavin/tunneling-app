@@ -5,11 +5,12 @@ import { outings } from "../lib/filters";
 import { ZONE } from "../lib/grid";
 import { pitchAbbr, pitchColorOnDark } from "../lib/pitchColors";
 import { outcomeOf } from "./PitchPicker";
+import { callLabel, missInches, targetBox, useCalls, type Call } from "../lib/calls";
 
 /**
  * At-bat playback: pick an outing and an at-bat, see its pitches in order, and step through them a pair at a time
  * (1→2, 2→3, …). Each step loads the pair exactly like picking A and B in Find pitches. Never rolls into the next at-bat.
- * The "Call" line is a placeholder for the pitch calls from the call sheets (and miss distance) later.
+ * Each pitch shows its call from the paper charts (lib/calls.ts) and how far it missed the called spot.
  */
 const abKey = (r: PitchRow) => `${r.game}|${r.inning}|${r.half}|${r.pa}`;
 const half = (r: PitchRow) => (r.half === "Bottom" ? "B" : "T");
@@ -36,6 +37,7 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
     return [...m.entries()].map(([k, l]) => [k, l.sort((a, b) => (a.pitchNo ?? 0) - (b.pitchNo ?? 0))] as const)
       .sort((a, b) => (a[1][0].inning ?? 0) - (b[1][0].inning ?? 0) || (a[1][0].pa ?? 0) - (b[1][0].pa ?? 0));
   }, [rows, game]);
+  const calls = useCalls();
   const [ab, setAb] = useState("");
   const list = useMemo(() => atBats.find(([k]) => k === ab)?.[1] ?? [], [atBats, ab]);
 
@@ -61,6 +63,15 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
   });   // eslint-disable-line react-hooks/exhaustive-deps
 
   const pairs = Math.max(0, list.length - 1);
+  const misses = list.map((r) => missInches(r, calls[r.id])).filter((m): m is number => m != null);
+  const callText = (r: PitchRow, c: Call | undefined) => {
+    if (!c) return "Call: —";
+    const m = missInches(r, c);
+    return `Call: ${callLabel(c)}${m == null ? "" : m < 0.05 ? " · hit" : ` · ${m.toFixed(1)} in`}`;
+  };
+  const callTitle = (c: Call | undefined) => !c ? "No call charted for this pitch" :
+    [`Chart page ${c.chart.replace("-", ", pitch ")}`, c.result && `charted result ${c.result}`, !c.typeOk && "chart and Trackman disagree on pitch type",
+     c.nameDiffers && "sheet has a different pitcher's name for this outing"].filter(Boolean).join(" · ");
   // mini zone, catcher's view: x = −side (third-base side on the left)
   const X = (s: number) => 60 - s * 34, Y = (h: number) => 158 - h * 34;
   return (
@@ -73,7 +84,7 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
           <option value="">Pick an at-bat…</option>
           {atBats.map(([k, l]) => <option key={k} value={k}>{half(l[0])}{l[0].inning} · PA {l[0].pa}{side(l[0]) ? ` · ${side(l[0])}` : ""} · {l.length} pitch{l.length === 1 ? "" : "es"} · {abResult(l[l.length - 1])}</option>)}
         </select>
-        {list.length > 0 && <span className="ab-sum">{list.length} pitch{list.length === 1 ? "" : "es"} · {abResult(list[list.length - 1])}</span>}
+        {list.length > 0 && <span className="ab-sum">{list.length} pitch{list.length === 1 ? "" : "es"} · {abResult(list[list.length - 1])}{misses.length ? ` · avg miss ${(misses.reduce((a, b) => a + b, 0) / misses.length).toFixed(1)} in` : ""}</span>}
       </div>
 
       {list.length > 0 && (
@@ -88,7 +99,7 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
                   {isA && <span className="ab-tag a">A</span>}{isB && <span className="ab-tag b">B</span>}
                   <span className="ab-top"><b>{i + 1}</b><i style={{ background: pitchColorOnDark(r.type) }} />{pitchAbbr(r.type)} {r.velo.toFixed(0)}</span>
                   <span className="ab-sub">{r.count ?? ""} · {resultOf(r)}</span>
-                  <span className="ab-sub ab-call">Call: —</span>
+                  <span className={`ab-sub ab-call${calls[r.id] ? " has" : ""}`} title={callTitle(calls[r.id])}>{callText(r, calls[r.id])}</span>
                 </button>
               );
             })}
@@ -106,6 +117,12 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
           </div>
           <svg className="ab-zone" viewBox="0 0 120 150" role="img" aria-label="Where each pitch of the at-bat crossed, catcher's view">
               <rect x={X(ZONE.halfWidth)} y={Y(ZONE.top)} width={X(-ZONE.halfWidth) - X(ZONE.halfWidth)} height={Y(ZONE.bottom) - Y(ZONE.top)} className="ab-zone-box" />
+              {at >= 0 && ([[list[at], "a"], [list[at + 1], "b"]] as const).map(([r, k]) => {
+                const box = r ? targetBox(calls[r.id]?.loc ?? "", r.batterSide) : null;
+                if (!box) return null;
+                const xa = X(box.x0), xb = X(box.x1);
+                return <rect key={k} className={`ab-target ${k}`} x={Math.min(xa, xb)} y={Y(box.y1)} width={Math.abs(xb - xa)} height={Y(box.y0) - Y(box.y1)} />;
+              })}
               {list.map((r, i) => {
                 const cls = at === i ? "a" : at >= 0 && at + 1 === i ? "b" : "";
                 const cx = Math.max(10, Math.min(110, X(r.side))), cy = Math.max(10, Math.min(140, Y(r.height)));

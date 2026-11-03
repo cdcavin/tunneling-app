@@ -756,3 +756,8 @@ button.primary.wide { width: 100%; }
 .ab-dot.a circle { fill: var(--wvu-gold); stroke: none; }
 .ab-dot.b circle { fill: var(--steel); stroke: none; }
 .ab-dot.a text, .ab-dot.b text { fill: var(--wvu-navy); }
+/* At-bat playback: pitch calls and target boxes */
+.ab-call.has { color: var(--ink-2); }
+.ab-target { fill-opacity: 0.12; stroke-width: 1.2; stroke-dasharray: 3 2; }
+.ab-target.a { fill: var(--wvu-gold); stroke: var(--wvu-gold); }
+.ab-target.b { fill: var(--steel); stroke: var(--steel); }
