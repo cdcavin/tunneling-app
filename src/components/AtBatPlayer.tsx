@@ -27,6 +27,61 @@ function abResult(last: PitchRow) {
   return "At-bat ended";
 }
 
+/** Where each pitch was called vs where it went (catcher's view). Called boxes for the current pair as corner brackets. */
+function CalledZone({ list, at, calls }: { list: PitchRow[]; at: number; calls: Record<string, Call> }) {
+  const K = 55, CX = 110, X = (s: number) => CX - s * K, Y = (h: number) => 34 + (4.4 - h) * K;
+  const clampX = (x: number) => Math.max(10, Math.min(210, x)), clampY = (y: number) => Math.max(36, Math.min(262, y));
+  const pair = at >= 0 ? [{ r: list[at], k: "a" as const, i: at }, { r: list[at + 1], k: "b" as const, i: at + 1 }].filter((p) => p.r) : [];
+  const hand = list[0]?.batterSide === "Left" ? "LHH" : list[0]?.batterSide === "Right" ? "RHH" : "";
+  const z = { x0: X(ZONE.halfWidth), x1: X(-ZONE.halfWidth), y0: Y(ZONE.top), y1: Y(ZONE.bottom) };
+  const cw = (z.x1 - z.x0) / 3, my = (z.y0 + z.y1) / 2;
+  const brackets = (x0: number, y0: number, x1: number, y1: number) => {
+    const t = Math.min(10, (x1 - x0) / 3, (y1 - y0) / 3);
+    return `M${x0} ${y0 + t}V${y0}H${x0 + t}M${x1 - t} ${y0}H${x1}V${y0 + t}M${x0} ${y1 - t}V${y1}H${x0 + t}M${x1 - t} ${y1}H${x1}V${y1 - t}`;
+  };
+  return (
+    <div className="cz">
+      <div className="cz-head"><span>Called vs actual</span><span>{hand}</span></div>
+      <svg viewBox="0 0 220 270" role="img" aria-label="Called location and where each pitch went, catcher's view">
+        <rect x={z.x0} y={z.y0} width={z.x1 - z.x0} height={z.y1 - z.y0} className="cz-zone" />
+        <line x1={z.x0} x2={z.x1} y1={my} y2={my} className="cz-grid" />
+        <line x1={z.x0 + cw} x2={z.x0 + cw} y1={z.y0} y2={z.y1} className="cz-grid" />
+        <line x1={z.x0 + 2 * cw} x2={z.x0 + 2 * cw} y1={z.y0} y2={z.y1} className="cz-grid" />
+        {list.map((r, i) => pair.some((p) => p.i === i) ? null : (
+          <g key={r.id} className="cz-other"><circle cx={clampX(X(r.side))} cy={clampY(Y(r.height))} r={6} /><text x={clampX(X(r.side))} y={clampY(Y(r.height))}>{i + 1}</text></g>
+        ))}
+        {pair.map(({ r, k, i }) => {
+          const box = targetBox(calls[r.id]?.loc ?? "", r.batterSide);
+          const dx = clampX(X(r.side)), dy = clampY(Y(r.height));
+          let mark = null, line = null, label = null;
+          if (box) {
+            const bx0 = Math.min(X(box.x0), X(box.x1)), bx1 = Math.max(X(box.x0), X(box.x1)), by0 = Y(box.y1), by1 = Y(box.y0);
+            mark = <g className={`cz-target ${k}`}><rect x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} /><path d={brackets(bx0, by0, bx1, by1)} /></g>;
+            const m = missInches(r, calls[r.id]);
+            if (m != null && m >= 0.05) {
+              const nx = Math.max(bx0, Math.min(bx1, dx)), ny = Math.max(by0, Math.min(by1, dy));
+              line = <line className={`cz-miss ${k}`} x1={nx} y1={ny} x2={dx} y2={dy} />;
+              label = <text className={`cz-num ${k}`} x={dx + (dx > 170 ? -12 : 12)} y={dy - 9} textAnchor={dx > 170 ? "end" : "start"}>{m.toFixed(1)}</text>;
+            }
+          }
+          return <g key={k}>{mark}{line}<g className={`cz-dot ${k}`}><circle cx={dx} cy={dy} r={8} /><text x={dx} y={dy}>{i + 1}</text></g>{label}</g>;
+        })}
+      </svg>
+      {pair.length > 0 && (
+        <div className="cz-rows">
+          {pair.map(({ r, k }) => {
+            const c = calls[r.id]; const m = missInches(r, c);
+            return (
+              <div key={k} className="cz-row"><i className={k} /><b>{pitchAbbr(r.type)}</b><span>{c ? c.loc : "—"}</span>
+                <em className={k}>{m == null ? "" : m < 0.05 ? "hit" : `${m.toFixed(1)} in`}</em></div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows: PitchRow[]; selected: RealPair | null; onSelect: (p: RealPair | null) => void; active: boolean }) {
   const games = useMemo(() => outings(rows), [rows]);
   const [game, setGame] = useState(games[0]?.game ?? "");
@@ -72,8 +127,6 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
   const callTitle = (c: Call | undefined) => !c ? "No call charted for this pitch" :
     [`Chart page ${c.chart.replace("-", ", pitch ")}`, c.result && `charted result ${c.result}`, !c.typeOk && "chart and Trackman disagree on pitch type",
      c.nameDiffers && "sheet has a different pitcher's name for this outing"].filter(Boolean).join(" · ");
-  // mini zone, catcher's view: x = −side (third-base side on the left)
-  const X = (s: number) => 60 - s * 34, Y = (h: number) => 158 - h * 34;
   return (
     <div className="ab">
       <div className="ab-pick">
@@ -115,20 +168,7 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
             <button type="button" className="ghost" onClick={() => go(at + 1)} disabled={pairs === 0 || at >= pairs - 1} aria-label="Next pair">Next ▶</button>
           </div>
           </div>
-          <svg className="ab-zone" viewBox="0 0 120 150" role="img" aria-label="Where each pitch of the at-bat crossed, catcher's view">
-              <rect x={X(ZONE.halfWidth)} y={Y(ZONE.top)} width={X(-ZONE.halfWidth) - X(ZONE.halfWidth)} height={Y(ZONE.bottom) - Y(ZONE.top)} className="ab-zone-box" />
-              {at >= 0 && ([[list[at], "a"], [list[at + 1], "b"]] as const).map(([r, k]) => {
-                const box = r ? targetBox(calls[r.id]?.loc ?? "", r.batterSide) : null;
-                if (!box) return null;
-                const xa = X(box.x0), xb = X(box.x1);
-                return <rect key={k} className={`ab-target ${k}`} x={Math.min(xa, xb)} y={Y(box.y1)} width={Math.abs(xb - xa)} height={Y(box.y0) - Y(box.y1)} />;
-              })}
-              {list.map((r, i) => {
-                const cls = at === i ? "a" : at >= 0 && at + 1 === i ? "b" : "";
-                const cx = Math.max(10, Math.min(110, X(r.side))), cy = Math.max(10, Math.min(140, Y(r.height)));
-                return <g key={r.id} className={`ab-dot ${cls}`}><circle cx={cx} cy={cy} r={9} /><text x={cx} y={cy}>{i + 1}</text></g>;
-              })}
-            </svg>
+          <CalledZone list={list} at={at} calls={calls} />
         </div>
       )}
       {!list.length && atBats.length === 0 && <p className="hint">No at-bats in this outing.</p>}
