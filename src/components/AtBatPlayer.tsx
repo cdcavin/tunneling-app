@@ -120,6 +120,7 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
 
   const pairs = Math.max(0, list.length - 1);
   const misses = list.map((r) => missInches(r, calls[r.id])).filter((m): m is number => m != null);
+  const outingCharted = useMemo(() => rows.some((r) => r.game === game && calls[r.id]), [rows, game, calls]);
   const callText = (r: PitchRow, c: Call | undefined) => {
     if (!c) return "Call: —";
     const m = missInches(r, c);
@@ -138,7 +139,7 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
           <option value="">Pick an at-bat…</option>
           {atBats.map(([k, l]) => <option key={k} value={k}>{half(l[0])}{l[0].inning} · PA {l[0].pa}{side(l[0]) ? ` · ${side(l[0])}` : ""} · {l.length} pitch{l.length === 1 ? "" : "es"} · {abResult(l[l.length - 1])}</option>)}
         </select>
-        {list.length > 0 && <span className="ab-sum">{list.length} pitch{list.length === 1 ? "" : "es"} · {abResult(list[list.length - 1])}{misses.length ? ` · avg miss ${(misses.reduce((a, b) => a + b, 0) / misses.length).toFixed(1)} in` : ""}</span>}
+        {list.length > 0 && <span className="ab-sum">{list.length} pitch{list.length === 1 ? "" : "es"} · {abResult(list[list.length - 1])}{misses.length ? ` · avg miss ${(misses.reduce((a, b) => a + b, 0) / misses.length).toFixed(1)} in` : outingCharted ? "" : " · no chart for this outing"}</span>}
       </div>
 
       {list.length > 0 && (
