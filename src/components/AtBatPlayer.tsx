@@ -62,7 +62,7 @@ function CalledZone({ list, at, calls }: { list: PitchRow[]; at: number; calls: 
             if (m != null && m >= 0.05) {
               const nx = Math.max(bx0, Math.min(bx1, dx)), ny = Math.max(by0, Math.min(by1, dy));
               line = <line className={`cz-miss ${k}`} x1={nx} y1={ny} x2={dx} y2={dy} />;
-              label = <text className={`cz-num ${k}`} x={dx + (dx > 170 ? -12 : 12)} y={dy - 9} textAnchor={dx > 170 ? "end" : "start"}>{m.toFixed(1)}</text>;
+              label = <text className={`cz-num ${k}`} x={dx + (dx > 170 ? -12 : 12)} y={dy < 28 ? dy + 4 : dy - 9} textAnchor={dx > 170 ? "end" : "start"}>{m.toFixed(1)}</text>;
             }
           }
           return <g key={k}>{mark}{line}<g className={`cz-dot ${k}`}><circle cx={dx} cy={dy} r={8} /><text x={dx} y={dy}>{i + 1}</text></g>{label}</g>;
