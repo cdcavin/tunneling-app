@@ -29,8 +29,8 @@ function abResult(last: PitchRow) {
 
 /** Where each pitch was called vs where it went (catcher's view). Called boxes for the current pair as corner brackets. */
 function CalledZone({ list, at, calls }: { list: PitchRow[]; at: number; calls: Record<string, Call> }) {
-  const K = 55, CX = 110, X = (s: number) => CX - s * K, Y = (h: number) => 34 + (4.4 - h) * K;
-  const clampX = (x: number) => Math.max(10, Math.min(210, x)), clampY = (y: number) => Math.max(36, Math.min(262, y));
+  const K = 68, CX = 110, X = (s: number) => CX - s * K, Y = (h: number) => 18 + (4.3 - h) * K;
+  const clampX = (x: number) => Math.max(10, Math.min(210, x)), clampY = (y: number) => Math.max(10, Math.min(250, y));
   const pair = at >= 0 ? [{ r: list[at], k: "a" as const, i: at }, { r: list[at + 1], k: "b" as const, i: at + 1 }].filter((p) => p.r) : [];
   const hand = list[0]?.batterSide === "Left" ? "LHH" : list[0]?.batterSide === "Right" ? "RHH" : "";
   const z = { x0: X(ZONE.halfWidth), x1: X(-ZONE.halfWidth), y0: Y(ZONE.top), y1: Y(ZONE.bottom) };
@@ -42,7 +42,7 @@ function CalledZone({ list, at, calls }: { list: PitchRow[]; at: number; calls: 
   return (
     <div className="cz">
       <div className="cz-head"><span>Called vs actual</span><span>{hand}</span></div>
-      <svg viewBox="0 0 220 270" role="img" aria-label="Called location and where each pitch went, catcher's view">
+      <svg viewBox="0 0 220 260" role="img" aria-label="Called location and where each pitch went, catcher's view">
         <rect x={z.x0} y={z.y0} width={z.x1 - z.x0} height={z.y1 - z.y0} className="cz-zone" />
         <line x1={z.x0} x2={z.x1} y1={my} y2={my} className="cz-grid" />
         <line x1={z.x0 + cw} x2={z.x0 + cw} y1={z.y0} y2={z.y1} className="cz-grid" />
@@ -56,7 +56,8 @@ function CalledZone({ list, at, calls }: { list: PitchRow[]; at: number; calls: 
           let mark = null, line = null, label = null;
           if (box) {
             const bx0 = Math.min(X(box.x0), X(box.x1)), bx1 = Math.max(X(box.x0), X(box.x1)), by0 = Y(box.y1), by1 = Y(box.y0);
-            mark = <g className={`cz-target ${k}`}><rect x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} /><path d={brackets(bx0, by0, bx1, by1)} /></g>;
+            const ins = k === "a" ? 3 : 0;   // A's brackets sit just inside B's, so a shared target shows both
+            mark = <g className={`cz-target ${k}`}><rect x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} /><path d={brackets(bx0 + ins, by0 + ins, bx1 - ins, by1 - ins)} /></g>;
             const m = missInches(r, calls[r.id]);
             if (m != null && m >= 0.05) {
               const nx = Math.max(bx0, Math.min(bx1, dx)), ny = Math.max(by0, Math.min(by1, dy));
