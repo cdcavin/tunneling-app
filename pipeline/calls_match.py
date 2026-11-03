@@ -119,10 +119,39 @@ def run(upload=True):
         out.update(rows); used.add((d, code))
         report.append((date, d, code, len(chart), len(seq), len(rows), sum(v["typeOk"] for _, v in rows), rok))
 
+    # Second pass: an outing the sheet credits to one pitcher and Trackman to another (or Trackman never switched
+    # pitchers). Try that day's Trackman pitches nobody claimed; keep it only if types and results agree almost fully.
+    taken = set(out)
+    second = []
     for date, items in sorted(unmatched.items()):
         d = sheet_to_tm(date)
-        left = sorted(((c, len(v)) for (dd, c), v in tm.items() if dd == d and (dd, c) not in used), key=lambda x: -x[1])
-        print(f"unmatched on sheet {date}: chart pitchers {items}; unused Trackman pitchers that day ({d}): {left}")
+        for code, n in items:
+            chart = groups[(date, code)]
+            best = None
+            for (dd, tcode), seq in tm.items():
+                if dd != d: continue
+                left = [t for t in seq if t["id"] not in taken]
+                if len(left) < 5: continue
+                pairs = align(chart, left)
+                if not pairs: continue
+                tok = sum(chart[i]["type"] == left[j]["t"] for i, j in pairs)
+                rok = sum((not chart_result(chart[i]["result"])) or chart_result(chart[i]["result"]) == left[j]["c"] for i, j in pairs)
+                score = (rok + tok) / (2 * len(pairs))
+                if len(pairs) >= 0.8 * len(chart) and tok / len(pairs) >= 0.85 and rok / len(pairs) >= 0.9 and (best is None or score > best[0]):
+                    best = (score, tcode, left, pairs, tok, rok)
+            if best is None:
+                print(f"unmatched on sheet {date}: pitcher {code[:6]}, {n} pitches (no Trackman pitches fit)"); continue
+            _, tcode, left, pairs, tok, rok = best
+            for i, j in pairs:
+                c, t = chart[i], left[j]
+                cr = chart_result(c["result"])
+                out[t["id"]] = {"call": c["call"], "loc": c["loc"], "type": c["type"], "result": c["result"],
+                                "chart": f'{c["page"]}-{c["n"]}', "date": c["date"], "nameDiffers": True,
+                                "typeOk": c["type"] == t["t"], "resultOk": (not cr) or cr == t["c"]}
+                taken.add(t["id"])
+            second.append((date, d, code, n, len(pairs), tok, rok))
+            print(f"name differs, matched anyway: sheet {date} pitcher {code[:6]} -> Trackman pitcher {tcode[:6]}: "
+                  f"{len(pairs)} of {n} pitches, type ok {tok}, result ok {rok}")
     for r in rejected:
         print(f"rejected (results agree under 75%): sheet {r[0]} -> TM {r[1]} pitcher {r[2]}: chart {r[3]}, TM {r[4]}, aligned {r[5]}, result ok {r[6]}")
     tot_c = sum(r[3] for r in report); tot_m = sum(r[5] for r in report)
