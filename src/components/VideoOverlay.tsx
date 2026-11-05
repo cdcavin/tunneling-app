@@ -333,18 +333,28 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const singleView = mode === "ab" && single;
   const toggleRef = useRef(toggle); toggleRef.current = toggle;
   const playingRef = useRef(playing); playingRef.current = playing;
-  // At-bat auto-play: once the pair's clips are ready, start 2.5 s before release, play to just after it, then hand off.
+  // At-bat auto-play: wait until both new clips can actually play, start 2.5 s before release, play to just after it,
+  // then hand off. A play the browser drops while a clip is still loading gets retried a few times.
   useEffect(() => {
     if (!abRun || mode !== "ab" || !selected) return;
-    let cancelled = false; const began = performance.now();
+    let cancelled = false, phase: "wait" | "seek" | "play" = "wait", tPhase = performance.now(), tries = 0;
+    const began = performance.now();
     const iv = setInterval(() => {
       if (cancelled) return;
-      const a = vA.current, b = vB.current;
-      const ready = !!a && !!urlA && !!urlB && a.readyState >= 2 && (b?.readyState ?? 0) >= 2 && aligned;
-      if (ready) {
-        clearInterval(iv); seekRel(-2.5);
-        setTimeout(() => { if (!cancelled && !playingRef.current) toggleRef.current(); }, 450);
-      } else if (performance.now() - began > 9000) { clearInterval(iv); if (!cancelled) setPairDone((n) => n + 1); }   // no video for this one: move on
+      const a = vA.current, b = vB.current, now = performance.now();
+      if (phase === "wait") {
+        const ready = !!a && !!b && !!urlA && !!urlB && a.readyState >= 3 && b.readyState >= 3 && !a.seeking && !b.seeking && aligned;
+        if (ready && now - began > 700) { seekRel(-2.5); phase = "seek"; tPhase = now; }
+        else if (now - began > 15000) { clearInterval(iv); setPairDone((n) => n + 1); }   // no video for this one: move on
+      } else if (phase === "seek") {
+        if (a && !a.seeking && now - tPhase > 400) { if (!playingRef.current) toggleRef.current(); phase = "play"; tPhase = now; }
+      } else if (phase === "play") {
+        if (playingRef.current) { clearInterval(iv); return; }
+        if (now - tPhase > 1500) {
+          if (++tries >= 4) { clearInterval(iv); setPairDone((n) => n + 1); return; }
+          seekRel(-2.5); phase = "seek"; tPhase = now;
+        }
+      }
     }, 200);
     return () => { cancelled = true; clearInterval(iv); };
   }, [abRun, mode, selected, urlA, urlB, aligned, seekRel]);
