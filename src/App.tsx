@@ -5,6 +5,9 @@ import { MovementPlot, SeparationChart } from "./components/Charts";
 import { aimAt, aimPoint, DECISION_FT, pairGeometry, perturb, PLATE_X, posAtTime, separationCurve, timeAtDist, type ShapeDelta } from "./lib/physics";
 import { HEAT_CHOICES, HEAT_METRICS, metricValue, nextPitchCells, provisionalBest, tightest, type Cell, type HeatMetric, type Loc } from "./lib/grid";
 import { suggestShapes, type Suggestion } from "./lib/suggest";
+
+/** "Change suggestions" card: hidden for now (code kept; flip to true to bring it back). */
+const SHOW_SUGGESTIONS = false;
 import { pitchColorOnDark } from "./lib/pitchColors";
 import FilterPanel from "./components/FilterPanel";
 import VideoOverlay from "./components/VideoOverlay";
@@ -475,11 +478,11 @@ export default function App() {
             <Metric label="Velo gap" value={last && next ? signed(next.velo + delta.velo - last.velo) : "—"} unit="mph" />
           </div>
 
-          <div className="cards">
+          <div className={`cards${SHOW_SUGGESTIONS ? "" : " one"}`}>
             <section className="card">
               <SeparationChart curve={curve} names={last && next ? [last.type, next.type] : undefined} />
             </section>
-            <section className="card sandbox">
+            {SHOW_SUGGESTIONS && <section className="card sandbox">
               <div className="sec-title">Change suggestions{next && `: ${next.type}`}</div>
               <p className="hint" style={{ marginTop: 0 }}>Small changes to the {next?.type.toLowerCase() ?? "tunnel pitch"}'s shape (vert, horz, velo) that would tunnel better off the anchor.</p>
               <div className="sandbox-row">
@@ -503,7 +506,7 @@ export default function App() {
                   <p className="hint">Each one moves the pitch to its own best spot. Click to try it.</p>
                 </div>
               )}
-            </section>
+            </section>}
           </div>
         </main>
       </div>
