@@ -622,7 +622,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const fmt = (s: number) => `${s >= 0 ? "+" : "−"}${Math.abs(s * 1000).toFixed(0)} ms`;
 
   return (
-    <div className={`overlay${full ? " is-full" : ""}`} ref={rootRef}>
+    <div className={`overlay${full ? " is-full" : ""}${full && mode === "ab" ? " ab-full" : ""}`} ref={rootRef}>
       <div className="overlay-head">
         <div className="sec-title">Video overlay</div>
         <div className="overlay-pick">
@@ -642,7 +642,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
         </button>
       </div>
 
-      <div style={mode === "ab" ? undefined : { display: "none" }}>
+      <div className="ab-wrap" style={mode === "ab" ? undefined : { display: "none" }}>
         <AtBatPlayer rows={rows} selected={selected} onSelect={onSelect} active={mode === "ab"}
           single={single} setSingle={setSingle} running={abRun} setRunning={setAbRun} pairDone={pairDone} />
       </div>

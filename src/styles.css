@@ -790,3 +790,20 @@ button.primary.wide { width: 100%; }
 .ab-play { padding: 6px 14px; border-radius: var(--r-ctl); border: 1px solid var(--wvu-gold); background: transparent; color: var(--wvu-gold); font: 600 13px var(--font-cond); cursor: pointer; }
 .ab-play.on { background: var(--wvu-gold); color: var(--wvu-navy); }
 .ab-play:disabled { opacity: .4; cursor: default; }
+
+/* Full screen in at-bat mode: big video on the left, at-bat panel as a sidebar on the right, controls underneath */
+.overlay.ab-full { display: grid !important; grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr); grid-auto-rows: auto; column-gap: 14px; row-gap: 8px; overflow: hidden; }
+.overlay.ab-full > * { grid-column: 1 / -1; }
+.overlay.ab-full > .overlay-stage { grid-column: 1; grid-row: 2; height: 100%; min-height: 0; aspect-ratio: auto; }
+.overlay.ab-full > .ab-wrap { grid-column: 2; grid-row: 2; min-height: 0; overflow-y: auto; }
+.overlay.ab-full .ab { height: 100%; }
+.overlay.ab-full .ab-pick { flex-direction: column; align-items: stretch; }
+.overlay.ab-full .ab-pick select { width: 100%; }
+.overlay.ab-full .ab-body { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.overlay.ab-full .ab-strip { flex-direction: column; overflow-x: visible; padding-top: 0; gap: 4px; }
+.overlay.ab-full .ab-chip { flex: 0 0 auto; padding: 5px 8px; grid-template-columns: auto 1fr; column-gap: 8px; }
+.overlay.ab-full .ab-chip .ab-top { grid-row: 1 / span 2; }
+.overlay.ab-full .ab-tag { top: 4px; right: 6px; }
+.overlay.ab-full .ab-nav { grid-template-columns: auto 1fr auto; }
+.overlay.ab-full .ab-now { font-size: 12px; }
+.overlay.ab-full .cz { width: 100%; }
