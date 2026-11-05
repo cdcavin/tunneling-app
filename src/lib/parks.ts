@@ -40,6 +40,9 @@ export const PARKS: Record<string, Park> = {
   kansasuniversity: { name: "Hoglund Ballpark", city: "Lawrence, KS", lat: 38.953, lon: -95.2529 },
   nickswisherfield: { name: "Nick Swisher Field", city: "Columbus, OH", lat: 40.0094, lon: -83.0269 },
   hagerstownballpark: { name: "Meritus Park", city: "Hagerstown, MD", lat: 39.6406, lon: -77.7239 },
+  kansasstate: { name: "Tointon Family Stadium", city: "Manhattan, KS", lat: 39.2045, lon: -96.5925, approx: "from the stadium's campus location" },
+  tcu: { name: "Lupton Stadium", city: "Fort Worth, TX", lat: 32.7075, lon: -97.3683, approx: "from the stadium's campus location" },
+  utah: { name: "America First Ballpark", city: "Salt Lake City, UT", lat: 40.7531, lon: -111.8444 },
   surprise: { name: "Surprise Stadium", city: "Surprise, AZ", lat: 33.6278, lon: -112.3778 },
 };
 
@@ -64,3 +67,12 @@ export function airDensityLb(tempF: number, rh: number, pressureHpa: number) {
   return (((pressureHpa - pv) * 100) / (287.058 * tk) + (pv * 100) / (461.495 * tk)) * 0.062428;
 }
 export const LAB_AIR = airDensityLb(LAB_TEMP_F, LAB_RH, MORGANTOWN_HPA);
+
+/** Big 12 baseball, 2027: team -> park key. Typical game-time weather for each comes from /data/parks_climate.json. */
+export const BIG12: { team: string; key: string }[] = [
+  { team: "West Virginia", key: "westvirginia" }, { team: "Arizona", key: "uarizona" }, { team: "Arizona State", key: "phoenixmunicipal" },
+  { team: "Baylor", key: "baylor" }, { team: "BYU", key: "brighamyoung" }, { team: "Cincinnati", key: "ucincinnati" },
+  { team: "Houston", key: "uofhouston" }, { team: "Kansas", key: "kansasuniversity" }, { team: "Kansas State", key: "kansasstate" },
+  { team: "Oklahoma State", key: "okstate" }, { team: "TCU", key: "tcu" }, { team: "Texas Tech", key: "danlawfield" },
+  { team: "UCF", key: "johneulianopark" }, { team: "Utah", key: "utah" },
+];

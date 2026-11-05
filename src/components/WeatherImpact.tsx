@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Coeffs } from "../lib/physics";
 import type { PitchRow } from "../lib/types";
 import { flyBallFt, flyPitch } from "../lib/airsim";
-import { HOME_KEY, LAB_AIR, LAB_RH, LAB_TEMP_F, PARKS, parkKey } from "../lib/parks";
+import { BIG12, HOME_KEY, LAB_AIR, LAB_RH, LAB_TEMP_F, PARKS, parkKey } from "../lib/parks";
 import { STANDARD_AIR } from "../lib/spin";
 import { pitchColorOnDark } from "../lib/pitchColors";
 import { compass, hourOf, useWeather, type Weather } from "./SpinCard";
@@ -25,6 +25,20 @@ const avgCoeffs = (rs: PitchRow[]): Coeffs | null => {
 const sg = (v: number, d = 1) => (Number.isFinite(v) ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(d)}` : "—");
 const MIN_DAY = 3;      // pitches of a type in an outing before we show his measured numbers for it
 const MIN_TYPE = 15;    // pitches of a type overall before it gets a tab
+
+/** Typical game-time weather by month at each Big 12 park (pipeline/park_climate.py). */
+interface ClimMonth { tempF: number; tempLo: number; tempHi: number; rh: number; hPa: number; windMph: number; rho: number; n: number }
+interface Climate { years?: number[]; hours?: number[]; parks: Record<string, { team: string; elevationM?: number; months: Record<string, ClimMonth> }> }
+let climP: Promise<Climate> | null = null;
+function useClimate() {
+  const [c, setC] = useState<Climate | null>(null);
+  useEffect(() => {
+    if (!climP) climP = fetch("/data/parks_climate.json").then((r) => (r.ok ? r.json() : { parks: {} })).catch(() => ({ parks: {} }));
+    let alive = true; climP.then((d) => { if (alive) setC(d); }); return () => { alive = false; };
+  }, []);
+  return c;
+}
+const MONTHS: [string, string][] = [["2", "Feb"], ["3", "Mar"], ["4", "Apr"], ["5", "May"], ["6", "Jun"]];
 
 export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; focusType: string }) {
   const { outings } = useMemo(() => {
@@ -49,6 +63,9 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
   }, [rows]);
   const [type, setType] = useState(types.includes(focusType) ? focusType : types[0] ?? "");
   const [sortBy, setSortBy] = useState<"air" | "date">("air");
+  const [view, setView] = useState<"outings" | "big12">("outings");
+  const [month, setMonth] = useState(() => { const m = String(new Date().getMonth() + 1); return MONTHS.some(([k]) => k === m) ? m : "4"; });
+  const clim = useClimate();
 
   const loaded = outings.filter((o) => wx[o.key]);
   const pending = outings.length - Object.keys(wx).filter((k) => outings.some((o) => o.key === k)).length;
@@ -108,6 +125,16 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
     return { n: pts.length, v: sl("v"), h: sl("h") };
   }, [tableRows]);
 
+  const big12 = useMemo(() => {
+    const home = clim?.parks[HOME_KEY]?.months[month];
+    const list = BIG12.map(({ team, key }) => {
+      const c = clim?.parks[key]?.months[month]; if (!c) return null;
+      return { team, key, c, elev: clim?.parks[key]?.elevationM, air: c.rho / LAB_AIR - 1, e: expected(type, c.rho),
+        fly: key === HOME_KEY || !home ? 0 : 400 * (flyBallFt(c.rho) / flyBallFt(home.rho) - 1) };
+    }).filter((x): x is NonNullable<typeof x> => !!x);
+    return list.sort((a, b) => b.air - a.air);
+  }, [clim, month, type, model, base]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!types.length) return <div className="wxi"><p className="hint">Not enough pitches in this selection.</p></div>;
   const p1 = per1[type];
   const fmtDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit", timeZone: "UTC" });
@@ -116,11 +143,17 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
   return (
     <div className="wxi">
       <div className="wxi-head">
-        <b title={`Movement and velo vs the lab (indoors in Morgantown, ${LAB_TEMP_F}°F, ${LAB_RH}% humidity, average pressure). Fly ball vs Kendrick at the same date and time. Break: + = more break the way the pitch already moves. Wind not included.`}>Weather vs lab</b>
-        <div className="wxi-sort" role="group" aria-label="Sort outings">
+        <div className="wxi-sort" role="group" aria-label="View">
+          <button type="button" className={`type-chip${view === "outings" ? " is-on" : ""}`} onClick={() => setView("outings")}>His outings</button>
+          <button type="button" className={`type-chip${view === "big12" ? " is-on" : ""}`} onClick={() => setView("big12")}>Big 12 parks</button>
+        </div>
+        <b className="wxi-title" title={`Movement and velo vs the lab (indoors in Morgantown, ${LAB_TEMP_F}°F, ${LAB_RH}% humidity, average pressure). Fly ball vs Kendrick at the same date and time. Break: + = more break the way the pitch already moves. Wind not included.`}>Weather vs lab</b>
+        {view === "outings" ? <div className="wxi-sort" role="group" aria-label="Sort outings">
           <button type="button" className={`type-chip${sortBy === "air" ? " is-on" : ""}`} onClick={() => setSortBy("air")}>Densest air</button>
           <button type="button" className={`type-chip${sortBy === "date" ? " is-on" : ""}`} onClick={() => setSortBy("date")}>Date</button>
-        </div>
+        </div> : <div className="wxi-sort" role="group" aria-label="Month">
+          {MONTHS.map(([k, l]) => <button key={k} type="button" className={`type-chip${month === k ? " is-on" : ""}`} onClick={() => setMonth(k)}>{l}</button>)}
+        </div>}
       </div>
 
       <div className="wxi-types" role="group" aria-label="Pitch type">
@@ -139,6 +172,34 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
         </div>
       )}
 
+      {view === "big12" ? (
+        <div className="wxi-scroll">
+          <table className="wxi-table">
+            <thead>
+              <tr><th rowSpan={2}>Park</th><th rowSpan={2} title={`Typical game time (${clim?.hours ? `${clim.hours[0] % 12 || 12}–${clim.hours[1] % 12 || 12} pm` : "afternoon/evening"} local), ${clim?.years ? `${clim.years[0]}–${clim.years[1]}` : "past 10 years"}: median temperature (usual range), humidity, wind`}>Typical</th><th rowSpan={2}>Elev</th><th rowSpan={2}>Air</th>
+                <th colSpan={3} className="grp">Weather effect</th><th rowSpan={2} title="A ball that goes 400 ft at Kendrick Family Ballpark in a typical game this month: how much farther or shorter in this park's typical air (air only, no wind)">Fly ball</th></tr>
+              <tr><th>Vert</th><th>Horz</th><th>Velo</th></tr>
+            </thead>
+            <tbody>
+              {big12.map(({ team, key, c, elev, air, e, fly }) => {
+                const park = PARKS[key];
+                return (
+                  <tr key={key} className={key === HOME_KEY ? "is-home" : undefined}>
+                    <td title={park ? `${park.name}, ${park.city}${park.approx ? ` · location: ${park.approx}` : ""}` : undefined}>{team}<small>{park?.city}</small></td>
+                    <td title={`${Math.round(c.hPa)} hPa · ${c.n} game-time hours`}>{Math.round(c.tempF)}°F <small className="inl">{Math.round(c.tempLo)}–{Math.round(c.tempHi)}</small> · {Math.round(c.rh)}% · {Math.round(c.windMph)} mph</td>
+                    <td>{elev != null ? `${Math.round(elev * 3.28084).toLocaleString()} ft` : "—"}</td>
+                    <td className={air >= 0 ? "pos" : "neg"}>{sg(air * 100)}%</td>
+                    <td className="num">{e ? sg(e.vert) : "—"}</td><td className="num">{e ? sg(e.horz) : "—"}</td><td className="num">{e ? sg(e.velo) : "—"}</td>
+                    <td className="num">{key === HOME_KEY ? <span className="dim">—</span> : `${sg(fly, 0)} ft`}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {clim && !big12.length && <p className="hint wxi-foot">Park weather isn't built yet.</p>}
+          {!clim && <p className="hint wxi-foot">Loading…</p>}
+        </div>
+      ) : <>
       <div className="wxi-scroll">
         <table className="wxi-table">
           <thead>
@@ -167,6 +228,7 @@ export default function WeatherImpact({ rows, focusType }: { rows: PitchRow[]; f
         </table>
       </div>
       {pending > 0 && <p className="hint wxi-foot">Loading {pending} more…</p>}
+      </>}
     </div>
   );
 }

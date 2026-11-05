@@ -437,6 +437,12 @@ if MODE in ("spintest", "spintest-plate"):
     sys.path.insert(0, os.path.dirname(__file__)); import sync
     sync.spin_test(); sys.exit(0)
 
+if MODE in ("climate", "climate-dry"):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import park_climate
+    park_climate.run(upload=(MODE == "climate"))
+    sys.exit(0)
+
 if MODE in ("calls", "calls-dry"):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import calls_match

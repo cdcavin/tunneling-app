@@ -807,3 +807,6 @@ button.primary.wide { width: 100%; }
 .overlay.ab-full .ab-nav { grid-template-columns: auto 1fr auto; }
 .overlay.ab-full .ab-now { font-size: 12px; }
 .overlay.ab-full .cz { width: 100%; }
+.wxi-head .wxi-title { display: none; }
+.wxi-table td small.inl { display: inline; }
+.wxi-table tr.is-home td { background: color-mix(in srgb, var(--gold, #eaaa00) 8%, transparent); }

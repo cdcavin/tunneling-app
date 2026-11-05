@@ -235,6 +235,11 @@ export default {
       return r2 ?? json({ calls: {} });
     }
 
+    if (pathname === "/data/parks_climate.json") {
+      const r2 = await fromR2("parks_climate.json.gz");
+      return r2 ?? json({ parks: {} });
+    }
+
     if (pathname === "/data/reference.json") {
       const r2 = await fromR2("reference.json.gz");
       return r2 ?? json({ error: "No reference built yet." }, 404);
