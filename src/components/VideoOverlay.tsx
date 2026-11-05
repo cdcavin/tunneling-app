@@ -131,6 +131,8 @@ function releaseFromUtc(utc: string | undefined, startMs: number | null): number
   return s >= 0 && s <= 120 ? s : null;
 }
 
+const AB_FROM = -3.0, AB_TO = 2.5;
+
 export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSelect, anchorType, nextType, onFlightTime, drivesScene, throws = "Right" }: Props) {
   const [clipsA, setClipsA] = useState<AwreClip[]>([]);
   const [clipsB, setClipsB] = useState<AwreClip[]>([]);
@@ -333,7 +335,9 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   const singleView = mode === "ab" && single;
   const toggleRef = useRef(toggle); toggleRef.current = toggle;
   const playingRef = useRef(playing); playingRef.current = playing;
-  // At-bat auto-play: wait until both new clips can actually play, start 2.5 s before release, play to just after it,
+  // At-bat auto-play: wait until both new clips can actually play, start AB_FROM s before (Trackman's) release and stop
+  // AB_TO s after it. Wide on purpose: Trackman's clock can sit a second or two off the video, so a tight window can stop
+  // before the real release.
   // then hand off. A play the browser drops while a clip is still loading gets retried a few times.
   useEffect(() => {
     if (!abRun || mode !== "ab" || !selected) return;
@@ -344,7 +348,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       const a = vA.current, b = vB.current, now = performance.now();
       if (phase === "wait") {
         const ready = !!a && !!b && !!urlA && !!urlB && a.readyState >= 3 && b.readyState >= 3 && !a.seeking && !b.seeking && aligned;
-        if (ready && now - began > 700) { seekRel(-2.5); phase = "seek"; tPhase = now; }
+        if (ready && now - began > 700) { seekRel(AB_FROM); phase = "seek"; tPhase = now; }
         else if (now - began > 15000) { clearInterval(iv); setPairDone((n) => n + 1); }   // no video for this one: move on
       } else if (phase === "seek") {
         if (a && !a.seeking && now - tPhase > 400) { if (!playingRef.current) toggleRef.current(); phase = "play"; tPhase = now; }
@@ -352,14 +356,14 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
         if (playingRef.current) { clearInterval(iv); return; }
         if (now - tPhase > 1500) {
           if (++tries >= 4) { clearInterval(iv); setPairDone((n) => n + 1); return; }
-          seekRel(-2.5); phase = "seek"; tPhase = now;
+          seekRel(AB_FROM); phase = "seek"; tPhase = now;
         }
       }
     }, 200);
     return () => { cancelled = true; clearInterval(iv); };
   }, [abRun, mode, selected, urlA, urlB, aligned, seekRel]);
   useEffect(() => {
-    if (abRun && playing && pos > 0.9) { pauseBoth(); setPairDone((n) => n + 1); }
+    if (abRun && playing && pos > AB_TO) { pauseBoth(); setPairDone((n) => n + 1); }
   }, [pos, abRun, playing]);   // eslint-disable-line react-hooks/exhaustive-deps
   const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
   const scrubA = (t: number) => { const a = vA.current; if (!a) return; pauseBoth(); a.currentTime = t0(a) + t; sync(); };
