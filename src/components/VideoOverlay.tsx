@@ -155,6 +155,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   // Full screen: the real Fullscreen API where the browser has it (desktop, iPad); a fixed full-window layer where it doesn't (iPhone).
   const rootRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<"find" | "ab">("find");
+  // At-bat extras: single view (only pitch A's clip, no overlay) and auto-play through the at-bat.
+  const [single, setSingle] = useState(false);
+  const [abRun, setAbRun] = useState(false);
+  const [pairDone, setPairDone] = useState(0);
   const [full, setFull] = useState(false);
   const fsEl = () => document.fullscreenElement ?? (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement ?? null;
   useEffect(() => {
@@ -305,7 +309,7 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
   };
   const toggle = () => {
     const a = vA.current, b = vB.current; if (!a || !b) return;
-    if (playing) { pauseBoth(); return; }
+    if (playing) { pauseBoth(); setAbRun(false); return; }
     sync();
     // Safari's native HLS seeks can take a moment; a play() issued mid-seek is aborted. Let any seek settle first.
     const settled = (v: HTMLVideoElement) => new Promise<void>((res) => {
@@ -326,6 +330,27 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
         setStatus(`Play was blocked: ${e.name}: ${e.message}`);
       });
   };
+  const singleView = mode === "ab" && single;
+  const toggleRef = useRef(toggle); toggleRef.current = toggle;
+  const playingRef = useRef(playing); playingRef.current = playing;
+  // At-bat auto-play: once the pair's clips are ready, start 2.5 s before release, play to just after it, then hand off.
+  useEffect(() => {
+    if (!abRun || mode !== "ab" || !selected) return;
+    let cancelled = false; const began = performance.now();
+    const iv = setInterval(() => {
+      if (cancelled) return;
+      const a = vA.current, b = vB.current;
+      const ready = !!a && !!urlA && !!urlB && a.readyState >= 2 && (b?.readyState ?? 0) >= 2 && aligned;
+      if (ready) {
+        clearInterval(iv); seekRel(-2.5);
+        setTimeout(() => { if (!cancelled && !playingRef.current) toggleRef.current(); }, 450);
+      } else if (performance.now() - began > 9000) { clearInterval(iv); if (!cancelled) setPairDone((n) => n + 1); }   // no video for this one: move on
+    }, 200);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [abRun, mode, selected, urlA, urlB, aligned, seekRel]);
+  useEffect(() => {
+    if (abRun && playing && pos > 0.9) { pauseBoth(); setPairDone((n) => n + 1); }
+  }, [pos, abRun, playing]);   // eslint-disable-line react-hooks/exhaustive-deps
   const step = (ms: number) => { pauseBoth(); seekRel(pos + ms / 1000); };
   const scrubA = (t: number) => { const a = vA.current; if (!a) return; pauseBoth(); a.currentTime = t0(a) + t; sync(); };
   // Scrubbing B while locked re-aligns it: wherever B is parked now is taken as the frame that matches A's current frame.
@@ -604,7 +629,8 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
       </div>
 
       <div style={mode === "ab" ? undefined : { display: "none" }}>
-        <AtBatPlayer rows={rows} selected={selected} onSelect={onSelect} active={mode === "ab"} />
+        <AtBatPlayer rows={rows} selected={selected} onSelect={onSelect} active={mode === "ab"}
+          single={single} setSingle={setSingle} running={abRun} setRunning={setAbRun} pairDone={pairDone} />
       </div>
 
       <div className="overlay-stage">
@@ -612,10 +638,10 @@ export default function VideoOverlay({ pairs, rows, pitcherTeam, selected, onSel
           <>
             <video ref={vA} muted playsInline preload="auto" crossOrigin="anonymous" />
             <video ref={vB} muted playsInline preload="auto" crossOrigin="anonymous"
-              style={{ opacity, transformOrigin: "50% 50%", transform: xf ? `translate(${xf.tx}%, ${xf.ty}%) scale(${xf.s})` : undefined }} />
+              style={{ opacity, visibility: singleView ? "hidden" : undefined, transformOrigin: "50% 50%", transform: xf ? `translate(${xf.tx}%, ${xf.ty}%) scale(${xf.s})` : undefined }} />
             <div className="overlay-tags">
               <span><i style={{ background: pitchColorOnDark(anchorType) }} />{anchorType}</span>
-              <span><i style={{ background: pitchColorOnDark(nextType) }} />{nextType}</span>
+              {!singleView && <span><i style={{ background: pitchColorOnDark(nextType) }} />{nextType}</span>}
               <span className={aligned ? "tag-ok" : "tag-warn"}>{aligned ? "Releases aligned" : "Release not found: mark it"}</span>
             </div>
           </>

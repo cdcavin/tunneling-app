@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PitchRow } from "../lib/types";
 import type { RealPair } from "../lib/pairs";
 import { outings } from "../lib/filters";
@@ -28,10 +28,10 @@ function abResult(last: PitchRow) {
 }
 
 /** Where each pitch was called vs where it went (catcher's view). Called boxes for the current pair as corner brackets. */
-function CalledZone({ list, at, calls }: { list: PitchRow[]; at: number; calls: Record<string, Call> }) {
+function CalledZone({ list, at, calls, single }: { list: PitchRow[]; at: number; calls: Record<string, Call>; single: boolean }) {
   const K = 68, CX = 110, X = (s: number) => CX - s * K, Y = (h: number) => 18 + (4.3 - h) * K;
   const clampX = (x: number) => Math.max(10, Math.min(210, x)), clampY = (y: number) => Math.max(10, Math.min(250, y));
-  const pair = at >= 0 ? [{ r: list[at], k: "a" as const, i: at }, { r: list[at + 1], k: "b" as const, i: at + 1 }].filter((p) => p.r) : [];
+  const pair = at >= 0 ? [{ r: list[at], k: "a" as const, i: at }, { r: list[at + 1], k: "b" as const, i: at + 1 }].filter((p) => p.r && (!single || p.k === "a")) : [];
   const hand = list[0]?.batterSide === "Left" ? "LHH" : list[0]?.batterSide === "Right" ? "RHH" : "";
   const z = { x0: X(ZONE.halfWidth), x1: X(-ZONE.halfWidth), y0: Y(ZONE.top), y1: Y(ZONE.bottom) };
   const cw = (z.x1 - z.x0) / 3, my = (z.y0 + z.y1) / 2;
@@ -83,7 +83,10 @@ function CalledZone({ list, at, calls }: { list: PitchRow[]; at: number; calls: 
   );
 }
 
-export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows: PitchRow[]; selected: RealPair | null; onSelect: (p: RealPair | null) => void; active: boolean }) {
+export default function AtBatPlayer({ rows, selected, onSelect, active, single, setSingle, running, setRunning, pairDone }: {
+  rows: PitchRow[]; selected: RealPair | null; onSelect: (p: RealPair | null) => void; active: boolean;
+  single: boolean; setSingle: (v: boolean) => void; running: boolean; setRunning: (v: boolean) => void; pairDone: number;
+}) {
   const games = useMemo(() => outings(rows), [rows]);
   const [game, setGame] = useState(games[0]?.game ?? "");
   useEffect(() => { if (!games.some((g) => g.game === game)) setGame(games[0]?.game ?? ""); }, [games, game]);
@@ -100,6 +103,26 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
   // Which pair is showing comes from what's loaded, so it stays right if a pair is picked elsewhere.
   const at = selected ? list.findIndex((r, i) => r.id === selected.anchor.id && list[i + 1]?.id === selected.next.id) : -1;
   const go = (i: number) => { if (i >= 0 && i < list.length - 1) onSelect({ anchor: list[i], next: list[i + 1] }); };
+  // Single view (overlay off): one pitch at a time. It still loads as a pair for the 3D and charts (the next pitch, or the
+  // one before for the last pitch); only pitch A's clip shows.
+  const cur = selected ? list.findIndex((r) => r.id === selected.anchor.id) : -1;
+  const goSingle = (i: number) => { if (i >= 0 && i < list.length) onSelect({ anchor: list[i], next: list[i + 1] ?? list[i - 1] ?? list[i] }); };
+  const posIdx = single ? cur : at;
+  const lastIdx = single ? list.length - 1 : list.length - 2;
+  const stepTo = (i: number) => (single ? goSingle(i) : go(i));
+  // Auto-play: each time the overlay finishes a clip it bumps pairDone; move on, or stop at the end of the at-bat.
+  const seenDone = useRef(pairDone);
+  useEffect(() => {
+    if (pairDone === seenDone.current) return;
+    seenDone.current = pairDone;
+    if (!running) return;
+    if (posIdx >= 0 && posIdx < lastIdx) stepTo(posIdx + 1); else setRunning(false);
+  }, [pairDone]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const playAb = () => {
+    if (running) { setRunning(false); return; }
+    if (posIdx < 0 || posIdx >= lastIdx) stepTo(0);
+    setRunning(true);
+  };
   const pick = (k: string) => {
     setAb(k);
     const l = atBats.find(([kk]) => kk === k)?.[1] ?? [];
@@ -111,8 +134,8 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (e.key === "ArrowRight" && at >= 0) { e.preventDefault(); go(at + 1); }
-      if (e.key === "ArrowLeft" && at > 0) { e.preventDefault(); go(at - 1); }
+      if (e.key === "ArrowRight" && posIdx >= 0) { e.preventDefault(); setRunning(false); stepTo(posIdx + 1); }
+      if (e.key === "ArrowLeft" && posIdx > 0) { e.preventDefault(); setRunning(false); stepTo(posIdx - 1); }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -147,10 +170,11 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
           <div className="ab-main">
           <div className="ab-strip" role="list">
             {list.map((r, i) => {
-              const isA = at === i, isB = at >= 0 && at + 1 === i;
+              const isA = posIdx === i, isB = !single && at >= 0 && at + 1 === i;
               return (
                 <button key={r.id} type="button" role="listitem" className={`ab-chip${isA ? " is-a" : ""}${isB ? " is-b" : ""}`}
-                  onClick={() => go(Math.min(i, list.length - 2))} title={i === list.length - 1 ? "Last pitch: shows as B of the final pair" : "Use as A (the next pitch becomes B)"}>
+                  onClick={() => { setRunning(false); if (single) goSingle(i); else go(Math.min(i, list.length - 2)); }}
+                  title={single ? "Show this pitch" : i === list.length - 1 ? "Last pitch: shows as B of the final pair" : "Use as A (the next pitch becomes B)"}>
                   {isA && <span className="ab-tag a">A</span>}{isB && <span className="ab-tag b">B</span>}
                   <span className="ab-top"><b>{i + 1}</b><i style={{ background: pitchColorOnDark(r.type) }} />{pitchAbbr(r.type)} {r.velo.toFixed(0)}</span>
                   <span className="ab-sub">{r.count ?? ""} · {resultOf(r)}</span>
@@ -161,16 +185,27 @@ export default function AtBatPlayer({ rows, selected, onSelect, active }: { rows
           </div>
 
           <div className="ab-nav">
-            <button type="button" className="ghost" onClick={() => go(at - 1)} disabled={at <= 0} aria-label="Previous pair">◀ Back</button>
+            <button type="button" className="ghost" onClick={() => { setRunning(false); stepTo(posIdx - 1); }} disabled={posIdx <= 0} aria-label={single ? "Previous pitch" : "Previous pair"}>◀ Back</button>
             <span className="ab-now">
-              {pairs === 0 ? "Only one pitch in this at-bat" : at >= 0
-                ? <><b>Pair {at + 1} of {pairs}</b> · {pitchAbbr(list[at].type)} → {pitchAbbr(list[at + 1].type)}</>
-                : <>Click a pitch or Next to start</>}
+              {single
+                ? (cur >= 0 ? <><b>Pitch {cur + 1} of {list.length}</b> · {pitchAbbr(list[cur].type)}</> : <>Click a pitch or Next to start</>)
+                : pairs === 0 ? "Only one pitch in this at-bat" : at >= 0
+                  ? <><b>Pair {at + 1} of {pairs}</b> · {pitchAbbr(list[at].type)} → {pitchAbbr(list[at + 1].type)}</>
+                  : <>Click a pitch or Next to start</>}
             </span>
-            <button type="button" className="ghost" onClick={() => go(at + 1)} disabled={pairs === 0 || at >= pairs - 1} aria-label="Next pair">Next ▶</button>
+            <button type="button" className="ghost" onClick={() => { setRunning(false); stepTo(posIdx + 1); }} disabled={lastIdx < 0 || posIdx >= lastIdx} aria-label={single ? "Next pitch" : "Next pair"}>Next ▶</button>
+          </div>
+          <div className="ab-tools">
+            <button type="button" className={`ab-play${running ? " on" : ""}`} onClick={playAb} disabled={single ? list.length < 1 : pairs === 0}>
+              {running ? "■ Stop" : "▶ Play at-bat"}
+            </button>
+            <label className="hud-check" title="Off: see one pitch at a time, no overlay">
+              <input type="checkbox" checked={!single} onChange={(e) => { setRunning(false); const s1 = !e.target.checked; setSingle(s1);
+                if (!s1 && cur >= 0) go(Math.min(cur, list.length - 2)); }} />Overlay
+            </label>
           </div>
           </div>
-          <CalledZone list={list} at={at} calls={calls} />
+          <CalledZone list={list} at={posIdx} calls={calls} single={single} />
         </div>
       )}
       {!list.length && atBats.length === 0 && <p className="hint">No at-bats in this outing.</p>}

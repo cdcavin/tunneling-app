@@ -786,3 +786,7 @@ button.primary.wide { width: 100%; }
 .cz-row em { font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; } .cz-row em.a { color: var(--wvu-gold); } .cz-row em.b { color: var(--steel); }
 @media (max-width: 700px) { .cz { margin: 0 auto; } }
 .cards.one { grid-template-columns: minmax(0, 1fr); }
+.ab-tools { display: flex; align-items: center; gap: 12px; }
+.ab-play { padding: 6px 14px; border-radius: var(--r-ctl); border: 1px solid var(--wvu-gold); background: transparent; color: var(--wvu-gold); font: 600 13px var(--font-cond); cursor: pointer; }
+.ab-play.on { background: var(--wvu-gold); color: var(--wvu-navy); }
+.ab-play:disabled { opacity: .4; cursor: default; }
