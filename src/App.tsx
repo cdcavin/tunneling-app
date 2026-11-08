@@ -15,13 +15,14 @@ import AngleCharts from "./components/AngleCharts";
 import SpinCard from "./components/SpinCard";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
+import TunnelCompare from "./components/TunnelCompare";
 import PitcherFinder from "./components/PitcherFinder";
 import SepReference from "./components/SepReference";
 import { comboKey, gradeOf, useReference } from "./lib/reference";
 import { realLoc } from "./lib/arsenal";
-import { realPairs, type RealPair } from "./lib/pairs";
+import { atWvuPark, realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
-import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher } from "./lib/types";
+import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher, type PitchRow } from "./lib/types";
 
 const FASTBALLS = ["Four-Seam", "Fastball", "Sinker"];
 const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}`;
@@ -148,6 +149,7 @@ export default function App() {
   }
   function chooseNextType(t: string) { setNextType(t); setDelta(NO_DELTA); setSuggestions(null); }
   // Load a real pair (or the first half of one): the anchor/tunnel types follow the pitches picked.
+  const isHomeRow = useCallback((r: PitchRow) => atWvuPark(r, pitcher?.team), [pitcher?.team]);
   const loadPair = (p: RealPair | null) => {
     setPair(p);
     if (!p) return;
@@ -391,7 +393,7 @@ export default function App() {
           </>)}
 
           <BestTunnels rows={rows} types={arsenal.map((p) => p.type)} selected={pair}
-            onSelect={loadPair} />
+            onSelect={loadPair} isHome={isHomeRow} />
 
           <section>
             <div className="sec-title">Situation</div>
@@ -470,6 +472,8 @@ export default function App() {
               <AngleCharts rows={rows} types={[last.type, next.type]} shown={[lastAimed, nextAimed]} />
             </section>
           )}
+
+          {pitcher && <TunnelCompare all={pitcher.pitches} hiddenTypes={filters.hiddenTypes} />}
 
           <div className="metrics" aria-live="polite">
             <Metric label="Apart at 23.8 ft" value={geo ? geo.decisionSep.toFixed(1) : "—"} unit="in" accent

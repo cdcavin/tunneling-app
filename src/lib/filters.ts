@@ -10,12 +10,14 @@ export interface Filters {
   velo: Range | null;
   ivb: Range | null;
   hb: Range | null;
+  from: string | null;   // first date kept, YYYY-MM-DD (null = no start)
+  to: string | null;     // last date kept, YYYY-MM-DD (null = no end)
 }
 
-export const NO_FILTERS: Filters = { seasons: [], games: [], opponents: [], hiddenTypes: [], velo: null, ivb: null, hb: null };
+export const NO_FILTERS: Filters = { seasons: [], games: [], opponents: [], hiddenTypes: [], velo: null, ivb: null, hb: null, from: null, to: null };
 
 export const isActive = (f: Filters) =>
-  f.seasons.length > 0 || f.games.length > 0 || f.opponents.length > 0 || f.hiddenTypes.length > 0 || !!f.velo || !!f.ivb || !!f.hb;
+  f.seasons.length > 0 || f.games.length > 0 || f.opponents.length > 0 || f.hiddenTypes.length > 0 || !!f.velo || !!f.ivb || !!f.hb || !!f.from || !!f.to;
 
 const inRange = (v: number, r: Range | null) => !r || (v >= r.min && v <= r.max);
 
@@ -25,6 +27,7 @@ export function applyFilters(rows: PitchRow[], f: Filters): PitchRow[] {
     (f.games.length === 0 || f.games.includes(p.game)) &&
     (f.opponents.length === 0 || f.opponents.includes(p.opponent)) &&
     !f.hiddenTypes.includes(p.type) &&
+    (!f.from || p.date >= f.from) && (!f.to || p.date <= f.to) &&
     inRange(p.velo, f.velo) && inRange(p.ivb, f.ivb) && inRange(p.hb, f.hb));
 }
 

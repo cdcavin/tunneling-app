@@ -810,3 +810,23 @@ button.primary.wide { width: 100%; }
 .wxi-head .wxi-title { display: none; }
 .wxi-table td small.inl { display: inline; }
 .wxi-table tr.is-home td { background: color-mix(in srgb, var(--gold, #eaaa00) 8%, transparent); }
+
+/* Date range in the pitch filter */
+.dfilter-dates { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin: 8px 0; }
+.dfilter-dates label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.dfilter-dates input[type="date"] { font-size: 12px; padding: 4px 6px; background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-ctl); color-scheme: dark; }
+.best-flags { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+
+/* Tunneling over time */
+.tc { display: grid; gap: 10px; }
+.tc-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tc-ranges { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.tc-range { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.tc-range b { font: 600 13px var(--font-cond); color: var(--ink); width: 14px; }
+.tc-range input[type="date"] { font-size: 12px; padding: 4px 6px; background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-ctl); color-scheme: dark; }
+.tc-pair { display: inline-flex; align-items: center; gap: 4px; }
+.tc-pair i { width: 8px; height: 8px; border-radius: 50%; }
+.tc-pair em { font-style: normal; color: var(--muted); }
+.tc-chart { width: 100%; height: auto; display: block; }
+.tc-grid { stroke: var(--line); stroke-width: 1; }
+.tc-ax { fill: var(--muted); font: 10.5px var(--font-cond); }

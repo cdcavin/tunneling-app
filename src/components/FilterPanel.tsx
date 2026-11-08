@@ -26,10 +26,15 @@ export default function FilterPanel({ all, selected, filters, onChange }: Props)
   const games = outings(inSeason);
   const opponents = [...new Set(inSeason.map((p) => p.opponent))].sort();
   const types = [...new Set(all.map((p) => p.type))].sort((a, b) => all.filter((p) => p.type === b).length - all.filter((p) => p.type === a).length);
-  const narrowed = filters.games.length > 0 || filters.opponents.length > 0 || filters.hiddenTypes.length > 0;
+  const narrowed = filters.games.length > 0 || filters.opponents.length > 0 || filters.hiddenTypes.length > 0 || !!filters.from || !!filters.to;
+  const dates = all.map((p) => p.date).sort();
+  const first = dates[0] ?? "", last = dates[dates.length - 1] ?? "";
 
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
-  const seasonText = filters.seasons.length ? filters.seasons.join(", ") : "All seasons";
+  const mdy = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}/${d.slice(2, 4)}`;
+  const seasonText = filters.from || filters.to
+    ? `${filters.from ? mdy(filters.from) : "start"} – ${filters.to ? mdy(filters.to) : "now"}`
+    : filters.seasons.length ? filters.seasons.join(", ") : "All seasons";
   const gameText = filters.games.length === 1
     ? (() => { const g = games.find((x) => x.game === filters.games[0]); return g ? `${md(g.date)} ${g.opponent}` : "1 outing"; })()
     : filters.games.length ? `${filters.games.length} outings` : filters.opponents.length === 1 ? `vs ${filters.opponents[0]}` : filters.opponents.length ? `${filters.opponents.length} opponents` : "all outings";
@@ -71,6 +76,13 @@ export default function FilterPanel({ all, selected, filters, onChange }: Props)
               <option value="">All opponents</option>
               {opponents.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
+          </div>
+          <div className="dfilter-dates" role="group" aria-label="Date range">
+            <label>From<input type="date" value={filters.from ?? ""} min={first} max={filters.to ?? last}
+              onChange={(e) => onChange({ ...filters, from: e.target.value || null, seasons: e.target.value ? [] : filters.seasons, games: [] })} /></label>
+            <label>To<input type="date" value={filters.to ?? ""} min={filters.from ?? first} max={last}
+              onChange={(e) => onChange({ ...filters, to: e.target.value || null, seasons: e.target.value ? [] : filters.seasons, games: [] })} /></label>
+            {(filters.from || filters.to) && <button type="button" className="type-chip clear" onClick={() => onChange({ ...filters, from: null, to: null })}>Clear dates</button>}
           </div>
           <div className="dfilter-row" role="group" aria-label="Pitch types (click to leave one out)">
             {types.map((t) => {

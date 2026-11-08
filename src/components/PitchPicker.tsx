@@ -5,6 +5,7 @@ import { pitchColorOnDark } from "../lib/pitchColors";
 import { outings } from "../lib/filters";
 import { IN_ZONES, OUT_ZONES, zoneOf, type Zone } from "../lib/zones";
 import { ZONE } from "../lib/grid";
+import { loadMeta, metaCache } from "../lib/awreMeta";
 
 interface Props {
   rows: PitchRow[];                 // the selected pitches (after filters)
@@ -15,27 +16,6 @@ interface Props {
   throws?: string;                  // "Right" | "Left", for arm/glove side on the movement plot
 }
 
-/** AWRE facts per pitch: has video (and center field), runners on first/second/third. null = no AWRE record. */
-interface Meta { video: boolean; cf: boolean; on1: boolean; on2: boolean; on3: boolean; outs: number | null }
-const metaCache = new Map<string, Meta | null>();
-async function loadMeta(ids: string[], onProgress: (done: number) => void) {
-  const todo = ids.filter((id) => !metaCache.has(id));
-  let done = ids.length - todo.length; onProgress(done);
-  const chunks: string[][] = []; for (let i = 0; i < todo.length; i += 15) chunks.push(todo.slice(i, i + 15));
-  let next = 0;
-  const worker = async () => {
-    while (next < chunks.length) {
-      const c = chunks[next++];
-      try {
-        const r = await fetch(`/api/awre/meta?ids=${c.map(encodeURIComponent).join(",")}`);
-        const j = (await r.json()) as Record<string, Meta | null>;
-        for (const id of c) metaCache.set(id, j[id] ?? null);
-      } catch { for (const id of c) metaCache.set(id, null); }
-      done += c.length; onProgress(done);
-    }
-  };
-  await Promise.all([worker(), worker(), worker(), worker()]);
-}
 type Runners = "any" | "on" | "risp";
 
 const abKey = (r: PitchRow) => `${r.game}|${r.inning}|${r.half}|${r.pa}`;
