@@ -83,7 +83,7 @@ export default function TunnelCompare({ all, hiddenTypes }: Props) {
   const Y = (v: number) => T + (1 - v / vmax) * (H - T - Bm);
   const ticks = [0, vmax / 4, vmax / 2, (3 * vmax) / 4].map((v) => Math.round(v));
   const xlab = outings.length <= 8 ? outings.map((_, i) => i) : [0, Math.floor(outings.length / 3), Math.floor((2 * outings.length) / 3), outings.length - 1];
-  const colorOf = (k: string) => PALETTE[Math.max(0, trendTypes.indexOf(k)) % PALETTE.length];
+  const colorOf = (k: string) => (on.includes(k) ? PALETTE[on.indexOf(k) % PALETTE.length] : "var(--line)");
 
   return (
     <section className="card tc">
@@ -133,7 +133,7 @@ export default function TunnelCompare({ all, hiddenTypes }: Props) {
               const isOn = on.includes(k);
               return (
                 <button key={k} type="button" className={`type-chip${isOn ? " is-on" : ""}`} aria-pressed={isOn}
-                  onClick={() => setShown(isOn ? on.filter((x) => x !== k) : [...on, k])}>
+                  onClick={() => setShown(isOn ? on.filter((x) => x !== k) : on.length >= PALETTE.length ? on : [...on, k])}>
                   <i style={{ background: colorOf(k) }} />{k}
                 </button>
               );
@@ -151,7 +151,7 @@ export default function TunnelCompare({ all, hiddenTypes }: Props) {
               ))}
             </svg>
           )}
-          <p className="hint">Median score per outing; an outing needs 2+ of that pair to get a point. Hover a point for the outing.</p>
+          <p className="hint">Median score per outing; an outing needs 2+ of that pair to get a point. Up to 8 pairs at once. Hover a point for the outing.</p>
         </>
       )}
     </section>
