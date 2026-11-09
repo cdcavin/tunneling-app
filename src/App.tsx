@@ -16,6 +16,8 @@ import SpinCard from "./components/SpinCard";
 import ArsenalPanel, { type ArsenalRow } from "./components/ArsenalPanel";
 import BestTunnels from "./components/BestTunnels";
 import TunnelCompare from "./components/TunnelCompare";
+import Leaderboard from "./components/Leaderboard";
+import { readJson } from "./lib/json";
 import PitcherFinder from "./components/PitcherFinder";
 import SepReference from "./components/SepReference";
 import { comboKey, gradeOf, useReference } from "./lib/reference";
@@ -29,11 +31,6 @@ const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.
 const SPEEDS = [0.05, 0.1, 0.25, 0.5, 1];
 const NO_DELTA: ShapeDelta = { ivb: 0, hb: 0, velo: 0 };
 
-/** Parse JSON written by Python, which spells missing values as bare NaN / Infinity. */
-async function readJson<T>(r: Response): Promise<T> {
-  const text = await r.text();
-  return JSON.parse(text.replace(/(?<=[:\[,]\s*)(?:NaN|-?Infinity)(?=\s*[,}\]])/g, "null")) as T;
-}
 
 function primaryFastball(arsenal: ArsenalPitch[]): ArsenalPitch | null {
   const fbs = arsenal.filter((x) => FASTBALLS.includes(x.type));
@@ -130,6 +127,7 @@ export default function App() {
 
   // The finder's Year choice ("" = any). Calendar year: "2026" covers the 2026 spring and Fall 2026.
   const [finderYear, setFinderYear] = useState("");
+  const [showLb, setShowLb] = useState(false);
   const reference = useReference();
   /** P4 grade for a pair of pitch types at a given separation, or null when there's no reference. */
   const gradeFor = (a: string, b: string, sep: number) => { const c = reference?.pools.P4?.[comboKey(a, b)]; return c ? gradeOf(c, sep) : null; };
@@ -283,11 +281,14 @@ export default function App() {
       <header className="topbar">
         <img className="logo-wvu" src={`${import.meta.env.BASE_URL}brand/wvu-baseball-bpc.png`} alt="WVU Baseball Biomechanics and Performance Center" />
         <h1>Pitch Tunneling</h1>
+        <button type="button" className="ghost lb-open" onClick={() => setShowLb(true)}>Leaderboard</button>
         <span className="stamp">
           {data.sample ? <b className="sample-flag">Sample pitchers, not real data</b> : <>Data through {data.dataThrough}</>}
         </span>
         <img className="logo-bp" src={`${import.meta.env.BASE_URL}brand/bioprecision.png`} alt="BioPrecision" />
       </header>
+
+      {showLb && <Leaderboard pitchers={data.pitchers} onPick={setPitcherId} onClose={() => setShowLb(false)} />}
 
       <div className="layout">
         <aside className="panel left" aria-label="Pitch selection">

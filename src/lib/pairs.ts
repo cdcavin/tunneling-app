@@ -56,7 +56,7 @@ export function guessRelease(clip: AwreClip | null, pitch: Record<string, unknow
 /** Route an AWRE video URL through the Worker so the browser can load it. */
 export const streamUrl = (u: string) => `${import.meta.env.BASE_URL}api/awre/stream?u=${encodeURIComponent(u)}`;
 
-const WVU_CODES = new Set(["WES_MOU", "WES_VIR4", "West Virginia"]);
+export const WVU_CODES = new Set(["WES_MOU", "WES_VIR4", "West Virginia"]);
 /**
  * AWRE cameras are WVU's own install, so video exists only for pitches thrown at WVU's park:
  * WVU at home, or an opponent visiting Morgantown.

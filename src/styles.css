@@ -864,3 +864,31 @@ button.primary.wide { width: 100%; }
 .tc-season-l { font-size: 10px; }
 .tc-end { font: 600 11px var(--font-cond); }
 @media (max-width: 640px) { .tc-db-scale, .tc-db-row { grid-template-columns: 130px minmax(0, 1fr) 44px; } .tc-db-row { font-size: 11.5px; } }
+
+/* Tunnel leaderboard */
+.lb-open { margin-left: auto; font-size: 13px; padding: 6px 12px; }
+.topbar .lb-open + .stamp { margin-left: 12px; }
+.lb-back { position: fixed; inset: 0; z-index: 50; background: rgba(4, 9, 18, 0.72); display: grid; place-items: start center; padding: 32px 16px; overflow-y: auto; }
+.lb { width: min(980px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 14px; }
+.lb-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.lb-title { font: 600 18px/1.2 var(--font-cond); color: var(--ink); }
+.lb-x { font-size: 16px; padding: 4px 10px; }
+.lb-controls { display: grid; gap: 10px; }
+.lb-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lb-pair select, .lb-row select { font-size: 13px; padding: 6px 8px; background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-ctl); }
+.lb-order { font-size: 16px; padding: 4px 10px; min-width: 40px; }
+.lb-filters { display: grid; gap: 8px; }
+.lb-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.lb-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.lb-row label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.lb-row input[type="date"] { font-size: 12px; padding: 5px 6px; background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-ctl); color-scheme: dark; }
+.lb-sum { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.lb-table td, .lb-table th { white-space: nowrap; }
+.lb-r { cursor: pointer; }
+.lb-r:hover td { background: var(--raised-2); }
+.lb-barh { width: 30%; }
+.lb-barc { min-width: 90px; }
+.lb-bar { display: block; height: 8px; border-radius: 4px; }
+@media (max-width: 640px) { .lb-back { padding: 0; } .lb { border-radius: 0; min-height: 100%; padding: 14px 16px; } .lb-open { padding: 5px 9px; font-size: 12px; } }
+.topbar .lb-open { background: #fff; color: var(--wvu-navy); border: 1px solid #c9d2e0; border-radius: 6px; font-weight: 600; }
+.topbar .lb-open:hover { background: #f1f4f9; }
