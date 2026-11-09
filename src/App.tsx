@@ -3,7 +3,7 @@ import Scene3D, { CAMERA_PRESETS, type CameraPreset } from "./components/Scene3D
 import ZonePicker from "./components/ZonePicker";
 import { MovementPlot, SeparationChart } from "./components/Charts";
 import { aimAt, aimPoint, DECISION_FT, pairGeometry, perturb, PLATE_X, posAtTime, separationCurve, timeAtDist, type ShapeDelta } from "./lib/physics";
-import { HEAT_CHOICES, HEAT_METRICS, metricValue, nextPitchCells, provisionalBest, tightest, type Cell, type HeatMetric, type Loc } from "./lib/grid";
+import { HEAT_CHOICES, HEAT_METRICS, metricValue, nextPitchCells, tightest, type Cell, type HeatMetric, type Loc } from "./lib/grid";
 import { suggestShapes, type Suggestion } from "./lib/suggest";
 
 /** "Change suggestions" card: hidden for now (code kept; flip to true to bring it back). */
@@ -192,7 +192,6 @@ export default function App() {
   }, [rows, pair]);
   const cells = useMemo(() => (lastAimed && shaped ? nextPitchCells(lastAimed, shaped) : []), [lastAimed, shaped]);
   const bestTight = useMemo(() => tightest(cells), [cells]);
-  const bestFar = useMemo(() => provisionalBest(cells, maxDecision), [cells, maxDecision]);
   const geo = lastAimed && nextAimed ? pairGeometry(lastAimed, nextAimed) : null;
   const curve = useMemo(() => (lastAimed && nextAimed ? separationCurve(lastAimed, nextAimed) : []), [lastAimed, nextAimed]);
   const aim = useMemo(() => {
@@ -308,13 +307,13 @@ export default function App() {
           {pitcher && !arsenalMode && (
           <section className="pitch-block zone-side" style={{ ["--accent" as string]: next ? pitchColorOnDark(next.type) : "#9aa7ba" }}>
             <div className="sec-title">Locations</div>
-            <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
+            {HEAT_CHOICES.length > 1 && <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
               {HEAT_CHOICES.map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)} title={HEAT_METRICS[m].help}>
                   {HEAT_METRICS[m].label}
                 </button>
               ))}
-            </div>
+            </div>}
             <p className="hint">{HEAT_METRICS[heatMetric].help}</p>
             <div className="placing" role="radiogroup" aria-label="Which pitch a click places">
               <button type="button" role="radio" aria-checked={placing === 0} className={placing === 0 ? "is-on" : ""} onClick={() => setPlacing(0)}>
@@ -333,9 +332,6 @@ export default function App() {
               <button type="button" className="primary" disabled={!bestTight} onClick={() => bestTight && setNextLoc({ side: bestTight.side, height: bestTight.height })}>
                 Lock tightest tunnel
               </button>
-              <button type="button" className="secondary" disabled={!bestFar} onClick={() => bestFar && setNextLoc({ side: bestFar.side, height: bestFar.height })}>
-                Lock tight, then far
-              </button>
             </div>
           </section>
           )}
@@ -343,13 +339,13 @@ export default function App() {
             <>
               <section className="pitch-block" style={{ ["--accent" as string]: (placing === 0 ? last : next) ? pitchColorOnDark((placing === 0 ? last : next)!.type) : "#9aa7ba" }}>
                 <div className="sec-title">Place {(placing === 0 ? last : next)?.type ?? ""}{placing === 0 ? " (anchor)" : ""}</div>
-                <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
+                {HEAT_CHOICES.length > 1 && <div className="segmented" role="radiogroup" aria-label="Shade the grid by">
                   {HEAT_CHOICES.map((m) => (
                     <button key={m} type="button" role="radio" aria-checked={m === heatMetric} className={m === heatMetric ? "is-on" : ""} onClick={() => setHeatMetric(m)} title={HEAT_METRICS[m].help}>
                       {HEAT_METRICS[m].label}
                     </button>
                   ))}
-                </div>
+                </div>}
                 <p className="hint">{HEAT_METRICS[heatMetric].help}</p>
                 <ZonePicker label="Where every pitch is placed; shaded by how the active pitch tunnels off the anchor" active={arsenalRows.filter((r) => r.on).findIndex((r) => r.isActive)} onSelect={place}
                   best={placing === 1 ? bestTight : null} heat={placing === 1 ? heatProps : undefined}

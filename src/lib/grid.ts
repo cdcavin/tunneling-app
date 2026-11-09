@@ -17,7 +17,7 @@ export const HEAT_METRICS: Record<HeatMetric, { label: string; better: "low" | "
   late: { label: "Late break", better: "high", help: "How much the two pitches split after 23.8 ft (apart at the plate minus apart at 23.8 ft). More is better: green = they look the same, then end up far apart." },
   plate: { label: "Apart at the plate", better: "high", help: "How far apart the two pitches end up." },
 };
-export const HEAT_CHOICES: HeatMetric[] = ["decision", "late"];
+export const HEAT_CHOICES: HeatMetric[] = ["decision"];   // "late" (late break) removed from the panel; still computed
 
 export interface Cell extends Loc { geo: PairGeometry }
 
