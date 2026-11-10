@@ -30,7 +30,7 @@ async function awre(env: Env, pathname: string): Promise<Response> {
   if (!m) return json({ error: "Not found." }, 404);
   const uid = decodeURIComponent(m[1]);
   const cacheKey = `awre:pitch:${uid}`;
-  const cached = await env.DATA.get(cacheKey, "text");
+  const cached = await kvGet(env, cacheKey, "text");
   if (cached) return new Response(cached, { headers: JSON_HEADERS });
 
   const team = env.AWRE_TEAM_ID ?? AWRE_TEAM;
@@ -85,7 +85,7 @@ async function weather(env: Env, request: Request): Promise<Response> {
   if (Number.isNaN(ms)) return json({ error: "Bad time." }, 400);
   const hour = new Date(Math.round(ms / 3600000) * 3600000).toISOString().slice(0, 13);   // nearest hour, UTC
   const key = `wx:v2:${parkK === "monogaliacounty" ? HOME_KEY : parkK}:${hour}`;   // v2: ballpark coordinates corrected (v1 used a point 100 m lower)
-  const hit = await env.DATA.get(key, "text");
+  const hit = await kvGet(env, key, "text");
   if (hit) return new Response(hit, { headers: JSON_HEADERS });
   const day = hour.slice(0, 10);
   const recent = Date.now() - ms < 7 * 86400000;
@@ -119,7 +119,7 @@ async function awreMeta(env: Env, request: Request): Promise<Response> {
   const out: Record<string, unknown> = {};
   await Promise.all(ids.map(async (uid) => {
     const key = `awre:meta:${uid}`;
-    const hit = await env.DATA.get(key, "text");
+    const hit = await kvGet(env, key, "text");
     if (hit) { out[uid] = JSON.parse(hit); return; }
     const r = await awre(env, `/api/awre/pitch/${encodeURIComponent(uid)}`);
     if (r.status === 503) { out[uid] = null; return; }
@@ -137,6 +137,10 @@ async function awreMeta(env: Env, request: Request): Promise<Response> {
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "private, max-age=300" };
 /** Cache write that never breaks a request: past the KV free tier's daily write limit, puts throw; skip caching instead. */
+/** Cache read that never breaks a request: past the KV daily read limit, gets throw; treat it as a cache miss instead. */
+async function kvGet(env: Env, key: string, type: "text"): Promise<string | null> {
+  try { return await env.DATA.get(key, type); } catch { return null; }
+}
 async function kvPut(env: Env, key: string, value: string, opts?: KVNamespacePutOptions) {
   try { await env.DATA.put(key, value, opts); } catch { /* over the daily write limit: serve without caching */ }
 }
@@ -210,7 +214,7 @@ export default {
     if (pathname === "/data/index.json") {
       const r2 = await fromR2("index.json.gz");
       if (r2) return r2;
-      const kv = await env.DATA.get("index", "text");
+      const kv = await kvGet(env, "index", "text");
       if (kv) return new Response(kv, { headers: JSON_HEADERS });
       const s = await sample(env, request);
       if (!s) return json({ error: "No data loaded." }, 404);
@@ -250,7 +254,7 @@ export default {
       const id = decodeURIComponent(m[1]);
       const r2 = await fromR2(`pitchers/${id}.json.gz`);
       if (r2) return r2;
-      const kv = await env.DATA.get(`pitcher:${id}`, "text");
+      const kv = await kvGet(env, `pitcher:${id}`, "text");
       if (kv) return new Response(kv, { headers: JSON_HEADERS });
       const s = await sample(env, request);
       const p = s?.pitchers.find((x) => x.id === id);
