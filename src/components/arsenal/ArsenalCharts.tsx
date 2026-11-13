@@ -3,13 +3,15 @@ import { contourDensity } from "d3-contour";
 import type { PitchRow } from "../../lib/types";
 import { pitchAbbr, pitchColor } from "../../lib/pitchColors";
 import { ZONE } from "../../lib/grid";
-import { kde1d, LAYERS, type ArsenalLine, type HeatLayer } from "../../lib/arsenalStats";
+import { kde1d, LAYERS, type ArsenalLine, type Circle, type HeatLayer } from "../../lib/arsenalStats";
+import { FRAME } from "./ZoneDraw";
 
 // ── Movement: every pitch as a dot, pitcher's view; click a dot for its video ──
 
-export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPick }: {
+export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPick, inside }: {
   rows: PitchRow[]; lines: ArsenalLine[]; throws?: "Right" | "Left";
   hasVideo: (r: PitchRow) => boolean; onPick: (r: PitchRow) => void;
+  inside?: Set<string> | null;     // when a location is circled: pitches outside it are greyed
 }) {
   const [hover, setHover] = useState<PitchRow | null>(null);
   const S = 400, cx = S / 2, cy = S / 2, R = 27, rad = 182;
@@ -34,9 +36,10 @@ export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPic
         <g clipPath="url(#ars-mvmt-clip)">
           {rows.map((r) => {
             const vid = hasVideo(r);
-            const c = pitchColor(r.type);
+            const out = !!inside && !inside.has(r.id);
+            const c = out ? "#4f6283" : pitchColor(r.type);
             return (
-              <circle key={r.id} className={`ars-dot${vid ? " has-vid" : ""}`} cx={x(r.hb)} cy={y(r.ivb)} r={3.4}
+              <circle key={r.id} className={`ars-dot${vid ? " has-vid" : ""}${out ? " is-out" : ""}`} cx={x(r.hb)} cy={y(r.ivb)} r={3.4}
                 fill={vid ? c : "transparent"} stroke={c} strokeWidth={vid ? 0 : 1.3}
                 onMouseEnter={() => setHover(r)} onMouseLeave={() => setHover(null)}
                 onClick={() => vid && onPick(r)} />
@@ -130,9 +133,9 @@ function ringsToPath(coords: number[][][][]): string {
   return coords.map((poly) => poly.map((ring) => `M${ring.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join("L")}Z`).join("")).join("");
 }
 
-function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer: HeatLayer }) {
-  const W = 150, H = 170;
-  const SIDE = 2.0, HLO = 0.4, HHI = 4.6;
+function ZoneMap({ type, rows, layer, circle }: { type: string; rows: PitchRow[]; layer: HeatLayer; circle: Circle | null }) {
+  const SIDE = FRAME.side, HLO = FRAME.lo, HHI = FRAME.hi;
+  const W = 150, H = (W * (HHI - HLO)) / (2 * SIDE);     // same scale both ways so a circle stays round
   const px = (side: number) => ((-side + SIDE) / (2 * SIDE)) * W;           // catcher's view: third-base side on the left
   const py = (h: number) => ((HHI - h) / (HHI - HLO)) * H;
   const pts = rows.filter(LAYERS[layer].keep);
@@ -156,6 +159,7 @@ function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer:
         {[1, 2].map((k) => <line key={`v${k}`} className="ars-zone-third" x1={zx + (zw * k) / 3} x2={zx + (zw * k) / 3} y1={zy} y2={zy + zh} />)}
         {[1, 2].map((k) => <line key={`h${k}`} className="ars-zone-third" x1={zx} x2={zx + zw} y1={zy + (zh * k) / 3} y2={zy + (zh * k) / 3} />)}
         <path className="ars-plate" d={`M${zx},${H + 2} L${zx + zw},${H + 2} L${zx + zw},${H + 6} L${zx + zw / 2},${H + 11} L${zx},${H + 6} Z`} />
+        {circle && <circle className="zd-circle" cx={px(circle.side)} cy={py(circle.height)} r={(circle.r * W) / (2 * SIDE)} />}
       </svg>
       {pts.length > 0 && pts.length < MIN_N && <div className="ars-few">Too few to shade</div>}
       {pts.length === 0 && <div className="ars-few">None</div>}
@@ -163,29 +167,20 @@ function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer:
   );
 }
 
-type Hand = "all" | "Left" | "Right";
-
-export function ZoneHeatmaps({ rows, lines }: { rows: PitchRow[]; lines: ArsenalLine[] }) {
-  const [hand, setHand] = useState<Hand>("all");
+export function ZoneHeatmaps({ rows, types, circle }: { rows: PitchRow[]; types: string[]; circle: Circle | null }) {
   const [layer, setLayer] = useState<HeatLayer>("location");
-  const sel = hand === "all" ? rows : rows.filter((r) => r.batterSide === hand);
   return (
     <section className="ars-heat">
       <div className="sec-title">Locations <span className="ars-sub">catcher's view</span></div>
       <div className="ars-heat-ctl">
-        <div className="segmented" role="radiogroup" aria-label="Hitter side">
-          {([["all", "All"], ["Left", "vs LHH"], ["Right", "vs RHH"]] as [Hand, string][]).map(([k, l]) => (
-            <button key={k} type="button" role="radio" aria-checked={hand === k} className={hand === k ? "is-on" : ""} onClick={() => setHand(k)}>{l}</button>
-          ))}
-        </div>
         <div className="segmented" role="radiogroup" aria-label="Shade by">
           {(Object.keys(LAYERS) as HeatLayer[]).map((k) => (
             <button key={k} type="button" role="radio" aria-checked={layer === k} className={layer === k ? "is-on" : ""} onClick={() => setLayer(k)} title={LAYERS[k].help}>{LAYERS[k].label}</button>
           ))}
         </div>
       </div>
-      <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${lines.length <= 4 ? 2 : 3}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
-        {lines.map((p) => <ZoneMap key={p.type} type={p.type} rows={sel.filter((r) => r.type === p.type)} layer={layer} />)}
+      <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${types.length <= 4 ? 2 : 3}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
+        {types.map((t) => <ZoneMap key={t} type={t} rows={rows.filter((r) => r.type === t)} layer={layer} circle={circle} />)}
       </div>
     </section>
   );

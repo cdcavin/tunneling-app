@@ -3,7 +3,8 @@ import PitcherFinder, { teamLabel } from "../PitcherFinder";
 import FilterPanel from "../FilterPanel";
 import { applyFilters, type Filters } from "../../lib/filters";
 import { atWvuPark } from "../../lib/pairs";
-import { arsenalLines, type ArsenalLine } from "../../lib/arsenalStats";
+import { ANY_SITUATION, applySituation, arsenalLines, COUNT_CHOICES, HAND_CHOICES, inCircle, RESULT_CHOICES, type ArsenalLine, type Circle, type Situation } from "../../lib/arsenalStats";
+import ZoneDraw from "./ZoneDraw";
 import { pitchColor } from "../../lib/pitchColors";
 import type { IndexFile, Pitcher, PitchRow } from "../../lib/types";
 import { ArsenalMovement, VeloRidges, ZoneHeatmaps } from "./ArsenalCharts";
@@ -40,8 +41,16 @@ const COLS: { key: string; label: string; title: string; cell: (l: ArsenalLine) 
 ];
 
 export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loading, filters, onFilters }: Props) {
-  const rows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
-  const lines = useMemo(() => arsenalLines(rows), [rows]);
+  const [sit, setSit] = useState<Situation>(ANY_SITUATION);
+  const [circle, setCircle] = useState<Circle | null>(null);
+  const dated = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
+  const rows = useMemo(() => applySituation(dated, sit), [dated, sit]);                       // everything after the filters
+  const picked = useMemo(() => (circle ? rows.filter((r) => inCircle(r, circle)) : rows), [rows, circle]);   // inside the circle
+  const inside = useMemo(() => (circle ? new Set(picked.map((r) => r.id)) : null), [circle, picked]);
+  const lines = useMemo(() => arsenalLines(picked), [picked]);
+  const types = useMemo(() => arsenalLines(rows).map((l) => l.type), [rows]);
+  const insideCount = useMemo(() => Object.fromEntries(lines.map((l) => [l.type, l.n])), [lines]);
+  const skewed = !!circle || sit.result !== "all";
   const hasVideo = useCallback((r: PitchRow) => !!r.utc && atWvuPark(r, pitcher?.team), [pitcher?.team]);
   const [video, setVideo] = useState<PitchRow | null>(null);
   const summary = data.pitchers.find((p) => p.id === pitcherId);
@@ -57,7 +66,28 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
         </section>
         {pitcher && (
           <section className="dfilter-sec">
-            <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={onFilters} />
+            <FilterPanel all={pitcher.pitches} selected={dated.length} filters={filters} onChange={onFilters} />
+          </section>
+        )}
+        {pitcher && (
+          <section>
+            <div className="sec-title">Location <span className="ars-sub">catcher's view</span></div>
+            <ZoneDraw rows={rows} circle={circle} onChange={setCircle} insideCount={insideCount} />
+          </section>
+        )}
+        {pitcher && (
+          <section className="ars-sit">
+            <div className="sec-title">Situation</div>
+            <div className="ars-sit-row"><span>Hitter</span><div className="segmented" role="radiogroup" aria-label="Hitter side">
+              {HAND_CHOICES.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={sit.hand === k} className={sit.hand === k ? "is-on" : ""} onClick={() => setSit({ ...sit, hand: k })}>{l}</button>)}
+            </div></div>
+            <div className="ars-sit-row"><span>Count</span><div className="segmented" role="radiogroup" aria-label="Count">
+              {COUNT_CHOICES.map(([k, l, t]) => <button key={k} type="button" role="radio" aria-checked={sit.count === k} className={sit.count === k ? "is-on" : ""} title={t} onClick={() => setSit({ ...sit, count: k })}>{l}</button>)}
+            </div></div>
+            <div className="ars-sit-row"><span>Result</span><div className="segmented" role="radiogroup" aria-label="Result">
+              {RESULT_CHOICES.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={sit.result === k} className={sit.result === k ? "is-on" : ""} onClick={() => setSit({ ...sit, result: k })}>{l}</button>)}
+            </div></div>
+            <p className="hint">{rows.length.toLocaleString()} of {dated.length.toLocaleString()} pitches match.</p>
           </section>
         )}
         <section>
@@ -66,15 +96,16 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
         </section>
       </aside>
       <main className="ars-main">
-      {pitcher && rows.length === 0 && <p className="hint ars-empty">No pitches match these filters.</p>}
-      {pitcher && rows.length > 0 && (
+      {pitcher && picked.length === 0 && <p className="hint ars-empty">No pitches match these filters{circle && " inside the circle"}.</p>}
+      {pitcher && picked.length > 0 && (
         <>
           <div className="ars-grid">
-            <section className="card"><ArsenalMovement rows={rows} lines={lines} throws={pitcher.throws} hasVideo={hasVideo} onPick={setVideo} /></section>
-            <section className="card"><VeloRidges rows={rows} lines={lines} /></section>
-            <section className="card"><ZoneHeatmaps rows={rows} lines={lines} /></section>
+            <section className="card"><ArsenalMovement rows={rows} lines={lines} throws={pitcher.throws} hasVideo={hasVideo} onPick={setVideo} inside={inside} /></section>
+            <section className="card"><VeloRidges rows={picked} lines={lines} /></section>
+            <section className="card"><ZoneHeatmaps rows={picked} types={types} circle={circle} /></section>
           </div>
           <section className="card ars-table-card">
+            {skewed && <p className="ars-warn">Zone %, Chase % and Whiff % only count the pitches {circle ? "inside your circle" : ""}{circle && sit.result !== "all" ? " and " : ""}{sit.result !== "all" ? "matching the result filter" : ""}, so they're skewed by the selection. Don't read them as his real rates.</p>}
             <div className="ars-table-wrap">
               <table className="ars-table">
                 <thead>

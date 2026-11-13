@@ -63,3 +63,34 @@ export function kde1d(xs: number[], grid: number[], bw?: number): number[] {
   const k = 1 / (xs.length * h * Math.sqrt(2 * Math.PI));
   return grid.map((g) => xs.reduce((s, x) => s + Math.exp(-0.5 * ((g - x) / h) ** 2), 0) * k);
 }
+
+/** A circle drawn on the strike zone, in feet (PlateLocSide / PlateLocHeight). */
+export interface Circle { side: number; height: number; r: number }
+export const inCircle = (p: PitchRow, c: Circle) => (p.side - c.side) ** 2 + (p.height - c.height) ** 2 <= c.r ** 2;
+
+export type HandF = "all" | "Left" | "Right";
+export type CountF = "all" | "first" | "ahead" | "even" | "behind" | "two";
+export type ResultF = "all" | "whiffs" | "called" | "inplay";
+export interface Situation { hand: HandF; count: CountF; result: ResultF }
+export const ANY_SITUATION: Situation = { hand: "all", count: "all", result: "all" };
+
+export const HAND_CHOICES: [HandF, string][] = [["all", "All"], ["Left", "vs LHH"], ["Right", "vs RHH"]];
+export const COUNT_CHOICES: [CountF, string, string][] = [
+  ["all", "All", "Every count"], ["first", "1st pitch", "0-0"], ["ahead", "Ahead", "More strikes than balls (pitcher ahead)"],
+  ["even", "Even", "Same balls and strikes, 0-0 included"], ["behind", "Behind", "More balls than strikes (pitcher behind)"], ["two", "2 strikes", "Any count with 2 strikes"],
+];
+export const RESULT_CHOICES: [ResultF, string][] = [["all", "All"], ["whiffs", "Whiffs"], ["called", "Called strikes"], ["inplay", "In play"]];
+
+const callOf = (p: PitchRow) => (p.call ?? "").toLowerCase().replace(/\s+/g, "");
+function countOk(p: PitchRow, f: CountF): boolean {
+  if (f === "all") return true;
+  const m = (p.count ?? "").match(/^(\d)-(\d)$/);
+  if (!m) return false;
+  const b = +m[1], s = +m[2];
+  return f === "first" ? b === 0 && s === 0 : f === "ahead" ? s > b : f === "even" ? s === b : f === "behind" ? b > s : s === 2;
+}
+export function applySituation(rows: PitchRow[], s: Situation): PitchRow[] {
+  return rows.filter((p) =>
+    (s.hand === "all" || p.batterSide === s.hand) && countOk(p, s.count) &&
+    (s.result === "all" || (s.result === "whiffs" ? callOf(p) === "strikeswinging" : s.result === "called" ? callOf(p) === "strikecalled" : callOf(p) === "inplay")));
+}
