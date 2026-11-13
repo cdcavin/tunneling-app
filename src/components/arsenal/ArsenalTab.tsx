@@ -47,20 +47,25 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
   const summary = data.pitchers.find((p) => p.id === pitcherId);
 
   return (
-    <div className="ars">
-      <header className="ars-top">
-        <div className="ars-who">
-          {pitcher ? (
-            <>
-              <h2>{pitcher.name}</h2>
-              <span>{pitcher.throws === "Left" ? "LHP" : "RHP"} · {teamLabel(pitcher.team ?? "")}{pitcher.conf && ` · ${pitcher.conf}`}{summary?.games != null && ` · ${summary.games} outings`}</span>
-            </>
-          ) : <h2>{loading ? "Loading…" : "Pick a pitcher"}</h2>}
-        </div>
-        <div className="ars-find"><PitcherFinder pitchers={data.pitchers} value={pitcherId} onChange={onPitcher} /></div>
-        {pitcher && <div className="ars-filter"><FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={onFilters} /></div>}
-      </header>
-
+    <div className="layout ars-layout">
+      <aside className="panel left" aria-label="Pitcher">
+        <section>
+          <div className="sec-title">Pitcher</div>
+          <PitcherFinder pitchers={data.pitchers} value={pitcherId} onChange={onPitcher} />
+          {loading && <p className="hint">Loading pitches…</p>}
+          {pitcher && <p className="hint ars-who">{pitcher.throws === "Left" ? "LHP" : "RHP"} · {teamLabel(pitcher.team ?? "")}{pitcher.conf && ` · ${pitcher.conf}`}{summary?.games != null && ` · ${summary.games} outings`}</p>}
+        </section>
+        {pitcher && (
+          <section className="dfilter-sec">
+            <FilterPanel all={pitcher.pitches} selected={rows.length} filters={filters} onChange={onFilters} />
+          </section>
+        )}
+        <section>
+          <div className="sec-title">Video</div>
+          <p className="hint ars-key"><span className="k-fill" /> filled dot: has video, click it <br /><span className="k-hollow" /> hollow dot: away game, no video</p>
+        </section>
+      </aside>
+      <main className="ars-main">
       {pitcher && rows.length === 0 && <p className="hint ars-empty">No pitches match these filters.</p>}
       {pitcher && rows.length > 0 && (
         <>
@@ -85,10 +90,10 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
                 </tbody>
               </table>
             </div>
-            <p className="hint">Release height, extension and approach angles come from Trackman's trajectory fit. Shape+ isn't hooked up yet. Hover a column name for its definition.</p>
           </section>
         </>
       )}
+      </main>
       {video && <PitchVideo row={video} onClose={() => setVideo(null)} />}
     </div>
   );

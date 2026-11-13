@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { contourDensity } from "d3-contour";
 import type { PitchRow } from "../../lib/types";
 import { pitchAbbr, pitchColor } from "../../lib/pitchColors";
@@ -12,7 +12,7 @@ export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPic
   hasVideo: (r: PitchRow) => boolean; onPick: (r: PitchRow) => void;
 }) {
   const [hover, setHover] = useState<PitchRow | null>(null);
-  const S = 400, cx = S / 2, cy = S / 2 - 4, R = 27, rad = 170;
+  const S = 400, cx = S / 2, cy = S / 2, R = 27, rad = 182;
   const sc = rad / R;
   const x = (hb: number) => cx + hb * sc;
   const y = (ivb: number) => cy - ivb * sc;
@@ -21,7 +21,7 @@ export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPic
   return (
     <figure className="chart mvmt ars-mvmt">
       <div className="sec-title">Pitch movement</div>
-      <svg viewBox={`0 -14 ${S} ${S + 22}`} role="img" aria-label="Movement plot, pitcher's view. Click a pitch to watch it.">
+      <svg viewBox={`0 -4 ${S} ${S + 22}`} role="img" aria-label="Movement plot, pitcher's view. Click a pitch to watch it.">
         <defs><clipPath id="ars-mvmt-clip"><circle cx={cx} cy={cy} r={rad} /></clipPath></defs>
         <circle className="mvmt-disc" cx={cx} cy={cy} r={rad} />
         {rings.map((r) => <circle key={r} className="mvmt-ring ars-ring" cx={cx} cy={cy} r={r * sc} />)}
@@ -52,7 +52,6 @@ export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPic
           ))}
         </g>
       </svg>
-      <p className="hint ars-key"><span className="k-fill" /> has video, click to watch <span className="k-hollow" /> away game, no video</p>
       {hover && (
         <div className="tip" role="status">
           <strong>{hover.type}, {hover.date}</strong>
@@ -68,19 +67,37 @@ export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPic
 
 // ── Velo: one smooth curve per pitch type on a shared axis ──
 
+/** Live pixel size of an element, so a chart can fill its panel at real text size. */
+function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setSize({ w: Math.round(e.contentRect.width), h: Math.round(e.contentRect.height) }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size] as const;
+}
+
 export function VeloRidges({ rows, lines }: { rows: PitchRow[]; lines: ArsenalLine[] }) {
   const order = [...lines].sort((a, b) => b.velo - a.velo);
   const vs = rows.map((r) => r.velo);
   const lo = Math.floor((Math.min(...vs) - 2) / 5) * 5, hi = Math.ceil((Math.max(...vs) + 2) / 5) * 5;
   const grid = useMemo(() => Array.from({ length: Math.round((hi - lo) / 0.25) + 1 }, (_, i) => lo + i * 0.25), [lo, hi]);
-  const W = 400, L = 64, Rp = 12, row = 40, peak = 54, top = peak - row + 6;
-  const H = top + order.length * row + 26;
+  const [box, size] = useSize<HTMLDivElement>();
+  const n = order.length;
+  const W = size.w || 300, L = 70, Rp = 12;
+  const H = size.h >= 120 ? size.h : n * 52 + 40;     // fills the panel on a laptop; natural height when stacked on a phone
+  const row = (H - 40) / (Math.max(1, n) + 0.45), peak = row * 1.45, top = 10 + peak - row;   // last baseline lands at H − 30
   const x = (v: number) => L + ((v - lo) / (hi - lo)) * (W - L - Rp);
   const ticks = Array.from({ length: (hi - lo) / 5 + 1 }, (_, i) => lo + i * 5);
   return (
     <figure className="chart ars-velo">
       <div className="sec-title">Velo by pitch</div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Velocity distribution for each pitch type">
+      <div className="ars-fit" ref={box}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Velocity distribution for each pitch type">
         {ticks.map((t) => <line key={t} className="ars-vgrid" x1={x(t)} x2={x(t)} y1={6} y2={H - 22} />)}
         {order.map((p, i) => {
           const d = kde1d(rows.filter((r) => r.type === p.type).map((r) => r.velo), grid, 0.6);
@@ -92,13 +109,14 @@ export function VeloRidges({ rows, lines }: { rows: PitchRow[]; lines: ArsenalLi
             <g key={p.type}>
               <path d={`M${x(lo)},${base} L${pts.join(" L")} L${x(hi)},${base} Z`} fill={c} fillOpacity={0.45} stroke={c} strokeWidth={1.5} />
               <line className="ars-base" x1={L} x2={W - Rp} y1={base} y2={base} />
-              <text className="ars-ridge-label" x={4} y={base - 4}>{pitchAbbr(p.type)}</text>
-              <text className="ars-ridge-num" x={L - 6} y={base - 4} textAnchor="end">{p.velo.toFixed(1)}</text>
+              <text className="ars-ridge-label" x={2} y={base - 5}>{pitchAbbr(p.type)}</text>
+              <text className="ars-ridge-num" x={L - 8} y={base - 5} textAnchor="end">{p.velo.toFixed(1)}</text>
             </g>
           );
         })}
         {ticks.map((t) => <text key={t} className="ars-tick" x={x(t)} y={H - 6} textAnchor="middle">{t}</text>)}
       </svg>
+      </div>
     </figure>
   );
 }
@@ -166,8 +184,7 @@ export function ZoneHeatmaps({ rows, lines }: { rows: PitchRow[]; lines: Arsenal
           ))}
         </div>
       </div>
-      <p className="hint">{LAYERS[layer].help} Shading is relative within each map: hottest = where it happens most for that pitch.</p>
-      <div className="ars-zone-grid">
+      <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${lines.length <= 4 ? 2 : 3}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
         {lines.map((p) => <ZoneMap key={p.type} type={p.type} rows={sel.filter((r) => r.type === p.type)} layer={layer} />)}
       </div>
     </section>
