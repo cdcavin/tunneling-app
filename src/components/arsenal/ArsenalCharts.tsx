@@ -162,8 +162,6 @@ function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer:
           {pts.length < MIN_N && pts.map((r) => <circle key={r.id} cx={px(r.side)} cy={py(r.height)} r={3} className="ars-zone-dot" />)}
         </g>
         <rect className="ars-zone-box" x={zx} y={zy} width={zw} height={zh} />
-        {[1, 2].map((k) => <line key={`v${k}`} className="ars-zone-third" x1={zx + (zw * k) / 3} x2={zx + (zw * k) / 3} y1={zy} y2={zy + zh} />)}
-        {[1, 2].map((k) => <line key={`h${k}`} className="ars-zone-third" x1={zx} x2={zx + zw} y1={zy + (zh * k) / 3} y2={zy + (zh * k) / 3} />)}
         <path className="ars-plate" d={`M${zx},${H + 2} L${zx + zw},${H + 2} L${zx + zw},${H + 6} L${zx + zw / 2},${H + 11} L${zx},${H + 6} Z`} />
       </svg>
       {pts.length > 0 && pts.length < MIN_N && <div className="ars-few">Too few to shade</div>}
