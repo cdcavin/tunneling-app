@@ -64,9 +64,17 @@ export function kde1d(xs: number[], grid: number[], bw?: number): number[] {
   return grid.map((g) => xs.reduce((s, x) => s + Math.exp(-0.5 * ((g - x) / h) ** 2), 0) * k);
 }
 
-/** A circle drawn on the strike zone, in feet (PlateLocSide / PlateLocHeight). */
-export interface Circle { side: number; height: number; r: number }
-export const inCircle = (p: PitchRow, c: Circle) => (p.side - c.side) ** 2 + (p.height - c.height) ** 2 <= c.r ** 2;
+/** An outline drawn by hand on the strike zone: its corner points in feet (PlateLocSide, PlateLocHeight). */
+export type Outline = [number, number][];
+/** Point-in-polygon (ray casting): is this pitch inside the drawn outline? */
+export function inOutline(p: PitchRow, poly: Outline): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > p.height) !== (yj > p.height) && p.side < ((xj - xi) * (p.height - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 
 export type HandF = "all" | "Left" | "Right";
 export type CountF = "all" | "first" | "ahead" | "even" | "behind" | "two";

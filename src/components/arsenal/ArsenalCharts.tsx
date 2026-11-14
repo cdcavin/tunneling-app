@@ -11,7 +11,7 @@ import { FRAME } from "./ZoneDraw";
 export function ArsenalMovement({ rows, lines, throws = "Right", hasVideo, onPick, inside }: {
   rows: PitchRow[]; lines: ArsenalLine[]; throws?: "Right" | "Left";
   hasVideo: (r: PitchRow) => boolean; onPick: (r: PitchRow) => void;
-  inside?: Set<string> | null;     // when a location is circled: pitches outside it are greyed
+  inside?: Set<string> | null;     // when a location is outlined: pitches outside it are greyed
 }) {
   const [hover, setHover] = useState<PitchRow | null>(null);
   const S = 400, cx = S / 2, cy = S / 2, R = 27, rad = 182;
@@ -167,7 +167,7 @@ function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer:
   );
 }
 
-/** Heatmaps show his full locations: the circle drawn in the left panel doesn't apply here. */
+/** Heatmaps show his full locations: the outline drawn in the left panel doesn't apply here. */
 export function ZoneHeatmaps({ rows, types }: { rows: PitchRow[]; types: string[] }) {
   const [layer, setLayer] = useState<HeatLayer>("location");
   const [hand, setHand] = useState<HandF>("all");
@@ -187,7 +187,7 @@ export function ZoneHeatmaps({ rows, types }: { rows: PitchRow[]; types: string[
           ))}
         </div>
       </div>
-      <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${types.length <= 4 ? 2 : 3}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
+      <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${Math.max(3, Math.min(types.length, 6))}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
         {types.map((t) => <ZoneMap key={t} type={t} rows={sel.filter((r) => r.type === t)} layer={layer} />)}
       </div>
     </section>

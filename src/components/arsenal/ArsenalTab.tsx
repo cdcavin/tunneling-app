@@ -3,7 +3,7 @@ import PitcherFinder, { teamLabel } from "../PitcherFinder";
 import FilterPanel from "../FilterPanel";
 import { applyFilters, type Filters } from "../../lib/filters";
 import { atWvuPark } from "../../lib/pairs";
-import { ANY_SITUATION, applySituation, arsenalLines, COUNT_CHOICES, inCircle, RESULT_CHOICES, type ArsenalLine, type Circle, type Situation } from "../../lib/arsenalStats";
+import { ANY_SITUATION, applySituation, arsenalLines, COUNT_CHOICES, inOutline, RESULT_CHOICES, type ArsenalLine, type Outline, type Situation } from "../../lib/arsenalStats";
 import ZoneDraw from "./ZoneDraw";
 import { pitchColor } from "../../lib/pitchColors";
 import type { IndexFile, Pitcher, PitchRow } from "../../lib/types";
@@ -42,15 +42,15 @@ const COLS: { key: string; label: string; title: string; cell: (l: ArsenalLine) 
 
 export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loading, filters, onFilters }: Props) {
   const [sit, setSit] = useState<Situation>(ANY_SITUATION);
-  const [circle, setCircle] = useState<Circle | null>(null);
+  const [outline, setOutline] = useState<Outline | null>(null);
   const dated = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
   const rows = useMemo(() => applySituation(dated, sit), [dated, sit]);                       // everything after the filters
-  const picked = useMemo(() => (circle ? rows.filter((r) => inCircle(r, circle)) : rows), [rows, circle]);   // inside the circle
-  const inside = useMemo(() => (circle ? new Set(picked.map((r) => r.id)) : null), [circle, picked]);
+  const picked = useMemo(() => (outline ? rows.filter((r) => inOutline(r, outline)) : rows), [rows, outline]);   // inside the drawn outline
+  const inside = useMemo(() => (outline ? new Set(picked.map((r) => r.id)) : null), [outline, picked]);
   const lines = useMemo(() => arsenalLines(picked), [picked]);
   const types = useMemo(() => arsenalLines(rows).map((l) => l.type), [rows]);
   const insideCount = useMemo(() => Object.fromEntries(lines.map((l) => [l.type, l.n])), [lines]);
-  const skewed = !!circle || sit.result !== "all";
+  const skewed = !!outline || sit.result !== "all";
   const hasVideo = useCallback((r: PitchRow) => !!r.utc && atWvuPark(r, pitcher?.team), [pitcher?.team]);
   const [video, setVideo] = useState<PitchRow | null>(null);
   const summary = data.pitchers.find((p) => p.id === pitcherId);
@@ -72,7 +72,7 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
         {pitcher && (
           <section>
             <div className="sec-title">Location <span className="ars-sub">catcher's view</span></div>
-            <ZoneDraw rows={rows} circle={circle} onChange={setCircle} insideCount={insideCount} />
+            <ZoneDraw rows={rows} outline={outline} onChange={setOutline} insideCount={insideCount} />
           </section>
         )}
         {pitcher && (
@@ -93,16 +93,16 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
         </section>
       </aside>
       <main className="ars-main">
-      {pitcher && picked.length === 0 && <p className="hint ars-empty">No pitches match these filters{circle && " inside the circle"}.</p>}
+      {pitcher && picked.length === 0 && <p className="hint ars-empty">No pitches match these filters{outline && " inside the outline"}.</p>}
       {pitcher && picked.length > 0 && (
         <>
           <div className="ars-grid">
-            <section className="card"><ArsenalMovement rows={rows} lines={lines} throws={pitcher.throws} hasVideo={hasVideo} onPick={setVideo} inside={inside} /></section>
-            <section className="card"><VeloRidges rows={picked} lines={lines} /></section>
-            <section className="card"><ZoneHeatmaps rows={rows} types={types} /></section>
+            <section className="card ars-mv"><ArsenalMovement rows={rows} lines={lines} throws={pitcher.throws} hasVideo={hasVideo} onPick={setVideo} inside={inside} /></section>
+            <section className="card ars-vl"><VeloRidges rows={picked} lines={lines} /></section>
+            <section className="card ars-ht"><ZoneHeatmaps rows={rows} types={types} /></section>
           </div>
           <section className="card ars-table-card">
-            {skewed && <p className="ars-warn">Zone %, Chase % and Whiff % only count the pitches {circle ? "inside your circle" : ""}{circle && sit.result !== "all" ? " and " : ""}{sit.result !== "all" ? "matching the result filter" : ""}, so they're skewed by the selection. Don't read them as his real rates.</p>}
+            {skewed && <p className="ars-warn">Zone %, Chase % and Whiff % only count the pitches {outline ? "inside your outline" : ""}{outline && sit.result !== "all" ? " and " : ""}{sit.result !== "all" ? "matching the result filter" : ""}, so they're skewed by the selection. Don't read them as his real rates.</p>}
             <div className="ars-table-wrap">
               <table className="ars-table">
                 <thead>
