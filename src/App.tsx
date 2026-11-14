@@ -26,18 +26,18 @@ import { atWvuPark, realPairs, type RealPair } from "./lib/pairs";
 import { applyFilters, NO_FILTERS, type Filters } from "./lib/filters";
 import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitcher, type PitchRow } from "./lib/types";
 import ArsenalTab from "./components/arsenal/ArsenalTab";
+import Sequencing from "./components/approach/Sequencing";
+import Command from "./components/approach/Command";
 
-/** Top-level tabs; Approach holds the original tunneling page plus command and sequencing. Kept in the URL hash. */
+/** Top-level tabs, kept in the URL hash. Approach = the original tunneling screen, with Sequencing and Command below it. */
 const TABS = [["arsenal", "Arsenal"], ["approach", "Approach"], ["trends", "Trends"], ["prep", "Game prep"]] as const;
-const SUBS = [["tunneling", "Tunneling"], ["command", "Command"], ["sequencing", "Sequencing"]] as const;
+const SECTIONS = [["tunneling", "Tunneling"], ["sequencing", "Sequencing"], ["command", "Command"]] as const;
 type Tab = (typeof TABS)[number][0];
-type Sub = (typeof SUBS)[number][0];
-function readHash(): { tab: Tab; sub: Sub } {
-  const [t, s] = window.location.hash.replace(/^#\/?/, "").split("/");
-  const tab = (TABS.find(([k]) => k === t)?.[0] ?? "arsenal") as Tab;
-  const sub = (SUBS.find(([k]) => k === s)?.[0] ?? "tunneling") as Sub;
-  return { tab, sub };
+function readHash(): { tab: Tab } {
+  const [t] = window.location.hash.replace(/^#\/?/, "").split("/");
+  return { tab: (TABS.find(([k]) => k === t)?.[0] ?? "arsenal") as Tab };
 }
+const scrollToSection = (id: string) => document.getElementById(id === "tunneling" ? "approach-top" : id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
 const FASTBALLS = ["Four-Seam", "Fastball", "Sinker"];
 const signed = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}`;
@@ -106,13 +106,13 @@ export default function App() {
   const clockRef = useRef<number | null>(null);
   const [videoClock, setVideoClock] = useState<number | null>(null);   // flight time driven by the video, when linked
   const onFlightTime = useCallback((t: number | null) => setVideoClock(t), []);
-  const [{ tab, sub }, setNav] = useState(readHash);
+  const [{ tab }, setNav] = useState(readHash);
   useEffect(() => {
     const on = () => setNav(readHash());
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
-  const go = (t: Tab, s: Sub = sub) => { window.location.hash = t === "approach" ? `${t}/${s}` : t; };
+  const go = (t: Tab) => { window.location.hash = t; };
   // Arsenal keeps its own filters and starts from all of his data; the tunneling page keeps its own defaults.
   const [arsFilters, setArsFilters] = useState<Filters>(NO_FILTERS);
   useEffect(() => { setArsFilters(NO_FILTERS); }, [pitcherId]);
@@ -308,14 +308,12 @@ export default function App() {
             <button key={k} type="button" className={k === tab ? "is-on" : ""} aria-current={k === tab ? "page" : undefined} onClick={() => go(k)}>{label}</button>
           ))}
           {tab === "approach" && (
-            <span className="subtabs">
-              {SUBS.map(([k, label]) => (
-                <button key={k} type="button" className={k === sub ? "is-on" : ""} aria-current={k === sub ? "page" : undefined} onClick={() => go("approach", k)}>{label}</button>
-              ))}
+            <span className="subtabs" aria-label="Jump to">
+              {SECTIONS.map(([k, label]) => <button key={k} type="button" onClick={() => scrollToSection(k)}>{label}</button>)}
             </span>
           )}
         </nav>
-        {tab === "approach" && sub === "tunneling" && <button type="button" className="ghost lb-open" onClick={() => setShowLb(true)}>Leaderboard</button>}
+        {tab === "approach" && <button type="button" className="ghost lb-open" onClick={() => setShowLb(true)}>Leaderboard</button>}
         <span className="stamp">
           {data.sample ? <b className="sample-flag">Sample pitchers, not real data</b> : <>Data through {data.dataThrough}</>}
         </span>
@@ -327,11 +325,12 @@ export default function App() {
       {tab === "arsenal" && (
         <ArsenalTab data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={pitcher} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} />
       )}
-      {(tab === "trends" || tab === "prep" || (tab === "approach" && sub !== "tunneling")) && (
-        <div className="state-msg"><p>{tab === "trends" ? "Trends" : tab === "prep" ? "Game prep" : sub === "command" ? "Command" : "Sequencing"} is coming next.</p></div>
+      {(tab === "trends" || tab === "prep") && (
+        <div className="state-msg"><p>{tab === "trends" ? "Trends" : "Game prep"} is coming next.</p></div>
       )}
-      {tab === "approach" && sub === "tunneling" && (
-      <div className="layout">
+      {tab === "approach" && (
+      <div className="approach">
+      <div className="layout approach-top" id="approach-top">
         <aside className="panel left" aria-label="Pitch selection">
           <section>
             <div className="sec-title">Pitcher</div>
@@ -551,6 +550,13 @@ export default function App() {
             </section>}
           </div>
         </main>
+      </div>
+      {pitcher && (
+        <div className="ap-below">
+          <Sequencing rows={rows} />
+          <Command rows={rows} throws={pitcher.throws ?? "Right"} />
+        </div>
+      )}
       </div>
       )}
     </div>

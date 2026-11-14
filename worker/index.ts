@@ -244,6 +244,11 @@ export default {
       return r2 ?? json({ parks: {} });
     }
 
+    if (pathname === "/data/count_norms.json") {
+      const r2 = await fromR2("count_norms.json.gz");
+      return r2 ?? json({ error: "No D1 count averages built yet." }, 404);
+    }
+
     if (pathname === "/data/reference.json") {
       const r2 = await fromR2("reference.json.gz");
       return r2 ?? json({ error: "No reference built yet." }, 404);
