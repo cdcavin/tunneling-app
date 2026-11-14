@@ -7,9 +7,9 @@ import type { PitchRow } from "../../lib/types";
 /** Frame shared with the heatmaps: 4 ft wide, 0.4–4.6 ft tall, same scale both ways. */
 export const FRAME = { side: 2.0, lo: 0.4, hi: 4.6 };
 const W = 220, PX = W / (2 * FRAME.side), H = (FRAME.hi - FRAME.lo) * PX;
-const px = (side: number) => (FRAME.side - side) * PX;         // catcher's view: third-base side on the left
+const px = (side: number) => (side + FRAME.side) * PX;         // pitcher's view: third-base side on the right
 const py = (h: number) => (FRAME.hi - h) * PX;
-const toSide = (x: number) => FRAME.side - x / PX;
+const toSide = (x: number) => x / PX - FRAME.side;
 const toHeight = (y: number) => FRAME.hi - y / PX;
 const MIN_STEP = 0.04;   // ft between recorded points, so a slow drag doesn't pile up thousands of them
 const pathOf = (pts: Outline, close: boolean) => (pts.length ? `M${pts.map(([s, h]) => `${px(s).toFixed(1)},${py(h).toFixed(1)}`).join("L")}${close ? "Z" : ""}` : "");
@@ -41,7 +41,7 @@ export default function ZoneDraw({ rows, outline, onChange, insideCount }: { row
   const total = Object.values(insideCount).reduce((a, b) => a + b, 0);
   return (
     <div className="zd">
-      <svg ref={svg} className="zd-svg" viewBox={`0 0 ${W} ${H + 14}`} role="img" aria-label="Strike zone, catcher's view. Press and draw around a location."
+      <svg ref={svg} className="zd-svg" viewBox={`0 0 ${W} ${H + 14}`} role="img" aria-label="Strike zone, pitcher's view. Press and draw around a location."
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         <rect className="ars-zone-bg" width={W} height={H} rx={4} />
         {rows.map((r) => {

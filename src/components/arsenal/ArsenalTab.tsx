@@ -77,7 +77,7 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
         )}
         {pitcher && (
           <section>
-            <div className="sec-title">Location <span className="ars-sub">catcher's view</span></div>
+            <div className="sec-title">Location <span className="ars-sub">pitcher's view</span></div>
             <ZoneDraw rows={rows} outline={outline} onChange={setOutline} insideCount={insideCount} />
           </section>
         )}
