@@ -87,15 +87,16 @@ function useSize<T extends HTMLElement>() {
 export function VeloRidges({ rows, lines }: { rows: PitchRow[]; lines: ArsenalLine[] }) {
   const order = [...lines].sort((a, b) => b.velo - a.velo);
   const vs = rows.map((r) => r.velo);
-  const lo = Math.floor((Math.min(...vs) - 2) / 5) * 5, hi = Math.ceil((Math.max(...vs) + 2) / 5) * 5;
+  const lo = Math.floor(Math.min(...vs) - 1.5), hi = Math.ceil(Math.max(...vs) + 1.5);    // tight to his range, not rounded out to 5s
+  const step = hi - lo > 16 ? 5 : 2;
   const grid = useMemo(() => Array.from({ length: Math.round((hi - lo) / 0.25) + 1 }, (_, i) => lo + i * 0.25), [lo, hi]);
   const [box, size] = useSize<HTMLDivElement>();
   const n = order.length;
-  const W = size.w || 300, L = 70, Rp = 12;
+  const W = size.w || 300, L = 40, Rp = 10;
   const H = size.h >= 120 ? size.h : n * 52 + 40;     // fills the panel on a laptop; natural height when stacked on a phone
   const row = (H - 40) / (Math.max(1, n) + 0.45), peak = row * 1.45, top = 10 + peak - row;   // last baseline lands at H − 30
   const x = (v: number) => L + ((v - lo) / (hi - lo)) * (W - L - Rp);
-  const ticks = Array.from({ length: (hi - lo) / 5 + 1 }, (_, i) => lo + i * 5);
+  const ticks = Array.from({ length: Math.floor(hi / step) - Math.ceil(lo / step) + 1 }, (_, i) => (Math.ceil(lo / step) + i) * step);
   return (
     <figure className="chart ars-velo">
       <div className="sec-title">Velo by pitch</div>
@@ -112,8 +113,8 @@ export function VeloRidges({ rows, lines }: { rows: PitchRow[]; lines: ArsenalLi
             <g key={p.type}>
               <path d={`M${x(lo)},${base} L${pts.join(" L")} L${x(hi)},${base} Z`} fill={c} fillOpacity={0.45} stroke={c} strokeWidth={1.5} />
               <line className="ars-base" x1={L} x2={W - Rp} y1={base} y2={base} />
-              <text className="ars-ridge-label" x={2} y={base - 5}>{pitchAbbr(p.type)}</text>
-              <text className="ars-ridge-num" x={L - 8} y={base - 5} textAnchor="end">{p.velo.toFixed(1)}</text>
+              <text className="ars-ridge-label" x={2} y={base - 20}>{pitchAbbr(p.type)}</text>
+              <text className="ars-ridge-num" x={2} y={base - 5}>{p.velo.toFixed(1)}</text>
             </g>
           );
         })}
