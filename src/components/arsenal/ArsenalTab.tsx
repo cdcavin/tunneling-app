@@ -9,6 +9,7 @@ import { pitchColor } from "../../lib/pitchColors";
 import type { IndexFile, Pitcher, PitchRow } from "../../lib/types";
 import { ArsenalMovement, VeloRidges, ZoneHeatmaps } from "./ArsenalCharts";
 import PitchVideo from "./PitchVideo";
+import ArsenalSpin from "./ArsenalSpin";
 
 interface Props {
   data: IndexFile;
@@ -123,6 +124,7 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
               </table>
             </div>
           </section>
+          <ArsenalSpin rows={picked} lines={lines} />
         </>
       )}
       </main>

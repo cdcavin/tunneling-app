@@ -1111,3 +1111,15 @@ button.primary.wide { width: 100%; }
 .ars-side-mv .tip { position: static; margin-top: 6px; }
 @media (max-width: 1100px) { .ars-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "vl" "ht"; grid-template-rows: 420px 560px; } .ars-grid > :last-child { min-height: auto; } }
 @media (max-width: 760px) { .ars-grid { grid-template-rows: auto auto; } .ars-ht .ars-zone-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+.ars-spin-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+.ars-spin-ball .spin-canvas { width: 160px; height: 160px; }
+.ars-spin-ball .spin-clock { font-size: 24px; }
+.gp-main > * + * { margin-top: 12px; }
+.gp-field { display: grid; gap: 4px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+.gp-field select, .gp-field input { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; font: inherit; font-size: 13.5px; color-scheme: dark; }
+.gp-wx-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.gp-wx-row > div { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+.gp-wx-row b { display: block; font: 600 20px var(--font-cond); color: var(--ink); }
+.gp-wx-row span { font-size: 12px; color: var(--muted); }
+.gp-fly { margin: 10px 0 4px; font-size: 14px; color: var(--ink-2); }
+.gp-fly b { color: var(--ink); }

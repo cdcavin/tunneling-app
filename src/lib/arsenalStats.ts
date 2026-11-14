@@ -1,4 +1,4 @@
-import { anglesOf } from "./physics";
+import { anglesOf, type Coeffs } from "./physics";
 import { countOutcomes, inZone } from "./outcomes";
 import type { PitchRow } from "./types";
 
@@ -101,4 +101,12 @@ export function applySituation(rows: PitchRow[], s: Situation): PitchRow[] {
   return rows.filter((p) =>
     (s.hand === "all" || p.batterSide === s.hand) && countOk(p, s.count) &&
     (s.result === "all" || (s.result === "whiffs" ? callOf(p) === "strikeswinging" : s.result === "called" ? callOf(p) === "strikecalled" : callOf(p) === "inplay")));
+}
+
+const COEF_KEYS = ["Xc0", "Xc1", "Xc2", "Yc0", "Yc1", "Yc2", "Zc0", "Zc1", "Zc2"] as const;
+/** His average trajectory for a set of pitches (each coefficient averaged), for spin and air calculations. */
+export function avgCoeffs(rows: PitchRow[]): Coeffs | null {
+  const cs = rows.map((r) => r.coeffs).filter((c): c is Coeffs => !!c);
+  if (!cs.length) return null;
+  return Object.fromEntries(COEF_KEYS.map((k) => [k, cs.reduce((a, c) => a + c[k], 0) / cs.length])) as unknown as Coeffs;
 }

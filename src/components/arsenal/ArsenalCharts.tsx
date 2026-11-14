@@ -124,7 +124,7 @@ export function VeloRidges({ rows, lines }: { rows: PitchRow[]; lines: ArsenalLi
   );
 }
 
-// ── Heatmaps: one per pitch type, catcher's view, smooth density contours ──
+// ── Heatmaps: one per pitch type, pitcher's view, smooth density contours ──
 
 const RAMP = ["#1f4a7a", "#2a7a9a", "#3fa65a", "#b9d45a", "#f0c35b", "#ec8a4c", "#d9443f"];
 const MIN_N = 5;
@@ -136,7 +136,7 @@ function ringsToPath(coords: number[][][][]): string {
 function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer: HeatLayer }) {
   const SIDE = 1.6, HLO = 0.9, HHI = 4.1;                 // cropped tight around the zone so the maps read bigger
   const W = 150, H = (W * (HHI - HLO)) / (2 * SIDE);     // same scale both ways
-  const px = (side: number) => ((-side + SIDE) / (2 * SIDE)) * W;           // catcher's view: third-base side on the left
+  const px = (side: number) => ((side + SIDE) / (2 * SIDE)) * W;            // pitcher's view: third-base side on the right
   const py = (h: number) => ((HHI - h) / (HHI - HLO)) * H;
   const pts = rows.filter(LAYERS[layer].keep);
   // Bands at fixed fractions of this map's peak (1/8 … 7/8), so each color always means the same share of the peak.
@@ -154,7 +154,7 @@ function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer:
   return (
     <figure className="ars-zone">
       <figcaption><i style={{ background: pitchColor(type) }} />{type}<span>{pts.length}{layer !== "location" && ` of ${rows.length}`}</span></figcaption>
-      <svg viewBox={`0 0 ${W} ${H + 14}`} role="img" aria-label={`${type}: ${LAYERS[layer].label.toLowerCase()}, catcher's view`}>
+      <svg viewBox={`0 0 ${W} ${H + 14}`} role="img" aria-label={`${type}: ${LAYERS[layer].label.toLowerCase()}, pitcher's view`}>
         <defs><clipPath id={id}><rect width={W} height={H} rx={4} /></clipPath></defs>
         <rect className="ars-zone-bg" width={W} height={H} rx={4} />
         <g clipPath={`url(#${id})`}>
@@ -179,7 +179,7 @@ export function ZoneHeatmaps({ rows, types }: { rows: PitchRow[]; types: string[
   const sel = hand === "all" ? rows : rows.filter((r) => r.batterSide === hand);
   return (
     <section className="ars-heat">
-      <div className="sec-title">Locations <span className="ars-sub">catcher's view</span></div>
+      <div className="sec-title">Locations <span className="ars-sub">pitcher's view</span></div>
       <div className="ars-heat-ctl">
         <div className="segmented" role="radiogroup" aria-label="Hitter side">
           {HAND_CHOICES.map(([k, l]) => (

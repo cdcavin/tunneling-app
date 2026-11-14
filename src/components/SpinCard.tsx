@@ -67,7 +67,7 @@ const rot = (v: V3, k: V3, ang: number): V3 => {
 const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 /** A spinning ball seen from the pitcher: seams turn about the spin axis, an arrow rides the spin, a dot marks the gyro. */
-function Ball({ p, color, rpm }: { p: SpinProfile; color: string; rpm: number | null }) {
+export function Ball({ p, color, rpm }: { p: SpinProfile; color: string; rpm: number | null }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;

@@ -28,6 +28,7 @@ import { buildArsenal, seasonsOf, type ArsenalPitch, type IndexFile, type Pitche
 import ArsenalTab from "./components/arsenal/ArsenalTab";
 import Sequencing from "./components/approach/Sequencing";
 import Command from "./components/approach/Command";
+import GamePrep from "./components/prep/GamePrep";
 
 /** Top-level tabs, kept in the URL hash. Approach = the original tunneling screen, with Sequencing and Command below it. */
 const TABS = [["arsenal", "Arsenal"], ["approach", "Approach"], ["trends", "Trends"], ["prep", "Game prep"]] as const;
@@ -325,8 +326,9 @@ export default function App() {
       {tab === "arsenal" && (
         <ArsenalTab data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={pitcher} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} />
       )}
-      {(tab === "trends" || tab === "prep") && (
-        <div className="state-msg"><p>{tab === "trends" ? "Trends" : "Game prep"} is coming next.</p></div>
+      {tab === "trends" && <div className="state-msg"><p>Trends is coming next.</p></div>}
+      {tab === "prep" && (
+        <GamePrep data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={pitcher} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} />
       )}
       {tab === "approach" && (
       <div className="approach">
