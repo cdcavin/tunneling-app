@@ -3,7 +3,7 @@ import PitcherFinder, { teamLabel } from "../PitcherFinder";
 import FilterPanel from "../FilterPanel";
 import { applyFilters, type Filters } from "../../lib/filters";
 import { atWvuPark } from "../../lib/pairs";
-import { ANY_SITUATION, applySituation, arsenalLines, COUNT_CHOICES, HAND_CHOICES, inCircle, RESULT_CHOICES, type ArsenalLine, type Circle, type Situation } from "../../lib/arsenalStats";
+import { ANY_SITUATION, applySituation, arsenalLines, COUNT_CHOICES, inCircle, RESULT_CHOICES, type ArsenalLine, type Circle, type Situation } from "../../lib/arsenalStats";
 import ZoneDraw from "./ZoneDraw";
 import { pitchColor } from "../../lib/pitchColors";
 import type { IndexFile, Pitcher, PitchRow } from "../../lib/types";
@@ -78,9 +78,6 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
         {pitcher && (
           <section className="ars-sit">
             <div className="sec-title">Situation</div>
-            <div className="ars-sit-row"><span>Hitter</span><div className="segmented" role="radiogroup" aria-label="Hitter side">
-              {HAND_CHOICES.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={sit.hand === k} className={sit.hand === k ? "is-on" : ""} onClick={() => setSit({ ...sit, hand: k })}>{l}</button>)}
-            </div></div>
             <div className="ars-sit-row"><span>Count</span><div className="segmented" role="radiogroup" aria-label="Count">
               {COUNT_CHOICES.map(([k, l, t]) => <button key={k} type="button" role="radio" aria-checked={sit.count === k} className={sit.count === k ? "is-on" : ""} title={t} onClick={() => setSit({ ...sit, count: k })}>{l}</button>)}
             </div></div>
@@ -102,7 +99,7 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
           <div className="ars-grid">
             <section className="card"><ArsenalMovement rows={rows} lines={lines} throws={pitcher.throws} hasVideo={hasVideo} onPick={setVideo} inside={inside} /></section>
             <section className="card"><VeloRidges rows={picked} lines={lines} /></section>
-            <section className="card"><ZoneHeatmaps rows={picked} types={types} circle={circle} /></section>
+            <section className="card"><ZoneHeatmaps rows={rows} types={types} /></section>
           </div>
           <section className="card ars-table-card">
             {skewed && <p className="ars-warn">Zone %, Chase % and Whiff % only count the pitches {circle ? "inside your circle" : ""}{circle && sit.result !== "all" ? " and " : ""}{sit.result !== "all" ? "matching the result filter" : ""}, so they're skewed by the selection. Don't read them as his real rates.</p>}

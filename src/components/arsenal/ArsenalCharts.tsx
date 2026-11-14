@@ -3,7 +3,7 @@ import { contourDensity } from "d3-contour";
 import type { PitchRow } from "../../lib/types";
 import { pitchAbbr, pitchColor } from "../../lib/pitchColors";
 import { ZONE } from "../../lib/grid";
-import { kde1d, LAYERS, type ArsenalLine, type Circle, type HeatLayer } from "../../lib/arsenalStats";
+import { HAND_CHOICES, kde1d, LAYERS, type ArsenalLine, type HandF, type HeatLayer } from "../../lib/arsenalStats";
 import { FRAME } from "./ZoneDraw";
 
 // ── Movement: every pitch as a dot, pitcher's view; click a dot for its video ──
@@ -133,7 +133,7 @@ function ringsToPath(coords: number[][][][]): string {
   return coords.map((poly) => poly.map((ring) => `M${ring.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join("L")}Z`).join("")).join("");
 }
 
-function ZoneMap({ type, rows, layer, circle }: { type: string; rows: PitchRow[]; layer: HeatLayer; circle: Circle | null }) {
+function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer: HeatLayer }) {
   const SIDE = FRAME.side, HLO = FRAME.lo, HHI = FRAME.hi;
   const W = 150, H = (W * (HHI - HLO)) / (2 * SIDE);     // same scale both ways so a circle stays round
   const px = (side: number) => ((-side + SIDE) / (2 * SIDE)) * W;           // catcher's view: third-base side on the left
@@ -159,7 +159,6 @@ function ZoneMap({ type, rows, layer, circle }: { type: string; rows: PitchRow[]
         {[1, 2].map((k) => <line key={`v${k}`} className="ars-zone-third" x1={zx + (zw * k) / 3} x2={zx + (zw * k) / 3} y1={zy} y2={zy + zh} />)}
         {[1, 2].map((k) => <line key={`h${k}`} className="ars-zone-third" x1={zx} x2={zx + zw} y1={zy + (zh * k) / 3} y2={zy + (zh * k) / 3} />)}
         <path className="ars-plate" d={`M${zx},${H + 2} L${zx + zw},${H + 2} L${zx + zw},${H + 6} L${zx + zw / 2},${H + 11} L${zx},${H + 6} Z`} />
-        {circle && <circle className="zd-circle" cx={px(circle.side)} cy={py(circle.height)} r={(circle.r * W) / (2 * SIDE)} />}
       </svg>
       {pts.length > 0 && pts.length < MIN_N && <div className="ars-few">Too few to shade</div>}
       {pts.length === 0 && <div className="ars-few">None</div>}
@@ -167,12 +166,20 @@ function ZoneMap({ type, rows, layer, circle }: { type: string; rows: PitchRow[]
   );
 }
 
-export function ZoneHeatmaps({ rows, types, circle }: { rows: PitchRow[]; types: string[]; circle: Circle | null }) {
+/** Heatmaps show his full locations: the circle drawn in the left panel doesn't apply here. */
+export function ZoneHeatmaps({ rows, types }: { rows: PitchRow[]; types: string[] }) {
   const [layer, setLayer] = useState<HeatLayer>("location");
+  const [hand, setHand] = useState<HandF>("all");
+  const sel = hand === "all" ? rows : rows.filter((r) => r.batterSide === hand);
   return (
     <section className="ars-heat">
       <div className="sec-title">Locations <span className="ars-sub">catcher's view</span></div>
       <div className="ars-heat-ctl">
+        <div className="segmented" role="radiogroup" aria-label="Hitter side">
+          {HAND_CHOICES.map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={hand === k} className={hand === k ? "is-on" : ""} onClick={() => setHand(k)}>{l}</button>
+          ))}
+        </div>
         <div className="segmented" role="radiogroup" aria-label="Shade by">
           {(Object.keys(LAYERS) as HeatLayer[]).map((k) => (
             <button key={k} type="button" role="radio" aria-checked={layer === k} className={layer === k ? "is-on" : ""} onClick={() => setLayer(k)} title={LAYERS[k].help}>{LAYERS[k].label}</button>
@@ -180,7 +187,7 @@ export function ZoneHeatmaps({ rows, types, circle }: { rows: PitchRow[]; types:
         </div>
       </div>
       <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${types.length <= 4 ? 2 : 3}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
-        {types.map((t) => <ZoneMap key={t} type={t} rows={rows.filter((r) => r.type === t)} layer={layer} circle={circle} />)}
+        {types.map((t) => <ZoneMap key={t} type={t} rows={sel.filter((r) => r.type === t)} layer={layer} />)}
       </div>
     </section>
   );
