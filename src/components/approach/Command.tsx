@@ -2,6 +2,80 @@ import { useMemo, useState } from "react";
 import type { PitchRow } from "../../lib/types";
 import { pitchAbbr, pitchColor } from "../../lib/pitchColors";
 import { callLabel, missInches, targetBox, useCalls, type Call } from "../../lib/calls";
+import OutingReplay from "./OutingReplay";
+
+/** Called-spot codes laid out as the hitter sees the plate: away | middle | in, top and bottom halves, then the off-zone spots. */
+const SPOTS: { code: string[]; label: string; col: number; row: number }[] = [
+  { code: ["7"], label: "Above", col: 1, row: 0 },
+  { code: ["4"], label: "Up away", col: 0, row: 1 }, { code: ["M", "MK"], label: "Up middle", col: 1, row: 1 }, { code: ["1"], label: "Up in", col: 2, row: 1 },
+  { code: ["3"], label: "Down away", col: 0, row: 2 }, { code: ["G", "GL"], label: "Down middle", col: 1, row: 2 }, { code: ["2"], label: "Down in", col: 2, row: 2 },
+  { code: ["6"], label: "Below", col: 1, row: 3 }, { code: ["5"], label: "Off away", col: 3, row: 1.5 },
+];
+const spotOf = (loc: string) => { const k = loc.toUpperCase().replace(/[CD?]+$/, "").trim(); return SPOTS.find((s) => s.code.includes(k)); };
+const MIN_SPOT = 3;
+
+/** Plain-words lean: which way he misses on average, from the center of the called spot. */
+function lean(arm: number | null, up: number | null) {
+  const parts: string[] = [];
+  if (arm != null && Math.abs(arm) >= 1) parts.push(`${Math.abs(arm).toFixed(1)}″ ${arm > 0 ? "arm side" : "glove side"}`);
+  if (up != null && Math.abs(up) >= 1) parts.push(`${Math.abs(up).toFixed(1)}″ ${up > 0 ? "up" : "down"}`);
+  return parts.length ? `Misses ${parts.join(" and ")} on average` : "No clear lean: misses spread evenly";
+}
+
+/** One card per pitch: his lean, plus average miss to each called spot (red = accurate, blue = wild, vs his own average for that pitch). */
+function Tendencies({ misses, types }: { misses: Miss[]; types: string[] }) {
+  return (
+    <div className="tend-grid">
+      {types.map((t) => {
+        const g = misses.filter((m) => m.r.type === t);
+        const all = avg(g.map((m) => m.miss)) ?? 0;
+        const a = avg(g.map((m) => m.arm)), u = avg(g.map((m) => m.up));
+        const cells = SPOTS.map((s) => {
+          const h = g.filter((m) => spotOf(m.c.loc) === s);
+          return { s, n: h.length, miss: avg(h.map((m) => m.miss)) };
+        });
+        const ranked = cells.filter((c) => c.n >= MIN_SPOT && c.miss != null).sort((x, y) => x.miss! - y.miss!);
+        const best = ranked[0], worst = ranked.length > 1 ? ranked[ranked.length - 1] : undefined;
+        const L = 46, G = 4;
+        const ax = 30, ay = 30, sc = 3.2;
+        return (
+          <div key={t} className="tend">
+            <div className="tend-head"><i style={{ background: pitchColor(t) }} /><b>{t}</b><span>{g.length} charted · avg miss {all.toFixed(1)}″</span></div>
+            <div className="tend-body">
+              <svg className="tend-map" viewBox={`0 0 ${4 * (L + G)} ${4 * (L + G)}`} role="img" aria-label={`${t}: average miss by called spot, hitter's view`}>
+                {cells.map(({ s, n, miss }) => {
+                  const thin = n < MIN_SPOT || miss == null;
+                  const z = thin ? 0 : Math.max(-1, Math.min(1, (all - miss!) / Math.max(3, all)));
+                  const fill = thin ? "rgba(120,140,170,0.10)" : z >= 0 ? `rgba(217,68,63,${(0.15 + 0.6 * z).toFixed(2)})` : `rgba(58,120,220,${(0.15 + 0.6 * -z).toFixed(2)})`;
+                  const x0 = s.col * (L + G), y0 = s.row * (L + G);
+                  return (
+                    <g key={s.label}>
+                      <rect x={x0} y={y0} width={L} height={L} rx={4} fill={fill} className={s.row >= 1 && s.row <= 2 && s.col <= 2 ? "tend-in" : "tend-off"}><title>{`${s.label}: ${n} charted${miss != null ? `, avg miss ${miss.toFixed(1)}″` : ""}`}</title></rect>
+                      <text className="tend-v" x={x0 + L / 2} y={y0 + L / 2 + 1} textAnchor="middle">{thin ? (n ? "·" : "") : miss!.toFixed(1)}</text>
+                      <text className="tend-n" x={x0 + L / 2} y={y0 + L - 6} textAnchor="middle">{n || ""}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+              <div className="tend-side">
+                <svg className="tend-arrow" viewBox="0 0 60 60" role="img" aria-label="Average miss direction, pitcher's view, arm side right">
+                  <circle cx={ax} cy={ay} r={26} className="cmd-ring" />
+                  <line x1={4} x2={56} y1={ay} y2={ay} className="cmd-axis" /><line y1={4} y2={56} x1={ax} x2={ax} className="cmd-axis" />
+                  {a != null && u != null && <line x1={ax} y1={ay} x2={ax + Math.max(-24, Math.min(24, a * sc))} y2={ay - Math.max(-24, Math.min(24, u * sc))} stroke={pitchColor(t)} strokeWidth={3} markerEnd="url(#tend-head)" />}
+                  <defs><marker id="tend-head" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#eef2f8" /></marker></defs>
+                </svg>
+                <p>{lean(a, u)}.</p>
+                {best && <p><span className="tend-good">Most accurate:</span> {best.s.label.toLowerCase()} ({best.miss!.toFixed(1)}″, {best.n})</p>}
+                {worst && worst !== best && <p><span className="tend-bad">Least accurate:</span> {worst.s.label.toLowerCase()} ({worst.miss!.toFixed(1)}″, {worst.n})</p>}
+                {!best && <p className="hint">Not enough charted pitches at any one spot yet (needs {MIN_SPOT}+).</p>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** One charted pitch: miss to the target box (the paper-chart definition) plus its offset from the box's center. */
 interface Miss { r: PitchRow; c: Call; miss: number; arm: number; up: number }
@@ -70,6 +144,12 @@ export default function Command({ rows, throws }: { rows: PitchRow[]; throws: "R
         <h2>Command</h2>
         <span className="hint">Every charted pitch vs the catcher's called spot. {misses.length} of {rows.length} pitches in these filters have a call.</span>
       </header>
+      <OutingReplay rows={rows} calls={calls} />
+      <div className="card">
+        <div className="sec-title">Where each pitch misses, and where he's most accurate <span className="ars-sub">grid = called spot from the hitter's view (away · middle · in); number = avg miss in inches; small number = pitches</span></div>
+        <Tendencies misses={misses} types={types} />
+        <p className="hint pk-key"><span className="pk-swatch good" /> more accurate than his average for that pitch <span className="pk-swatch bad" /> less accurate. Arrow = his average miss from the center of the called spot (pitcher's view, arm side right). Spots with under {MIN_SPOT} pitches aren't shaded.</p>
+      </div>
       <div className="ap-row cmd-row">
         <div className="card cmd-plot">
           <div className="sec-title">Where misses go <span className="ars-sub">arm side always to the right · from the center of the called spot</span></div>
