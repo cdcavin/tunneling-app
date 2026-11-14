@@ -69,6 +69,11 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
             <FilterPanel all={pitcher.pitches} selected={dated.length} filters={filters} onChange={onFilters} />
           </section>
         )}
+        {pitcher && picked.length > 0 && (
+          <section className="ars-side-mv">
+            <ArsenalMovement rows={rows} lines={lines} throws={pitcher.throws} hasVideo={hasVideo} onPick={setVideo} inside={inside} />
+          </section>
+        )}
         {pitcher && (
           <section>
             <div className="sec-title">Location <span className="ars-sub">catcher's view</span></div>
@@ -97,7 +102,6 @@ export default function ArsenalTab({ data, pitcherId, onPitcher, pitcher, loadin
       {pitcher && picked.length > 0 && (
         <>
           <div className="ars-grid">
-            <section className="card ars-mv"><ArsenalMovement rows={rows} lines={lines} throws={pitcher.throws} hasVideo={hasVideo} onPick={setVideo} inside={inside} /></section>
             <section className="card ars-vl"><VeloRidges rows={picked} lines={lines} /></section>
             <section className="card ars-ht"><ZoneHeatmaps rows={rows} types={types} /></section>
           </div>

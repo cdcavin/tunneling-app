@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { contourDensity } from "d3-contour";
+import { contourDensity, type ContourMultiPolygon } from "d3-contour";
 import type { PitchRow } from "../../lib/types";
 import { pitchAbbr, pitchColor } from "../../lib/pitchColors";
 import { ZONE } from "../../lib/grid";
 import { HAND_CHOICES, kde1d, LAYERS, type ArsenalLine, type HandF, type HeatLayer } from "../../lib/arsenalStats";
-import { FRAME } from "./ZoneDraw";
 
 // ── Movement: every pitch as a dot, pitcher's view; click a dot for its video ──
 
@@ -135,13 +134,19 @@ function ringsToPath(coords: number[][][][]): string {
 }
 
 function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer: HeatLayer }) {
-  const SIDE = FRAME.side, HLO = FRAME.lo, HHI = FRAME.hi;
-  const W = 150, H = (W * (HHI - HLO)) / (2 * SIDE);     // same scale both ways so a circle stays round
+  const SIDE = 1.6, HLO = 0.9, HHI = 4.1;                 // cropped tight around the zone so the maps read bigger
+  const W = 150, H = (W * (HHI - HLO)) / (2 * SIDE);     // same scale both ways
   const px = (side: number) => ((-side + SIDE) / (2 * SIDE)) * W;           // catcher's view: third-base side on the left
   const py = (h: number) => ((HHI - h) / (HHI - HLO)) * H;
   const pts = rows.filter(LAYERS[layer].keep);
-  const bands = useMemo(() => (pts.length < MIN_N ? [] : contourDensity<PitchRow>()
-    .x((r) => px(r.side)).y((r) => py(r.height)).size([W, H]).bandwidth(11).thresholds(RAMP.length + 1)(pts).slice(1)),
+  // Bands at fixed fractions of this map's peak (1/8 … 7/8), so each color always means the same share of the peak.
+  const bands = useMemo(() => {
+    if (pts.length < MIN_N) return [];
+    const gen = contourDensity<PitchRow>().x((r) => px(r.side)).y((r) => py(r.height)).size([W, H]).bandwidth((0.29 * W) / (2 * SIDE));
+    // d3-contour 4 has density.contours(); @types/d3-contour 3 doesn't know it yet.
+    const dens = (gen as unknown as { contours: (d: PitchRow[]) => ((v: number) => ContourMultiPolygon) & { max: number } }).contours(pts);
+    return RAMP.map((_, i) => dens((dens.max * (i + 1)) / (RAMP.length + 1)));
+  },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pts]);
   const zx = px(ZONE.halfWidth), zw = px(-ZONE.halfWidth) - zx, zy = py(ZONE.top), zh = py(ZONE.bottom) - zy;
@@ -187,7 +192,7 @@ export function ZoneHeatmaps({ rows, types }: { rows: PitchRow[]; types: string[
           ))}
         </div>
       </div>
-      <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${Math.max(3, Math.min(types.length, 6))}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
+      <div className="ars-zone-grid" style={{ gridTemplateColumns: `repeat(${types.length <= 4 ? 2 : 3}, minmax(0, 1fr))` }} title={`${LAYERS[layer].help} Shading is relative within each map.`}>
         {types.map((t) => <ZoneMap key={t} type={t} rows={sel.filter((r) => r.type === t)} layer={layer} />)}
       </div>
     </section>

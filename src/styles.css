@@ -1102,15 +1102,12 @@ button.primary.wide { width: 100%; }
 .tend-arrow-l { stroke: #ffffff; stroke-width: 1.8; }
 .tend-v { fill: #ffffff; font: 700 12px var(--font-cond); paint-order: stroke; stroke: rgba(10, 22, 40, 0.85); stroke-width: 3px; }
 
-/* Arsenal, v3: movement + velo side by side, heatmaps full width, table below; the main area scrolls. */
+/* Arsenal, v4: movement plot in the left panel (like the tunneling page); velo and heatmaps share the main row and fill it; table below. */
 .ars-main { display: block; }
 .ars-main > * + * { margin-top: 12px; }
-.ars-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); grid-template-areas: "mv vl" "ht ht"; grid-template-rows: clamp(380px, 56vh, 600px) auto; }
-.ars-mv { grid-area: mv; } .ars-vl { grid-area: vl; } .ars-ht { grid-area: ht; }
-.ars-grid > .card.ars-ht { min-height: auto; height: auto; }
-.ars-grid > .card.ars-ht > section { flex: none; min-height: auto; height: auto; }
-.ars-ht .ars-zone-grid { flex: none; grid-auto-rows: auto; gap: 14px; }
-.ars-ht .ars-zone svg { flex: none; height: auto; max-height: 340px; }
-.ars-ht .ars-zone figcaption { font-size: 14px; }
-@media (max-width: 1100px) { .ars-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "mv" "vl" "ht"; grid-template-rows: 440px 440px auto; } .ars-grid > :last-child { min-height: auto; } }
-@media (max-width: 760px) { .ars-grid { grid-template-rows: auto auto auto; } .ars-ht .ars-zone-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+.ars-grid { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); grid-template-areas: "vl ht"; grid-template-rows: clamp(440px, calc(100vh - 56px - 230px), 760px); }
+.ars-vl { grid-area: vl; } .ars-ht { grid-area: ht; }
+.ars-side-mv .ars-mvmt svg { max-width: 300px; display: block; margin: 0 auto; }
+.ars-side-mv .tip { position: static; margin-top: 6px; }
+@media (max-width: 1100px) { .ars-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "vl" "ht"; grid-template-rows: 420px 560px; } .ars-grid > :last-child { min-height: auto; } }
+@media (max-width: 760px) { .ars-grid { grid-template-rows: auto auto; } .ars-ht .ars-zone-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
