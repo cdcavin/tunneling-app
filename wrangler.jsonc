@@ -17,5 +17,14 @@
   // Pitch data: one gzipped JSON per pitcher-season, plus index.json.gz. Uploaded from Colab.
   "r2_buckets": [
     { "binding": "BUCKET", "bucket_name": "tunneling-data" }
-  ]
+  ],
+  // Preview builds (non-main branches) read the same pitch data as the live site, so new tabs can be tested on real pitchers.
+  "previews": {
+    "kv_namespaces": [
+      { "binding": "DATA", "id": "07dec3dd433e4b378bd5e29fb50aa769" }
+    ],
+    "r2_buckets": [
+      { "binding": "BUCKET", "bucket_name": "tunneling-data" }
+    ]
+  }
 }
