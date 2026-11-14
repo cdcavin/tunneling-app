@@ -37,7 +37,7 @@ export default function ZoneDraw({ rows, outline, onChange, insideCount }: { row
     setDraft(null);
   };
 
-  const zx = px(ZONE.halfWidth), zw = px(-ZONE.halfWidth) - zx, zy = py(ZONE.top), zh = py(ZONE.bottom) - zy;
+  const zx = Math.min(px(ZONE.halfWidth), px(-ZONE.halfWidth)), zw = Math.abs(px(ZONE.halfWidth) - px(-ZONE.halfWidth)), zy = py(ZONE.top), zh = py(ZONE.bottom) - zy;
   const total = Object.values(insideCount).reduce((a, b) => a + b, 0);
   return (
     <div className="zd">
@@ -49,8 +49,6 @@ export default function ZoneDraw({ rows, outline, onChange, insideCount }: { row
           return <circle key={r.id} cx={px(r.side)} cy={py(r.height)} r={2.3} fill={inside ? pitchColor(r.type) : "#4f6283"} opacity={inside ? 0.85 : 0.35} />;
         })}
         <rect className="ars-zone-box" x={zx} y={zy} width={zw} height={zh} pointerEvents="none" />
-        {[1, 2].map((k) => <line key={`v${k}`} className="ars-zone-third" x1={zx + (zw * k) / 3} x2={zx + (zw * k) / 3} y1={zy} y2={zy + zh} />)}
-        {[1, 2].map((k) => <line key={`h${k}`} className="ars-zone-third" x1={zx} x2={zx + zw} y1={zy + (zh * k) / 3} y2={zy + (zh * k) / 3} />)}
         <path className="ars-plate" d={`M${zx},${H + 2} L${zx + zw},${H + 2} L${zx + zw},${H + 6} L${zx + zw / 2},${H + 11} L${zx},${H + 6} Z`} />
         {shown && <path className="zd-circle" d={pathOf(shown, !draft)} />}
       </svg>

@@ -149,7 +149,7 @@ function ZoneMap({ type, rows, layer }: { type: string; rows: PitchRow[]; layer:
   },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pts]);
-  const zx = px(ZONE.halfWidth), zw = px(-ZONE.halfWidth) - zx, zy = py(ZONE.top), zh = py(ZONE.bottom) - zy;
+  const zx = Math.min(px(ZONE.halfWidth), px(-ZONE.halfWidth)), zw = Math.abs(px(ZONE.halfWidth) - px(-ZONE.halfWidth)), zy = py(ZONE.top), zh = py(ZONE.bottom) - zy;
   const id = `clip-${type.replace(/\W/g, "")}`;
   return (
     <figure className="ars-zone">
