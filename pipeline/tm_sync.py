@@ -472,6 +472,35 @@ if MODE == "datefind":
                 print(f"   {n}: {len(df)} rows, WVU-pitcher rows {wv}, stadium {st}, date {dt}")
     sys.exit(0)
 
+if MODE == "penscan":
+    """Find where WVU bullpen sessions land on the FTP: top-level folders, WVU-park file-name kinds, and a look inside
+    the newest file of each non-game kind (no batter + one pitcher at a time = a pen)."""
+    import pandas as pd
+    f = FTP(quiet=True)
+    print("top-level folders:", [n for n, isdir, *_ in f.ls_attr("/") if isdir])
+    files = walk_v3(f)
+    csvs = [x for x in files if x[1].lower().endswith(".csv") and not SKIP.search(x[1]) and x[1][:4] >= "2025"]
+    wvu = [x for x in csvs if WVU_NAME.search(x[1])]
+    kinds = {}
+    for x in wvu: kinds.setdefault(stem(x[1]), []).append(x)
+    print("\nWVU-park files since 2025 by name kind: count, newest")
+    for k in sorted(kinds): print(f"  {k}: {len(kinds[k])}, newest {max(n for _, n, *_ in kinds[k])}")
+    other = [x for x in csvs if re.search(r"pen|bull|prac|train|lab|indoor", x[1], re.I) and x not in wvu]
+    print(f"\nother files with pen/bullpen/practice/lab/indoor in the name: {len(other)}", [n for _, n, *_ in other[:15]])
+    looks = [max(v, key=lambda x: x[1]) for k, v in kinds.items() if not re.fullmatch(r"(WestVirginia|MonogaliaCounty)", k)] + other[:3]
+    for p_, n, *_ in looks:
+        try: df = pd.read_csv(io.BytesIO(f.read(p_)), low_memory=False)
+        except Exception as e: print(f"\n{n}: unreadable ({e})"); continue
+        col = lambda c: df[c].astype(str) if c in df else pd.Series([], dtype=str)
+        has_bat = (col("Batter").str.strip().replace({"nan": ""}) != "").mean() if "Batter" in df else 0
+        print(f"\n===== {n}: {len(df)} rows")
+        print("  pitcher teams:", col("PitcherTeam").value_counts().head(4).to_dict(), "· pitchers:", col("Pitcher").nunique(), "· batter filled:", f"{has_bat:.0%}")
+        print("  per pitcher:", col("Pitcher").value_counts().head(6).to_dict() and {f"pitcher{i + 1}": int(v) for i, v in enumerate(col("Pitcher").value_counts().head(6).values)})
+        for c in ("PitchCall", "TaggedPitchType", "Date", "Time", "Level", "League"):
+            if c in df: print(f"  {c}:", col(c).value_counts().head(6).to_dict())
+        if "RelSpeed" in df: print(f"  RelSpeed filled {df['RelSpeed'].notna().mean():.0%}, median {pd.to_numeric(df['RelSpeed'], errors='coerce').median():.1f}")
+    sys.exit(0)
+
 if MODE == "spincheck":
     spincheck(FTP(quiet=True)); sys.exit(0)
 
