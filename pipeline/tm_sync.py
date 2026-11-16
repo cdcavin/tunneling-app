@@ -472,6 +472,11 @@ if MODE == "datefind":
                 print(f"   {n}: {len(df)} rows, WVU-pitcher rows {wv}, stadium {st}, date {dt}")
     sys.exit(0)
 
+if MODE in ("pens", "pens-dry"):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import pens
+    pens.run(lambda quiet=False: FTP(quiet), upload=(MODE == "pens")); sys.exit(0)
+
 if MODE == "penscan":
     """Find where WVU bullpen sessions land on the FTP: top-level folders, WVU-park file-name kinds, and a look inside
     the newest file of each non-game kind (no batter + one pitcher at a time = a pen)."""
@@ -543,6 +548,12 @@ if MODE in ("dry", "sync"):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import sync
     sync.run(lambda quiet=False: FTP(quiet), upload=(MODE == "sync"))
+    try:
+        import pens
+        print("\n========== bullpens ==========")
+        pens.run(lambda quiet=False: FTP(quiet), upload=(MODE == "sync"))
+    except Exception as e:
+        print(f"bullpens step failed ({type(e).__name__}: {e}); games were synced anyway")
     sys.exit(0)
 f = FTP()
 if MODE == "compare":
