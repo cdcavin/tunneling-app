@@ -1140,7 +1140,6 @@ button.primary.wide { width: 100%; }
 .tc-box { position: relative; width: 100%; }
 .tc-box svg { display: block; }
 .tc-grid { stroke: rgba(238, 242, 248, 0.08); }
-.tc-break { stroke: rgba(238, 242, 248, 0.35); stroke-dasharray: 2 4; }
 .tc-tick { fill: var(--muted); font: 500 11px var(--font-cond); }
 .tc-hover { stroke: rgba(238, 242, 248, 0.35); }
 .tc-pin { cursor: pointer; }
@@ -1185,3 +1184,4 @@ button.primary.wide { width: 100%; }
 .tc-vgrid { stroke: rgba(238, 242, 248, 0.06); }
 .tc-break line { stroke: rgba(238, 242, 248, 0.4); stroke-dasharray: 2 4; }
 .tc-break text { fill: var(--muted); font: 600 12px var(--font); }
+.wl-int-title { fill: var(--muted, #8a9bb5); font-size: 11px; }

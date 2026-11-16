@@ -98,17 +98,20 @@ export function workEvents(games: PitchRow[], pens: { id: string; date: string; 
 /**
  * One calendar axis shared by every Trends chart, so the same date sits at the same spot on all of them.
  * Real day spacing, except gaps over 21 days (off-season) are squeezed to 7 days and marked with a break.
- * pos(date) is 0..1; ticks are evenly spaced (every 7, 14 or 28 days) inside each stretch, all labeled "Mon D".
+ * pos(date) is 0..1. ticksFor(width) picks ticks that fit that chart's width: Mondays every 1 or 2 weeks when there is room,
+ * otherwise the 1st of each month (or every other month). Ticks closer than a label's width to the last one are dropped.
  */
-export interface Axis { pos: (d: string) => number; ticks: { d: string; label: string }[]; breaks: number[] }
-const GAP = 21, SQUEEZE = 7;
+export interface Tick { d: string; label: string; at: number }
+export interface Axis { pos: (d: string) => number; ticksFor: (widthPx: number) => Tick[]; breaks: number[] }
+const GAP = 21, SQUEEZE = 7, LABEL_PX = 46;
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const shortDate = (d: string) => `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}`;
-export function makeAxis(dates: string[], widthPx = 900): Axis {
+const iso = (t: number) => new Date(t * DAY).toISOString().slice(0, 10);
+export function makeAxis(dates: string[]): Axis {
   const u = [...new Set(dates)].sort();
-  if (!u.length) return { pos: () => 0.5, ticks: [], breaks: [] };
-  const day = (d: string) => Date.parse(d) / DAY;
-  const anchors: [number, number][] = [[day(u[0]), 0]];   // (real day, squeezed day)
+  if (!u.length) return { pos: () => 0.5, ticksFor: () => [], breaks: [] };
+  const day = (d: string) => Math.round(Date.parse(d) / DAY);
+  const anchors: [number, number][] = [[day(u[0]), 0]];
   const breaks: number[] = [];
   for (let i = 1; i < u.length; i++) {
     const gap = day(u[i]) - day(u[i - 1]);
@@ -116,19 +119,37 @@ export function makeAxis(dates: string[], widthPx = 900): Axis {
     const at = prev[1] + (day(u[i - 1]) - prev[0]);
     if (gap > GAP) { anchors.push([day(u[i]), at + SQUEEZE]); breaks.push(at + SQUEEZE / 2); }
   }
-  const sq = (d: string) => { const t = day(d); let a = anchors[0]; for (const x of anchors) if (x[0] <= t) a = x; return a[1] + (t - a[0]); };
-  const total = Math.max(1, sq(u[u.length - 1]));
-  const pos = (d: string) => (u.length === 1 ? 0.5 : sq(d) / total);
+  const sqDay = (t: number) => { let a = anchors[0]; for (const x of anchors) if (x[0] <= t) a = x; return a[1] + (t - a[0]); };
+  const total = Math.max(1, sqDay(day(u[u.length - 1])));
+  const pos = (d: string) => (u.length === 1 ? 0.5 : sqDay(day(d)) / total);
   const segs = anchors.map((a, k) => [a[0], k + 1 < anchors.length ? Math.max(...u.filter((d) => day(d) < anchors[k + 1][0]).map(day)) : day(u[u.length - 1])]);
-  const pxPerDay = widthPx / total;
-  const step = [7, 14, 28, 56].find((s) => s * pxPerDay >= 60) ?? 56;
-  const ticks: Axis["ticks"] = [];
-  for (const [a, b] of segs) {
-    const first = a + ((((4 - a) % 7) + 7) % 7);   // first Monday on or after the stretch starts (epoch day 4 was a Monday)
-    for (let t = first; t <= b; t += step) {
-      const d = new Date(t * DAY).toISOString().slice(0, 10);
-      ticks.push({ d, label: shortDate(d) });
+  const multiYear = u[0].slice(0, 4) !== u[u.length - 1].slice(0, 4);
+  const ticksFor = (widthPx: number): Tick[] => {
+    const pxPerDay = widthPx / total;
+    const cands: { t: number; label: string }[] = [];
+    const week = [7, 14].find((s) => s * pxPerDay >= LABEL_PX + 14);
+    for (const [a, b] of segs) {
+      if (week) {
+        for (let t = a + ((((4 - a) % 7) + 7) % 7); t <= b; t += week) cands.push({ t, label: shortDate(iso(t)) });
+      } else {
+        const every = 31 * pxPerDay >= LABEL_PX ? 1 : 2;
+        const s = iso(a); let y = +s.slice(0, 4), m = +s.slice(5, 7) - 1;
+        if (+s.slice(8, 10) > 1) m++;
+        for (;; m += every) {
+          const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12;
+          const t = Math.round(Date.UTC(yy, mm, 1) / DAY);
+          if (t > b) break;
+          cands.push({ t, label: MON[mm] + (multiYear && (mm === 0 || !cands.length) ? ` '${String(yy).slice(2)}` : "") });
+        }
+      }
     }
-  }
-  return { pos, ticks, breaks: breaks.map((b) => b / total) };
+    const out: Tick[] = [];
+    for (const c of cands) {
+      const at = sqDay(c.t) / total;
+      if (out.length && (at - out[out.length - 1].at) * widthPx < LABEL_PX + 6) continue;
+      out.push({ d: iso(c.t), label: c.label, at });
+    }
+    return out;
+  };
+  return { pos, ticksFor, breaks: breaks.map((b) => b / total) };
 }
