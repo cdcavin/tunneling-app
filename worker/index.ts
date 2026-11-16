@@ -196,6 +196,51 @@ async function stream(env: Env, request: Request): Promise<Response> {
   return new Response(out, { status: up.status, headers: { ...cors, "content-type": "application/vnd.apple.mpegurl" } });
 }
 
+/**
+ * Change pins for the Trends tab ("new grip", "mechanics change", "ailment"…), one R2 object per pitcher
+ * (pins/<pitcherId>.json, plain JSON). R2 rather than KV: strongly consistent and no 1,000-writes/day cap.
+ * GET ?pitcher=  → { pins }  ·  POST { pitcher, pin }  → adds or replaces by id  ·  DELETE ?pitcher=&id=
+ */
+interface Pin { id: string; date: string; kind: string; note?: string; pitch?: string; added: string }
+const PIN_KINDS = new Set(["grip", "mechanics", "health", "other"]);
+async function pins(env: Env, request: Request): Promise<Response> {
+  if (!env.BUCKET) return json({ error: "No storage bound." }, 500);
+  const url = new URL(request.url);
+  const read = async (pid: string): Promise<Pin[]> => {
+    const o = await env.BUCKET!.get(`pins/${pid}.json`);
+    return o ? ((await o.json()) as { pins: Pin[] }).pins ?? [] : [];
+  };
+  const write = (pid: string, list: Pin[]) =>
+    env.BUCKET!.put(`pins/${pid}.json`, JSON.stringify({ pins: list }), { httpMetadata: { contentType: "application/json" } });
+  const okId = (v: unknown): v is string => typeof v === "string" && /^[\w.-]{1,80}$/.test(v);
+  if (request.method === "GET") {
+    const pid = url.searchParams.get("pitcher");
+    if (!okId(pid)) return json({ error: "Bad pitcher." }, 400);
+    return new Response(JSON.stringify({ pins: await read(pid) }), { headers: { ...JSON_HEADERS, "cache-control": "no-store" } });
+  }
+  if (request.method === "POST") {
+    const b = (await request.json().catch(() => null)) as { pitcher?: unknown; pin?: Partial<Pin> } | null;
+    const pid = b?.pitcher, p = b?.pin;
+    if (!okId(pid) || !p || !/^\d{4}-\d{2}-\d{2}$/.test(String(p.date)) || !PIN_KINDS.has(String(p.kind))) return json({ error: "Bad pin." }, 400);
+    const pin: Pin = {
+      id: okId(p.id) ? p.id : crypto.randomUUID(), date: String(p.date), kind: String(p.kind),
+      note: typeof p.note === "string" ? p.note.slice(0, 200) : undefined, pitch: typeof p.pitch === "string" ? p.pitch.slice(0, 40) : undefined,
+      added: new Date().toISOString(),
+    };
+    const list = (await read(pid)).filter((x) => x.id !== pin.id).concat(pin).sort((x, y) => x.date.localeCompare(y.date));
+    await write(pid, list.slice(-200));
+    return json({ pins: list });
+  }
+  if (request.method === "DELETE") {
+    const pid = url.searchParams.get("pitcher"), id = url.searchParams.get("id");
+    if (!okId(pid) || !okId(id)) return json({ error: "Bad request." }, 400);
+    const list = (await read(pid)).filter((x) => x.id !== id);
+    await write(pid, list);
+    return json({ pins: list });
+  }
+  return json({ error: "Method not allowed." }, 405);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url);
@@ -266,6 +311,7 @@ export default {
       return p ? json(p) : json({ error: `No pitcher ${id}.` }, 404);
     }
 
+    if (pathname === "/api/pins") return pins(env, request);
     if (pathname === "/api/weather") return weather(env, request);
     if (pathname === "/api/awre/stream") return stream(env, request);
     if (pathname === "/api/awre/meta") return awreMeta(env, request);
