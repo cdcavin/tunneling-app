@@ -6,12 +6,14 @@ import { arsenalLines, releaseOf } from "../../lib/arsenalStats";
 import { tally } from "../../lib/sequencing";
 import { atWvuPark } from "../../lib/pairs";
 import { pitchColor } from "../../lib/pitchColors";
-import { outings, PIN_KINDS, pinColor, pinLabel, usePins, type Outing } from "../../lib/trends";
+import { outings, PIN_KINDS, pinColor, pinLabel, usePins, workEvents } from "../../lib/trends";
+import type { Pens, Source } from "../../lib/pens";
+import WorkloadChart from "./WorkloadChart";
 import type { IndexFile, Pitcher, PitchRow } from "../../lib/types";
 import TrendChart, { type Series } from "./TrendChart";
 import { PitchClip } from "../arsenal/PitchVideo";
 
-interface Props { data: IndexFile; pitcherId: string; onPitcher: (id: string) => void; pitcher: Pitcher | null; loading: boolean; filters: Filters; onFilters: (f: Filters) => void }
+interface Props { data: IndexFile; pitcherId: string; onPitcher: (id: string) => void; pitcher: Pitcher | null; loading: boolean; filters: Filters; onFilters: (f: Filters) => void; pens: Pens; source: Source }
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 /** His normal range for a series: mean ± 1 SD across outings (needs 4+ outings). */
@@ -25,9 +27,16 @@ const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
 const sg = (v: number, d = 1) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(d)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, filters, onFilters }: Props) {
-  const rows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
+export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, filters, onFilters, pens, source }: Props) {
+  const gameRows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
+  const penRows = useMemo(() => applyFilters(pens.pitches, filters), [pens, filters]);
+  const rows = useMemo(() => (source === "games" ? gameRows : source === "pens" ? penRows : [...gameRows, ...penRows]), [source, gameRows, penRows]);
   const outs = useMemo(() => outings(rows), [rows]);
+  const gameOuts = useMemo(() => outings(gameRows), [gameRows]);
+  const events = useMemo(() => {
+    const ids = new Set(penRows.map((r) => r.game));
+    return workEvents(gameRows, pens.sessions.filter((s) => ids.has(s.id)));
+  }, [gameRows, penRows, pens]);
   const types = useMemo(() => arsenalLines(rows).map((l) => l.type), [rows]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const shown = types.filter((t) => !hidden.has(t));
@@ -97,17 +106,17 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
       </aside>
       <main className="ars-main tr-main">
         {!pitcher && <p className="hint ars-empty">{loading ? "Loading…" : "Pick a pitcher."}</p>}
-        {pitcher && outs.length < 2 && <p className="hint ars-empty">Trends need at least 2 outings in these filters.</p>}
+        {pitcher && outs.length < 2 && <p className="hint ars-empty">Trends need at least 2 {source === "pens" ? "bullpens" : "outings"} in these filters.</p>}
         {pitcher && outs.length >= 2 && (
           <>
-            {pin && <BeforeAfter rows={rows} pin={pin} types={types} team={pitcher.team} onClose={() => setSelPin(null)} />}
+            {pin && <BeforeAfter rows={gameRows} pin={pin} types={types} team={pitcher.team} onClose={() => setSelPin(null)} />}
             <div className="tr-types">
               {types.map((t) => (
                 <button key={t} type="button" className={hidden.has(t) ? "is-off" : ""} onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(t)) n.delete(t); else n.add(t); return n; })}>
                   <i style={{ background: pitchColor(t) }} />{t}
                 </button>
               ))}
-              <span className="hint">Shaded band = his normal range (average ± 1 SD across these outings). Outings with under 3 of a pitch are left out of its line.</span>
+              <span className="hint">Shaded band = his normal range (average ± 1 SD across these outings). Outings with under 3 of a pitch are left out of its line.{source === "both" && " Hollow points = bullpens."}</span>
             </div>
             <section className="card tr-sec"><div className="sec-title">Stuff by pitch</div>
               <div className="tr-grid">
@@ -124,37 +133,26 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
                 <TrendChart title="Extension" unit="ft" series={byType("ext")} fmt={(v) => v.toFixed(2)} {...common} />
               </div>
             </section>
-            <section className="card tr-sec"><div className="sec-title">Workload</div>
-              <div className="tr-grid">
-                <TrendChart title="Pitches per outing" series={[{ name: "Pitches", color: "#4fc3f7", values: outs.map((o) => o.n), bars: true }]} fmt={(v) => v.toFixed(0)} zero {...common} />
-                <TrendChart title="Rolling pitch totals" unit="(all filtered outings)" series={[
-                  { name: "Last 7 days", color: "#eaaa00", values: outs.map((o) => o.roll7) },
-                  { name: "Last 28 days", color: "#ef8a5a", values: outs.map((o) => o.roll28) },
-                ]} fmt={(v) => v.toFixed(0)} zero legend {...common} />
+            <section className="card tr-sec"><div className="sec-title">Workload <span className="ars-sub">games and bullpens, whatever the games/pens toggle says</span></div>
+              <WorkloadChart events={events} />
+              <div className="tr-grid tr-roll">
+                <TrendChart title="Rolling pitch totals" unit="(games + pens, at each game)" series={(() => {
+                  const roll = (d: string, n: number) => events.filter((e) => { const k = (Date.parse(d) - Date.parse(e.date)) / 86400000; return k >= 0 && k < n; }).reduce((a, e) => a + e.n, 0);
+                  return [{ name: "Last 7 days", color: "#eaaa00", values: gameOuts.map((o) => roll(o.date, 7)) }, { name: "Last 28 days", color: "#ef8a5a", values: gameOuts.map((o) => roll(o.date, 28)) }];
+                })()} fmt={(v) => v.toFixed(0)} zero legend outs={gameOuts} pins={pins} selPin={selPin} onPin={common.onPin} />
               </div>
-              <RestStrip outs={outs} />
             </section>
-            <section className="card tr-sec"><div className="sec-title">Results</div>
+            <section className="card tr-sec"><div className="sec-title">Results <span className="ars-sub">games only</span></div>
               <div className="tr-grid">
-                <TrendChart title="Strike %" series={one("Strike %", "#66bb6a", outs.map((o) => o.strike))} fmt={pct} {...common} />
-                <TrendChart title="Whiff %" series={one("Whiff %", "#ef5350", outs.map((o) => o.whiff))} fmt={pct} {...common} />
-                <TrendChart title="Chase %" series={one("Chase %", "#ab47bc", outs.map((o) => o.chase))} fmt={pct} {...common} />
-                <TrendChart title="Hard-hit %" unit="(95+ mph, balls in play)" series={one("Hard-hit %", "#ffa726", outs.map((o) => o.hard))} fmt={pct} {...common} />
+                <TrendChart title="Strike %" series={one("Strike %", "#66bb6a", gameOuts.map((o) => o.strike))} fmt={pct} {...common} outs={gameOuts} />
+                <TrendChart title="Whiff %" series={one("Whiff %", "#ef5350", gameOuts.map((o) => o.whiff))} fmt={pct} {...common} outs={gameOuts} />
+                <TrendChart title="Chase %" series={one("Chase %", "#ab47bc", gameOuts.map((o) => o.chase))} fmt={pct} {...common} outs={gameOuts} />
+                <TrendChart title="Hard-hit %" unit="(95+ mph, balls in play)" series={one("Hard-hit %", "#ffa726", gameOuts.map((o) => o.hard))} fmt={pct} {...common} outs={gameOuts} />
               </div>
             </section>
           </>
         )}
       </main>
-    </div>
-  );
-}
-
-/** Days of rest before each outing, as a strip of numbers under the workload charts. */
-function RestStrip({ outs }: { outs: Outing[] }) {
-  return (
-    <div className="tr-rest">
-      <span className="hint">Days of rest before each outing:</span>
-      {outs.map((o) => <span key={o.game} title={`${o.date} vs ${o.opp}`} className={o.rest != null && o.rest <= 2 ? "short" : ""}>{o.rest ?? "—"}</span>)}
     </div>
   );
 }

@@ -22,6 +22,8 @@ export interface PitchRow {
   result?: string | null; // PA result when this pitch ended it: Single/Double/Triple/HomeRun/Out/K/BB/HBP/IBB
   ev?: number | null;     // exit velo, mph, balls in play
   coeffs: Coeffs;        // 9-parameter trajectory fit
+  scrimmage?: boolean;   // scrimmage / private session (League "Team")
+  pen?: boolean;         // bullpen pitch (Trackman practice mode), only loaded when the pen toggle is on
 }
 
 export interface Pitcher {

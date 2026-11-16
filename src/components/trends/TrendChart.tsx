@@ -23,7 +23,8 @@ export default function TrendChart({ title, unit, outs, series, pins, selPin, on
   const y = (v: number) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
   const ticks = Array.from({ length: 4 }, (_, k) => lo + ((k + 0.5) * (hi - lo)) / 4);
   const breaks = outs.map((o, i) => (i > 0 && (Date.parse(o.date) - Date.parse(outs[i - 1].date)) / 86400000 > 60 ? i : -1)).filter((i) => i > 0);
-  const dateTicks = outs.map((o, i) => [i, o.date] as const).filter(([i]) => i === 0 || i === n - 1 || breaks.includes(i) || (n > 8 && i % Math.ceil(n / 6) === 0));
+  const want = outs.map((o, i) => [i, o.date] as const).filter(([i]) => i === 0 || i === n - 1 || breaks.includes(i) || (n > 8 && i % Math.ceil(n / 6) === 0));
+  const dateTicks = want.filter(([i], k) => i === n - 1 || k === 0 || (x(i) - x(want[k - 1][0]) >= 56 && x(n - 1) - x(i) >= 56));
   const pinX = (p: Pin) => { const i = outs.findIndex((o) => o.date >= p.date); return i < 0 ? x(n - 1) + 6 : i === 0 ? x(0) - 6 : (x(i - 1) + x(i)) / 2; };
   const bw = Math.max(3, Math.min(18, ((W - L - R) / Math.max(1, n)) * 0.6));
   return (
@@ -42,7 +43,7 @@ export default function TrendChart({ title, unit, outs, series, pins, selPin, on
                 s.values.forEach((v, i) => { if (v == null || !Number.isFinite(v)) { if (cur) segs.push(cur); cur = ""; return; } cur += `${cur ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`; });
                 if (cur) segs.push(cur);
                 return <g key={s.name}>{segs.map((d, k) => <path key={k} d={d} fill="none" stroke={s.color} strokeWidth={2} />)}
-                  {s.values.map((v, i) => v != null && Number.isFinite(v) && <circle key={i} cx={x(i)} cy={y(v)} r={hover === i ? 4.5 : 2.8} fill={s.color} />)}</g>;
+                  {s.values.map((v, i) => v != null && Number.isFinite(v) && <circle key={i} cx={x(i)} cy={y(v)} r={hover === i ? 4.5 : outs[i].pen ? 3.2 : 2.8} fill={outs[i].pen ? "#0f1d33" : s.color} stroke={s.color} strokeWidth={outs[i].pen ? 1.6 : 0} />)}</g>;
               })())}
           {pins.map((p) => (
             <g key={p.id} className={`tc-pin${selPin === p.id ? " is-on" : ""}`} onClick={() => onPin(p.id)}>
@@ -56,7 +57,7 @@ export default function TrendChart({ title, unit, outs, series, pins, selPin, on
         </svg>
         {hover != null && (
           <div className="tc-tip" style={{ left: Math.min(W - 170, Math.max(0, x(hover) + 10)) }}>
-            <b>{outs[hover].date} vs {outs[hover].opp}</b>
+            <b>{outs[hover].date} {outs[hover].pen ? "· bullpen" : `vs ${outs[hover].opp}`}</b>
             {series.map((s) => s.values[hover] != null && <span key={s.name}><i style={{ background: s.color }} />{s.name}: {fmt(s.values[hover]!)}</span>)}
           </div>
         )}

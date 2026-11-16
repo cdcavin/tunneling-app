@@ -37,7 +37,7 @@ export function arsenalLines(rows: PitchRow[]): ArsenalLine[] {
       relHeight: mean(rel.map((x) => x.height))!, relSide: mean(rel.map((x) => x.side))!, extension: mean(rel.map((x) => x.extension))!,
       shapePlus: null,
       zonePct: g.length ? g.filter(inZone).length / g.length : null,
-      chasePct: o.chasePct, whiffPct: o.whiffPct,
+      ...(g.some((r) => r.call) ? { chasePct: o.chasePct, whiffPct: o.whiffPct } : { chasePct: null, whiffPct: null }),   // bullpens have no calls
     });
   }
   return out.sort((a, b) => b.n - a.n);

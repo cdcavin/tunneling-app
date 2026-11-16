@@ -289,6 +289,16 @@ export default {
       return r2 ?? json({ parks: {} });
     }
 
+    if (pathname === "/data/pens/index.json") {
+      const r2 = await fromR2("pens/index.json.gz");
+      return r2 ?? json({ pitchers: {} });
+    }
+    const penM = pathname.match(/^\/data\/pens\/([\w.-]{1,80})\.json$/);
+    if (penM) {
+      const r2 = await fromR2(`pens/${penM[1]}.json.gz`);
+      return r2 ?? json({ sessions: [], pitches: [] });
+    }
+
     if (pathname === "/data/count_norms.json") {
       const r2 = await fromR2("count_norms.json.gz");
       return r2 ?? json({ error: "No D1 count averages built yet." }, 404);

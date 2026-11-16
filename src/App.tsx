@@ -30,6 +30,7 @@ import Sequencing from "./components/approach/Sequencing";
 import Command from "./components/approach/Command";
 import GamePrep from "./components/prep/GamePrep";
 import Trends from "./components/trends/Trends";
+import { usePens, type Source } from "./lib/pens";
 
 /** Top-level tabs, kept in the URL hash. Approach = the original tunneling screen, with Sequencing and Command below it. */
 const TABS = [["arsenal", "Arsenal"], ["approach", "Approach"], ["trends", "Trends"], ["prep", "Game prep"]] as const;
@@ -117,6 +118,11 @@ export default function App() {
   const go = (t: Tab) => { window.location.hash = t; };
   // Arsenal keeps its own filters and starts from all of his data; the tunneling page keeps its own defaults.
   const [arsFilters, setArsFilters] = useState<Filters>(NO_FILTERS);
+  // Games / bullpens / both, for pitch shape and velo on Arsenal and Trends. Pens load only when that toggle wants them.
+  const [source, setSource] = useState<Source>("games");
+  const pens = usePens(tab === "trends" || source !== "games" ? pitcherId : "");
+  const shown = useMemo(() => (!pitcher || source === "games" ? pitcher
+    : { ...pitcher, pitches: source === "pens" ? pens.pitches : [...pitcher.pitches, ...pens.pitches] }), [pitcher, source, pens]);
   useEffect(() => { setArsFilters(NO_FILTERS); }, [pitcherId]);
 
   useEffect(() => {
@@ -315,6 +321,13 @@ export default function App() {
             </span>
           )}
         </nav>
+        {(tab === "arsenal" || tab === "trends") && (
+          <div className="segmented src-toggle" role="radiogroup" aria-label="Pitches from">
+            {([["games", "Games"], ["pens", "Bullpens"], ["both", "Both"]] as [Source, string][]).map(([k, l]) => (
+              <button key={k} type="button" role="radio" aria-checked={source === k} className={source === k ? "is-on" : ""} onClick={() => setSource(k)}>{l}</button>
+            ))}
+          </div>
+        )}
         {tab === "approach" && <button type="button" className="ghost lb-open" onClick={() => setShowLb(true)}>Leaderboard</button>}
         <span className="stamp">
           {data.sample ? <b className="sample-flag">Sample pitchers, not real data</b> : <>Data through {data.dataThrough}</>}
@@ -325,10 +338,10 @@ export default function App() {
       {showLb && <Leaderboard pitchers={data.pitchers} onPick={setPitcherId} onClose={() => setShowLb(false)} />}
 
       {tab === "arsenal" && (
-        <ArsenalTab data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={pitcher} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} />
+        <ArsenalTab data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={shown} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} />
       )}
       {tab === "trends" && (
-        <Trends data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={pitcher} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} />
+        <Trends data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={pitcher} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} pens={pens} source={source} />
       )}
       {tab === "prep" && (
         <GamePrep data={data} pitcherId={pitcherId} onPitcher={setPitcherId} pitcher={pitcher} loading={loadingPitcher} filters={arsFilters} onFilters={setArsFilters} />

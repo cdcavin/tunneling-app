@@ -5,7 +5,7 @@ import { tally } from "./sequencing";
 
 /** One outing: its date, opponent, pitch count, and per-pitch-type averages. */
 export interface Outing {
-  game: string; date: string; opp: string; n: number; rest: number | null; roll7: number; roll28: number;
+  game: string; date: string; opp: string; n: number; rest: number | null; roll7: number; roll28: number; pen: boolean;
   byType: Record<string, { n: number; velo: number; ivb: number; hb: number; spin: number | null; relH: number; relS: number; ext: number }>;
   strike: number | null; whiff: number | null; chase: number | null; hard: number | null;
 }
@@ -29,9 +29,11 @@ export function outings(rows: PitchRow[]): Outing[] {
     }
     const t = tally(rs);
     const strikes = rs.filter((r) => isStrike((r.call ?? "").toLowerCase().replace(/\s+/g, ""))).length;
+    const pen = !!rs[0].pen;
     return {
-      game, date: rs[0].date, opp: rs[0].opponent, n: rs.length, rest: null as number | null, roll7: 0, roll28: 0, byType,
-      strike: rs.length ? strikes / rs.length : null, whiff: t.swings ? t.whiffs / t.swings : null, chase: t.ooz ? t.chases / t.ooz : null, hard: t.evN ? t.hard / t.evN : null,
+      game, date: rs[0].date, opp: rs[0].opponent, n: rs.length, rest: null as number | null, roll7: 0, roll28: 0, byType, pen,
+      strike: !pen && rs.length ? strikes / rs.length : null, whiff: !pen && t.swings ? t.whiffs / t.swings : null,
+      chase: !pen && t.ooz ? t.chases / t.ooz : null, hard: !pen && t.evN ? t.hard / t.evN : null,
     };
   }).sort((a, b) => a.date.localeCompare(b.date) || a.game.localeCompare(b.game));
   list.forEach((o, i) => {
@@ -76,4 +78,18 @@ export function usePins(pitcherId: string) {
     setPins(((await r.json()) as { pins: Pin[] }).pins);
   }, [pitcherId]);
   return { pins, err, save, remove };
+}
+
+/** Workload events on the calendar: game outings (start / relief / scrimmage) and bullpens. */
+export interface WorkEvent { date: string; kind: "start" | "relief" | "scrimmage" | "pen"; n: number; label: string; intent?: number | null; opp?: string }
+export function workEvents(games: PitchRow[], pens: { id: string; date: string; n: number; intent: number | null }[]): WorkEvent[] {
+  const g = new Map<string, PitchRow[]>();
+  for (const r of games) { const a = g.get(r.game); if (a) a.push(r); else g.set(r.game, [r]); }
+  const ev: WorkEvent[] = [...g.values()].map((rs) => {
+    const first = rs.reduce((a, b) => ((a.inning ?? 99) * 1000 + (a.pa ?? 99) * 10 + (a.pitchNo ?? 9) <= (b.inning ?? 99) * 1000 + (b.pa ?? 99) * 10 + (b.pitchNo ?? 9) ? a : b));
+    const kind = rs.some((r) => r.scrimmage) ? "scrimmage" : first.inning === 1 && first.pa === 1 ? "start" : "relief";
+    return { date: rs[0].date, kind, n: rs.length, label: String(rs.length), opp: rs[0].opponent };
+  });
+  for (const p of pens) ev.push({ date: p.date, kind: "pen", n: p.n, intent: p.intent, label: p.intent ? `${p.n} · ${Math.round(p.intent * 100)}%` : String(p.n) });
+  return ev.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === "pen" ? 1 : -1));
 }
