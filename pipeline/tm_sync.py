@@ -478,6 +478,29 @@ if MODE == "penscan":
     import pandas as pd
     f = FTP(quiet=True)
     print("top-level folders:", [n for n, isdir, *_ in f.ls_attr("/") if isdir])
+    def tree(path, depth=0, acc=None):
+        acc = [] if acc is None else acc
+        try: items = f.ls_attr(path)
+        except Exception as e: print(f"  {path}: can't list ({e})"); return acc
+        dirs = [n for n, isdir, *_ in items if isdir]
+        fl = [(f"{path}/{n}".replace("//", "/"), n, sz) for n, isdir, sz, *_ in items if not isdir]
+        if depth <= 2 or fl: print(f"  {'  ' * depth}{path}: {len(dirs)} folders, {len(fl)} files{(' e.g. ' + ', '.join(n for _, n, _ in fl[:3])) if fl else ''}")
+        acc += fl
+        for d in (sorted(dirs)[-4:] if depth >= 1 else sorted(dirs)):
+            if depth < 5: tree(f"{path}/{d}".replace("//", "/"), depth + 1, acc)
+        return acc
+    print("\n/practice (newest 4 folders at each level below the top):")
+    pf = [x for x in tree("/practice") if x[1].lower().endswith(".csv")]
+    for p_, n, sz in sorted(pf, key=lambda x: x[0])[-3:]:
+        try: df = pd.read_csv(io.BytesIO(f.read(p_)), low_memory=False)
+        except Exception as e: print(f"\n{p_}: unreadable ({e})"); continue
+        print(f"\n===== {p_}: {len(df)} rows, {df.shape[1]} cols")
+        print("  columns:", ", ".join(df.columns[:60]))
+        for c in ("PitcherTeam", "Level", "League", "PitchCall", "TaggedPitchType", "Date", "SessionType", "Session", "Type", "Tag"):
+            if c in df: print(f"  {c}:", df[c].astype(str).value_counts().head(6).to_dict())
+        if "Pitcher" in df: print("  pitchers:", df["Pitcher"].nunique(), "· pitches each:", sorted(df["Pitcher"].value_counts().values.tolist(), reverse=True)[:8])
+        if "RelSpeed" in df: print(f"  RelSpeed filled {df['RelSpeed'].notna().mean():.0%}, median {pd.to_numeric(df['RelSpeed'], errors='coerce').median():.1f}")
+    sys.exit(0)
     files = walk_v3(f)
     csvs = [x for x in files if x[1].lower().endswith(".csv") and not SKIP.search(x[1]) and x[1][:4] >= "2025"]
     wvu = [x for x in csvs if WVU_NAME.search(x[1])]
