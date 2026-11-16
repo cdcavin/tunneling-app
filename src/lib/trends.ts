@@ -16,7 +16,7 @@ const isStrike = (c: string) => /^(strikecalled|strikeswinging|foul|foulball|fou
 
 export function outings(rows: PitchRow[]): Outing[] {
   const g = new Map<string, PitchRow[]>();
-  for (const r of rows) { const a = g.get(r.game); if (a) a.push(r); else g.set(r.game, [r]); }
+  for (const r of rows) { const k = r.pen ? r.game : `${r.date}|${r.opponent}`; const a = g.get(k); if (a) a.push(r); else g.set(k, [r]); }
   const list = [...g.entries()].map(([game, rs]) => {
     const byType: Outing["byType"] = {};
     const types = new Map<string, PitchRow[]>();
@@ -83,8 +83,9 @@ export function usePins(pitcherId: string) {
 /** Workload events on the calendar: game outings (start / relief / scrimmage) and bullpens. */
 export interface WorkEvent { date: string; kind: "start" | "relief" | "scrimmage" | "pen"; n: number; label: string; intent?: number | null; opp?: string }
 export function workEvents(games: PitchRow[], pens: { id: string; date: string; n: number; intent: number | null }[]): WorkEvent[] {
+  // One bar per day and opponent: a game Trackman split into two files (or a restart) is still one outing.
   const g = new Map<string, PitchRow[]>();
-  for (const r of games) { const a = g.get(r.game); if (a) a.push(r); else g.set(r.game, [r]); }
+  for (const r of games) { const k = `${r.date}|${r.opponent}`; const a = g.get(k); if (a) a.push(r); else g.set(k, [r]); }
   const ev: WorkEvent[] = [...g.values()].map((rs) => {
     const first = rs.reduce((a, b) => ((a.inning ?? 99) * 1000 + (a.pa ?? 99) * 10 + (a.pitchNo ?? 9) <= (b.inning ?? 99) * 1000 + (b.pa ?? 99) * 10 + (b.pitchNo ?? 9) ? a : b));
     const kind = rs.some((r) => r.scrimmage) ? "scrimmage" : first.inning === 1 && first.pa === 1 ? "start" : "relief";
@@ -92,4 +93,42 @@ export function workEvents(games: PitchRow[], pens: { id: string; date: string; 
   });
   for (const p of pens) ev.push({ date: p.date, kind: "pen", n: p.n, intent: p.intent, label: p.intent ? `${p.n} · ${Math.round(p.intent * 100)}%` : String(p.n) });
   return ev.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === "pen" ? 1 : -1));
+}
+
+/**
+ * One calendar axis shared by every Trends chart, so the same date sits at the same spot on all of them.
+ * Real day spacing, except gaps over 21 days (off-season) are squeezed to 7 days and marked with a break.
+ * pos(date) is 0..1; ticks are evenly spaced (every 7, 14 or 28 days) inside each stretch, all labeled "Mon D".
+ */
+export interface Axis { pos: (d: string) => number; ticks: { d: string; label: string }[]; breaks: number[] }
+const GAP = 21, SQUEEZE = 7;
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const shortDate = (d: string) => `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}`;
+export function makeAxis(dates: string[], widthPx = 900): Axis {
+  const u = [...new Set(dates)].sort();
+  if (!u.length) return { pos: () => 0.5, ticks: [], breaks: [] };
+  const day = (d: string) => Date.parse(d) / DAY;
+  const anchors: [number, number][] = [[day(u[0]), 0]];   // (real day, squeezed day)
+  const breaks: number[] = [];
+  for (let i = 1; i < u.length; i++) {
+    const gap = day(u[i]) - day(u[i - 1]);
+    const prev = anchors[anchors.length - 1];
+    const at = prev[1] + (day(u[i - 1]) - prev[0]);
+    if (gap > GAP) { anchors.push([day(u[i]), at + SQUEEZE]); breaks.push(at + SQUEEZE / 2); }
+  }
+  const sq = (d: string) => { const t = day(d); let a = anchors[0]; for (const x of anchors) if (x[0] <= t) a = x; return a[1] + (t - a[0]); };
+  const total = Math.max(1, sq(u[u.length - 1]));
+  const pos = (d: string) => (u.length === 1 ? 0.5 : sq(d) / total);
+  const segs = anchors.map((a, k) => [a[0], k + 1 < anchors.length ? Math.max(...u.filter((d) => day(d) < anchors[k + 1][0]).map(day)) : day(u[u.length - 1])]);
+  const pxPerDay = widthPx / total;
+  const step = [7, 14, 28, 56].find((s) => s * pxPerDay >= 60) ?? 56;
+  const ticks: Axis["ticks"] = [];
+  for (const [a, b] of segs) {
+    const first = a + ((((4 - a) % 7) + 7) % 7);   // first Monday on or after the stretch starts (epoch day 4 was a Monday)
+    for (let t = first; t <= b; t += step) {
+      const d = new Date(t * DAY).toISOString().slice(0, 10);
+      ticks.push({ d, label: shortDate(d) });
+    }
+  }
+  return { pos, ticks, breaks: breaks.map((b) => b / total) };
 }

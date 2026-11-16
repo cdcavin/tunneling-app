@@ -1182,3 +1182,6 @@ button.primary.wide { width: 100%; }
 .wl-br text { fill: var(--ink-2); font: 600 11px var(--font-cond); }
 .wl-hover { margin: 4px 0 0; }
 .tr-roll { margin-top: 10px; grid-template-columns: minmax(0, 1fr); }
+.tc-vgrid { stroke: rgba(238, 242, 248, 0.06); }
+.tc-break line { stroke: rgba(238, 242, 248, 0.4); stroke-dasharray: 2 4; }
+.tc-break text { fill: var(--muted); font: 600 12px var(--font); }

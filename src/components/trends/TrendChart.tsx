@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useSize } from "../../lib/useSize";
-import { pinColor, pinLabel, type Outing, type Pin } from "../../lib/trends";
+import { pinColor, pinLabel, type Axis, type Outing, type Pin } from "../../lib/trends";
 
 export interface Series { name: string; color: string; values: (number | null)[]; band?: [number, number] | null; bars?: boolean }
 
 /** One outing-by-outing chart: x = outings in order (gaps over 60 days get a break line), pins as dashed lines. */
-export default function TrendChart({ title, unit, outs, series, pins, selPin, onPin, fmt = (v) => v.toFixed(1), zero = false, legend = false }: {
-  title: string; unit?: string; outs: Outing[]; series: Series[]; pins: Pin[]; selPin: string | null; onPin: (id: string) => void;
+export default function TrendChart({ title, unit, outs, axis, series, pins, selPin, onPin, fmt = (v) => v.toFixed(1), zero = false, legend = false }: {
+  title: string; unit?: string; outs: Outing[]; axis: Axis; series: Series[]; pins: Pin[]; selPin: string | null; onPin: (id: string) => void;
   fmt?: (v: number) => string; zero?: boolean; legend?: boolean;
 }) {
   const [box, size] = useSize<HTMLDivElement>();
@@ -19,13 +19,11 @@ export default function TrendChart({ title, unit, outs, series, pins, selPin, on
   if (zero) lo = Math.min(0, lo);
   const pad = (hi - lo) * 0.08 || 1; lo -= zero && lo === 0 ? 0 : pad; hi += pad;
   const IN = 16;   // keep the first and last outing clear of the axis labels and the edge
-  const x = (i: number) => L + IN + (n === 1 ? (W - L - R - 2 * IN) / 2 : (i / (n - 1)) * (W - L - R - 2 * IN));
+  const X = (d: string) => L + IN + axis.pos(d) * (W - L - R - 2 * IN);   // same calendar on every chart
+  const x = (i: number) => X(outs[i].date);
   const y = (v: number) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
   const ticks = Array.from({ length: 4 }, (_, k) => lo + ((k + 0.5) * (hi - lo)) / 4);
-  const breaks = outs.map((o, i) => (i > 0 && (Date.parse(o.date) - Date.parse(outs[i - 1].date)) / 86400000 > 60 ? i : -1)).filter((i) => i > 0);
-  const want = outs.map((o, i) => [i, o.date] as const).filter(([i]) => i === 0 || i === n - 1 || breaks.includes(i) || (n > 8 && i % Math.ceil(n / 6) === 0));
-  const dateTicks = want.filter(([i], k) => i === n - 1 || k === 0 || (x(i) - x(want[k - 1][0]) >= 56 && x(n - 1) - x(i) >= 56));
-  const pinX = (p: Pin) => { const i = outs.findIndex((o) => o.date >= p.date); return i < 0 ? x(n - 1) + 6 : i === 0 ? x(0) - 6 : (x(i - 1) + x(i)) / 2; };
+  const pinX = (p: Pin) => Math.max(L, Math.min(W - R, X(p.date) - 3));
   const bw = Math.max(3, Math.min(18, ((W - L - R) / Math.max(1, n)) * 0.6));
   return (
     <figure className="tc">
@@ -34,7 +32,8 @@ export default function TrendChart({ title, unit, outs, series, pins, selPin, on
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} onMouseLeave={() => setHover(null)}
           onMouseMove={(e) => { const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect(); const px = e.clientX - r.left; let best = 0; for (let i = 1; i < n; i++) if (Math.abs(x(i) - px) < Math.abs(x(best) - px)) best = i; setHover(best); }}>
           {ticks.map((t) => <g key={t}><line className="tc-grid" x1={L} x2={W - R} y1={y(t)} y2={y(t)} /><text className="tc-tick" x={L - 6} y={y(t) + 4} textAnchor="end">{fmt(t)}</text></g>)}
-          {breaks.map((i) => <line key={`b${i}`} className="tc-break" x1={(x(i - 1) + x(i)) / 2} x2={(x(i - 1) + x(i)) / 2} y1={T} y2={H - B} />)}
+          {axis.ticks.map((t) => <line key={`g${t.d}`} className="tc-vgrid" x1={X(t.d)} x2={X(t.d)} y1={T} y2={H - B} />)}
+          {axis.breaks.map((b) => { const bx = L + IN + b * (W - L - R - 2 * IN); return <g key={`b${b}`} className="tc-break"><line x1={bx} x2={bx} y1={T} y2={H - B} /><text x={bx} y={T + 8} textAnchor="middle">≈</text></g>; })}
           {series.map((s) => s.band && <rect key={`band-${s.name}`} x={L} width={W - L - R} y={y(s.band[1])} height={Math.max(1, y(s.band[0]) - y(s.band[1]))} fill={s.color} opacity={0.09} />)}
           {series.map((s) => s.bars
             ? s.values.map((v, i) => v != null && <rect key={`${s.name}${i}`} x={x(i) - bw / 2} width={bw} y={y(v)} height={Math.max(0, y(lo) - y(v))} fill={s.color} opacity={hover === i ? 1 : 0.75} rx={2} />)
@@ -52,7 +51,7 @@ export default function TrendChart({ title, unit, outs, series, pins, selPin, on
               <circle cx={pinX(p)} cy={T + 2} r={4} fill={pinColor(p.kind)} />
             </g>
           ))}
-          {dateTicks.map(([i, d]) => <text key={`d${i}`} className="tc-tick" x={x(i)} y={H - 6} textAnchor={i === n - 1 && n > 1 ? "end" : i === 0 ? "start" : "middle"}>{d.slice(5).replace("-", "/")}{breaks.includes(i) || i === 0 ? `/${d.slice(2, 4)}` : ""}</text>)}
+          {axis.ticks.map((t) => <text key={`d${t.d}`} className="tc-tick" x={X(t.d)} y={H - 6} textAnchor="middle">{t.label}</text>)}
           {hover != null && <line className="tc-hover" x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} />}
         </svg>
         {hover != null && (

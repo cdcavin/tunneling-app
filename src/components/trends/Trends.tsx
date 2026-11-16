@@ -6,7 +6,7 @@ import { arsenalLines, releaseOf } from "../../lib/arsenalStats";
 import { tally } from "../../lib/sequencing";
 import { atWvuPark } from "../../lib/pairs";
 import { pitchColor } from "../../lib/pitchColors";
-import { outings, PIN_KINDS, pinColor, pinLabel, usePins, workEvents } from "../../lib/trends";
+import { makeAxis, outings, PIN_KINDS, pinColor, pinLabel, usePins, workEvents } from "../../lib/trends";
 import type { Pens, Source } from "../../lib/pens";
 import WorkloadChart from "./WorkloadChart";
 import type { IndexFile, Pitcher, PitchRow } from "../../lib/types";
@@ -51,7 +51,8 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
     return { name: t, color: pitchColor(t), values, band: band(values) };
   });
   const one = (name: string, color: string, values: (number | null)[], withBand = true): Series[] => [{ name, color, values, band: withBand ? band(values) : null }];
-  const common = { outs, pins, selPin, onPin: (id: string) => setSelPin((p) => (p === id ? null : id)) };
+  const axis = useMemo(() => makeAxis([...outs, ...gameOuts].map((o) => o.date).concat(events.map((e) => e.date))), [outs, gameOuts, events]);
+  const common = { outs, axis, pins, selPin, onPin: (id: string) => setSelPin((p) => (p === id ? null : id)) };
 
   const addPin = async () => {
     setBusy(true); setMsg(null);
@@ -134,12 +135,12 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
               </div>
             </section>
             <section className="card tr-sec"><div className="sec-title">Workload <span className="ars-sub">games and bullpens, whatever the games/pens toggle says</span></div>
-              <WorkloadChart events={events} />
+              <WorkloadChart events={events} axis={axis} />
               <div className="tr-grid tr-roll">
                 <TrendChart title="Rolling pitch totals" unit="(games + pens, at each game)" series={(() => {
                   const roll = (d: string, n: number) => events.filter((e) => { const k = (Date.parse(d) - Date.parse(e.date)) / 86400000; return k >= 0 && k < n; }).reduce((a, e) => a + e.n, 0);
                   return [{ name: "Last 7 days", color: "#eaaa00", values: gameOuts.map((o) => roll(o.date, 7)) }, { name: "Last 28 days", color: "#ef8a5a", values: gameOuts.map((o) => roll(o.date, 28)) }];
-                })()} fmt={(v) => v.toFixed(0)} zero legend outs={gameOuts} pins={pins} selPin={selPin} onPin={common.onPin} />
+                })()} fmt={(v) => v.toFixed(0)} zero legend outs={gameOuts} axis={axis} pins={pins} selPin={selPin} onPin={common.onPin} />
               </div>
             </section>
             <section className="card tr-sec"><div className="sec-title">Results <span className="ars-sub">games only</span></div>
