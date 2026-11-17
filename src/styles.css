@@ -1189,3 +1189,4 @@ button.primary.wide { width: 100%; }
 .wl-range .segmented { margin-bottom: 10px; }
 .wl-range .gp-field { min-width: 130px; }
 .wl-range-sum { margin-bottom: 14px; }
+.tr-range { background: var(--raised, #13223a); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 0; margin: 0 0 12px; }

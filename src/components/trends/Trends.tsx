@@ -36,8 +36,8 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
   const gameRows = useMemo(() => (pitcher ? applyFilters(pitcher.pitches, filters) : []), [pitcher, filters]);
   const penRows = useMemo(() => applyFilters(pens.pitches, filters), [pens, filters]);
   const rows = useMemo(() => (source === "games" ? gameRows : source === "pens" ? penRows : [...gameRows, ...penRows]), [source, gameRows, penRows]);
-  const outs = useMemo(() => outings(rows), [rows]);
-  const gameOuts = useMemo(() => outings(gameRows), [gameRows]);
+  const allOuts = useMemo(() => outings(rows), [rows]);
+  const allGameOuts = useMemo(() => outings(gameRows), [gameRows]);
   const events = useMemo(() => {
     const ids = new Set(penRows.map((r) => r.game));
     return workEvents(gameRows, pens.sessions.filter((s) => ids.has(s.id)));
@@ -56,23 +56,31 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
     return { name: t, color: pitchColor(t), values, band: band(values) };
   });
   const one = (name: string, color: string, values: (number | null)[], withBand = true): Series[] => [{ name, color, values, band: withBand ? band(values) : null }];
-  const axis = useMemo(() => makeAxis([...outs, ...gameOuts].map((o) => o.date).concat(events.map((e) => e.date))), [outs, gameOuts, events]);
-  const [wr, setWr] = useState<Range | null>(null);
-  useEffect(() => { setWr(null); }, [pitcherId]);
-  const evDates = useMemo(() => events.map((e) => e.date).sort(), [events]);
+  const [sel, setSel] = useState<{ key: string; from?: string; to?: string }>({ key: "last60" });
+  useEffect(() => { setSel({ key: "last60" }); }, [pitcherId]);
+  const allDates = useMemo(() => [...events.map((e) => e.date), ...allOuts.map((o) => o.date), ...allGameOuts.map((o) => o.date)].sort(), [events, allOuts, allGameOuts]);
   const seasons = useMemo(() => {
     const m = new Map<string, Range>();
-    for (const d of evDates) { const k = seasonOf(d), r = m.get(k); if (r) r.to = d; else m.set(k, { from: d, to: d, key: k }); }
+    for (const d of allDates) { const k = seasonOf(d), r = m.get(k); if (r) r.to = d; else m.set(k, { from: d, to: d, key: k }); }
     return [...m.values()];
-  }, [evDates]);
-  const months = useMemo(() => [...new Set(evDates.map((d) => d.slice(0, 7)))], [evDates]);
-  const lastDay = evDates[evDates.length - 1] ?? today();
+  }, [allDates]);
+  const months = useMemo(() => [...new Set(allDates.map((d) => d.slice(0, 7)))], [allDates]);
+  const firstDay = allDates[0] ?? today(), lastDay = allDates[allDates.length - 1] ?? today();
+  const wr: Range | null = useMemo(() => {
+    const k = sel.key, n = k.match(/^last(\d+)$/);
+    if (k === "all") return null;
+    if (n) return { from: addDays(lastDay, 1 - Number(n[1])), to: lastDay, key: k };
+    if (k.startsWith("m:")) return { from: `${k.slice(2)}-01`, to: monthEnd(k.slice(2)), key: k };
+    if (k === "custom") return { from: sel.from ?? firstDay, to: sel.to ?? lastDay, key: k };
+    return seasons.find((r) => r.key === k) ?? null;
+  }, [sel, seasons, firstDay, lastDay]);
   const inWr = (d: string) => !wr || (d >= wr.from && d <= wr.to);
+  const outs = useMemo(() => allOuts.filter((o) => inWr(o.date)), [allOuts, wr]);
+  const gameOuts = useMemo(() => allGameOuts.filter((o) => inWr(o.date)), [allGameOuts, wr]);
   const wEvents = useMemo(() => events.filter((e) => inWr(e.date)), [events, wr]);
-  const wGameOuts = useMemo(() => gameOuts.filter((o) => inWr(o.date)), [gameOuts, wr]);
-  const wAxis = useMemo(() => makeAxis(wEvents.map((e) => e.date).concat(wGameOuts.map((o) => o.date), wr && wEvents.length ? [wr.from, wr.to] : [])), [wEvents, wGameOuts, wr]);
+  const axis = useMemo(() => makeAxis([...outs, ...gameOuts].map((o) => o.date).concat(wEvents.map((e) => e.date), wr && (outs.length || wEvents.length) ? [wr.from, wr.to] : [])), [outs, gameOuts, wEvents, wr]);
   const wPins = pins.filter((p) => inWr(p.date));
-  const common = { outs, axis, pins, selPin, onPin: (id: string) => setSelPin((p) => (p === id ? null : id)) };
+  const common = { outs, axis, pins: wPins, selPin, onPin: (id: string) => setSelPin((p) => (p === id ? null : id)) };
 
   const addPin = async () => {
     setBusy(true); setMsg(null);
@@ -127,7 +135,25 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
       </aside>
       <main className="ars-main tr-main">
         {!pitcher && <p className="hint ars-empty">{loading ? "Loading…" : "Pick a pitcher."}</p>}
-        {pitcher && outs.length < 2 && <p className="hint ars-empty">Trends need at least 2 {source === "pens" ? "bullpens" : "outings"} in these filters.</p>}
+        {pitcher && allOuts.length > 0 && (
+          <div className="wl-range tr-range">
+            <div className="segmented">
+              <button type="button" className={!wr ? "is-on" : ""} onClick={() => setSel({ key: "all" })}>All</button>
+              {seasons.map((r) => <button key={r.key} type="button" className={wr?.key === r.key ? "is-on" : ""} onClick={() => setSel({ key: r.key })}>{r.key}</button>)}
+              {[30, 60, 90].map((n) => <button key={n} type="button" className={wr?.key === `last${n}` ? "is-on" : ""} onClick={() => setSel({ key: `last${n}` })}>Last {n} d</button>)}
+            </div>
+            <label className="gp-field wl-month"><span>Month</span>
+              <select value={wr?.key.startsWith("m:") ? wr.key.slice(2) : ""} onChange={(e) => { const m = e.target.value; setSel({ key: m ? `m:${m}` : "all" }); }}>
+                <option value="">—</option>
+                {months.map((m) => <option key={m} value={m}>{MONTHS[+m.slice(5, 7) - 1]} {m.slice(0, 4)}</option>)}
+              </select>
+            </label>
+            <label className="gp-field"><span>From</span><input type="date" value={wr?.from ?? firstDay} onChange={(e) => e.target.value && setSel({ key: "custom", from: e.target.value, to: wr?.to ?? lastDay })} /></label>
+            <label className="gp-field"><span>To</span><input type="date" value={wr?.to ?? lastDay} onChange={(e) => e.target.value && setSel({ key: "custom", from: wr?.from ?? firstDay, to: e.target.value })} /></label>
+            <span className="hint wl-range-sum">{wEvents.filter((e) => e.kind !== "pen").length} outings · {wEvents.filter((e) => e.kind === "pen").length} pens · {wEvents.reduce((a, e) => a + e.n, 0)} pitches in this range</span>
+          </div>
+        )}
+        {pitcher && outs.length < 2 && <p className="hint ars-empty">Trends need at least 2 {source === "pens" ? "bullpens" : "outings"} in this date range and these filters. Pick a longer range above.</p>}
         {pitcher && outs.length >= 2 && (
           <>
             {pin && <BeforeAfter rows={gameRows} pin={pin} types={types} team={pitcher.team} onClose={() => setSelPin(null)} />}
@@ -155,28 +181,12 @@ export default function Trends({ data, pitcherId, onPitcher, pitcher, loading, f
               </div>
             </section>
             <section className="card tr-sec"><div className="sec-title">Workload <span className="ars-sub">games and bullpens, whatever the games/pens toggle says</span></div>
-              <div className="wl-range">
-                <div className="segmented">
-                  <button type="button" className={!wr ? "is-on" : ""} onClick={() => setWr(null)}>All</button>
-                  {seasons.map((r) => <button key={r.key} type="button" className={wr?.key === r.key ? "is-on" : ""} onClick={() => setWr(r)}>{r.key}</button>)}
-                  {[30, 60, 90].map((n) => <button key={n} type="button" className={wr?.key === `last${n}` ? "is-on" : ""} onClick={() => setWr({ from: addDays(lastDay, 1 - n), to: lastDay, key: `last${n}` })}>Last {n} d</button>)}
-                </div>
-                <label className="gp-field wl-month"><span>Month</span>
-                  <select value={wr?.key.startsWith("m:") ? wr.key.slice(2) : ""} onChange={(e) => { const m = e.target.value; setWr(m ? { from: `${m}-01`, to: monthEnd(m), key: `m:${m}` } : null); }}>
-                    <option value="">—</option>
-                    {months.map((m) => <option key={m} value={m}>{MONTHS[+m.slice(5, 7) - 1]} {m.slice(0, 4)}</option>)}
-                  </select>
-                </label>
-                <label className="gp-field"><span>From</span><input type="date" value={wr?.from ?? evDates[0] ?? ""} onChange={(e) => e.target.value && setWr({ from: e.target.value, to: wr?.to ?? lastDay, key: "custom" })} /></label>
-                <label className="gp-field"><span>To</span><input type="date" value={wr?.to ?? lastDay} onChange={(e) => e.target.value && setWr({ from: wr?.from ?? evDates[0] ?? e.target.value, to: e.target.value, key: "custom" })} /></label>
-                <span className="hint wl-range-sum">{wEvents.filter((e) => e.kind !== "pen").length} outings · {wEvents.filter((e) => e.kind === "pen").length} pens · {wEvents.reduce((a, e) => a + e.n, 0)} pitches</span>
-              </div>
-              <WorkloadChart events={wEvents} axis={wAxis} />
+              <WorkloadChart events={wEvents} axis={axis} />
               <div className="tr-grid tr-roll">
                 <TrendChart title="Rolling pitch totals" unit="(games + pens, at each game)" series={(() => {
                   const roll = (d: string, n: number) => events.filter((e) => { const k = (Date.parse(d) - Date.parse(e.date)) / 86400000; return k >= 0 && k < n; }).reduce((a, e) => a + e.n, 0);
-                  return [{ name: "Last 7 days", color: "#eaaa00", values: wGameOuts.map((o) => roll(o.date, 7)) }, { name: "Last 28 days", color: "#ef8a5a", values: wGameOuts.map((o) => roll(o.date, 28)) }];
-                })()} fmt={(v) => v.toFixed(0)} zero legend outs={wGameOuts} axis={wAxis} pins={wPins} selPin={selPin} onPin={common.onPin} />
+                  return [{ name: "Last 7 days", color: "#eaaa00", values: gameOuts.map((o) => roll(o.date, 7)) }, { name: "Last 28 days", color: "#ef8a5a", values: gameOuts.map((o) => roll(o.date, 28)) }];
+                })()} fmt={(v) => v.toFixed(0)} zero legend outs={gameOuts} axis={axis} pins={wPins} selPin={selPin} onPin={common.onPin} />
               </div>
             </section>
             <section className="card tr-sec"><div className="sec-title">Results <span className="ars-sub">games only</span></div>
