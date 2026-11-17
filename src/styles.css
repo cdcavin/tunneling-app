@@ -1185,3 +1185,7 @@ button.primary.wide { width: 100%; }
 .tc-break line { stroke: rgba(238, 242, 248, 0.4); stroke-dasharray: 2 4; }
 .tc-break text { fill: var(--muted); font: 600 12px var(--font); }
 .wl-int-title { fill: var(--muted, #8a9bb5); font-size: 11px; }
+.wl-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 12px; margin: 4px 0 8px; }
+.wl-range .segmented { margin-bottom: 10px; }
+.wl-range .gp-field { min-width: 130px; }
+.wl-range-sum { margin-bottom: 14px; }
