@@ -12,8 +12,8 @@ export default function WorkloadChart({ events, axis }: { events: WorkEvent[]; a
   if (!events.length) return <p className="hint">No outings or bullpens in these filters.</p>;
   const W = Math.max(320, size.w), L = 44, R = 10, IN = 16, T = 22, BASE = 160;
   const pens = events.filter((e) => e.kind === "pen" && e.intent != null);
-  const IT = BASE + 34, IB = IT + 58;
-  const H = (pens.length ? IB : BASE + 22) + 24;
+  const IT = BASE + 52, IB = IT + 58;
+  const H = (pens.length ? IB : BASE + 34) + 24;
   const PW = W - L - R - 2 * IN;
   const X = (d: string) => L + IN + axis.pos(d) * PW;
   const xt = axis.ticksFor(PW);
@@ -41,7 +41,7 @@ export default function WorkloadChart({ events, axis }: { events: WorkEvent[]; a
     placed.push(r); show.add(i);
   }
 
-  const games = events.map((e, i) => ({ e, i })).filter(({ e }) => e.kind !== "pen");
+  const games = events.map((e, i) => ({ e, i })).filter(({ e }) => e.kind === "start" || e.kind === "scrimmage");
   const ints = pens.map((e) => e.intent!);
   const ilo = Math.min(0.88, ...ints) - 0.01, ihi = Math.max(1.0, ...ints) + 0.01;
   const iy = (v: number) => IB - ((v - ilo) / (ihi - ilo)) * (IB - IT);
@@ -50,18 +50,17 @@ export default function WorkloadChart({ events, axis }: { events: WorkEvent[]; a
 
   return (
     <div className="wl">
-      <div className="wl-legend">{(Object.keys(KIND) as WorkEvent["kind"][]).map((k) => <span key={k}><i style={{ background: KIND[k][1] }} />{KIND[k][0]}</span>)}<span className="hint">Number on top = pitches (hidden when bars are too close; hover for it). Brackets = days between outings.</span></div>
+      <div className="wl-legend">{(Object.keys(KIND) as WorkEvent["kind"][]).map((k) => <span key={k}><i style={{ background: KIND[k][1] }} />{KIND[k][0]}</span>)}<span className="hint">Number on top = pitches (hidden when bars are too close; hover for it). Brackets = days between starts (scrimmages count as starts).</span></div>
       <div ref={box} className="tc-box">
         <svg width={W} height={H} role="img" aria-label="Pitches per outing and bullpen on a calendar">
           {xt.map((t) => <g key={t.d}><line className="tc-vgrid" x1={L + IN + t.at * PW} x2={L + IN + t.at * PW} y1={T - 6} y2={pens.length ? IB : BASE} /><text className="tc-tick" x={L + IN + t.at * PW} y={H - 6} textAnchor="middle">{t.label}</text></g>)}
           {axis.breaks.map((b) => { const x0 = L + IN + b * PW; return <g key={b} className="tc-break"><line x1={x0} x2={x0} y1={T - 6} y2={pens.length ? IB : BASE} /><text x={x0} y={T - 8} textAnchor="middle">≈</text></g>; })}
           <line className="wl-base" x1={L} x2={W - R} y1={BASE} y2={BASE} />
           {games.slice(1).map(({ i }, k) => {
-            const p = games[k], a = bx(p.i) + bw + 2, b = bx(i) - 2, dd = Math.round((Date.parse(events[i].date) - Date.parse(events[p.i].date)) / DAY);
-            if (b - a < 30) return null;
-            const yy = BASE + 16;
-            return <g key={`br${i}`} className="wl-br"><line x1={a} x2={b} y1={yy} y2={yy} /><line x1={a} x2={a} y1={yy - 4} y2={yy + 4} /><line x1={b} x2={b} y1={yy - 4} y2={yy + 4} />
-              <text x={(a + b) / 2} y={yy - 4} textAnchor="middle">{dd} d</text></g>;
+            const p = games[k], a = bx(p.i) + bw / 2, b = bx(i) + bw / 2, dd = Math.round((Date.parse(events[i].date) - Date.parse(events[p.i].date)) / DAY);
+            const yy = BASE + (k % 2 ? 30 : 15), lbl = b - a >= 28 ? `${dd} d` : `${dd}`;
+            return <g key={`br${i}`} className="wl-br"><line x1={a} x2={b} y1={yy} y2={yy} /><line x1={a} x2={a} y1={yy - 3} y2={yy + 3} /><line x1={b} x2={b} y1={yy - 3} y2={yy + 3} />
+              <text x={(a + b) / 2} y={yy - 3} textAnchor="middle">{lbl}</text></g>;
           })}
           {events.map((e, i) => (
             <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
